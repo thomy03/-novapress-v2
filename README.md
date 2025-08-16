@@ -45,7 +45,7 @@ The design follows strict professional journalism standards:
 
 ```bash
 # Clone the repository
-git clone https://github.com/thomy03/novapress-v2.git
+git clone https://github.com/thomy03/-novapress-v2.git
 cd novapress-v2
 
 # Install dependencies

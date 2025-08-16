@@ -22,10 +22,10 @@
 
 ```bash
 # Clone via HTTPS
-git clone https://github.com/thomy03/novapress-v2.git
+git clone https://github.com/thomy03/-novapress-v2.git
 
 # Or via SSH
-git clone git@github.com:thomy03/novapress-v2.git
+git clone git@github.com:thomy03/-novapress-v2.git
 
 # Navigate to project directory
 cd novapress-v2
@@ -379,7 +379,7 @@ npm run analyze
 
 ### Troubleshooting
 If you encounter issues not covered here:
-1. Check the [Issues](https://github.com/thomy03/novapress-v2/issues) page
+1. Check the [Issues](https://github.com/thomy03/-novapress-v2/issues) page
 2. Search existing discussions
 3. Create a new issue with details
 
