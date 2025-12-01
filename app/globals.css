@@ -29,3 +29,279 @@ body {
     opacity: 0.5;
   }
 }
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+/* Accessibility improvements */
+
+/* High contrast focus indicators */
+*:focus {
+  outline: 2px solid #3b82f6 !important;
+  outline-offset: 2px !important;
+}
+
+/* Ensure sufficient color contrast */
+.text-secondary {
+  color: #4b5563 !important; /* Improved contrast ratio */
+}
+
+/* Dark mode text contrast improvements */
+.dark .text-secondary {
+  color: #9ca3af !important; /* Better contrast in dark mode */
+}
+
+/* Responsive text sizing for better accessibility */
+@media (max-width: 768px) {
+  h1 { font-size: clamp(24px, 6vw, 48px) !important; }
+  h2 { font-size: clamp(20px, 5vw, 32px) !important; }
+  h3 { font-size: clamp(16px, 4vw, 24px) !important; }
+  body { font-size: clamp(14px, 3vw, 16px) !important; }
+}
+
+/* Minimum touch target sizes (44px minimum) */
+button, a, input[type="button"], input[type="submit"] {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Skip to content link styling */
+.skip-to-content {
+  position: absolute;
+  top: -40px;
+  left: 8px;
+  background: #2563eb;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 4px;
+  text-decoration: none;
+  font-weight: bold;
+  z-index: 1000;
+  transition: top 0.3s ease;
+}
+
+.skip-to-content:focus {
+  top: 8px;
+}
+
+/* Screen reader only content */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Reduced motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  
+  .scroll-animation {
+    animation: none !important;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  :root {
+    --text-color: #000000;
+    --bg-color: #ffffff;
+    --border-color: #000000;
+  }
+  
+  .dark {
+    --text-color: #ffffff;
+    --bg-color: #000000;
+    --border-color: #ffffff;
+  }
+}
+
+/* Color contrast improvements */
+.text-blue { color: #1e40af !important; } /* Darker blue for better contrast */
+.text-red { color: #dc2626 !important; } /* Already good contrast */
+.text-green { color: #166534 !important; } /* Darker green for better contrast */
+
+/* Ensure interactive elements are clearly distinguishable */
+button:not(:disabled), a, [role="button"] {
+  position: relative;
+}
+
+button:not(:disabled):hover, a:hover, [role="button"]:hover {
+  opacity: 0.9;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ==========================================
+   Neural Causal Graph Animations
+   ========================================== */
+
+/* Node activation pulse */
+@keyframes neuralPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 20px 10px rgba(37, 99, 235, 0.3);
+    transform: scale(1.05);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
+    transform: scale(1);
+  }
+}
+
+/* Ripple effect for activated nodes */
+@keyframes ripple {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.8);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(2);
+  }
+}
+
+/* Edge flow animation */
+@keyframes edgeFlow {
+  from {
+    stroke-dashoffset: 24;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Edge glow pulse */
+@keyframes edgeGlow {
+  0%, 100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* Dendrite expansion */
+@keyframes dendriteExpand {
+  0% {
+    width: 25px;
+    opacity: 0.4;
+  }
+  50% {
+    width: 40px;
+    opacity: 1;
+  }
+  100% {
+    width: 35px;
+    opacity: 0.8;
+  }
+}
+
+/* Apply animations to classes */
+.neural-node-activated {
+  animation: neuralPulse 0.6s ease-out;
+}
+
+.neural-ripple {
+  animation: ripple 1s ease-out infinite;
+}
+
+.neural-ripple-delayed {
+  animation: ripple 1s ease-out infinite;
+  animation-delay: 0.3s;
+}
+
+.neural-edge-active {
+  animation: edgeFlow 0.5s linear infinite;
+  stroke-dasharray: 8, 4 !important;
+}
+
+.neural-edge-glow {
+  animation: edgeGlow 1s ease-in-out infinite;
+}
+
+.neural-dendrite-active {
+  animation: dendriteExpand 0.6s ease-out;
+}
+
+/* React Flow customizations */
+.react-flow__node {
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.react-flow__node:hover {
+  transform: scale(1.05);
+}
+
+.react-flow__edge-path {
+  transition: stroke 0.3s ease, stroke-width 0.3s ease;
+}
+
+.react-flow__controls {
+  background: white;
+  border: 1px solid #E5E5E5;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.react-flow__controls-button {
+  background: white;
+  border: none;
+  border-bottom: 1px solid #E5E5E5;
+}
+
+.react-flow__controls-button:hover {
+  background: #F9FAFB;
+}
+
+.react-flow__minimap {
+  background: white;
+  border: 1px solid #E5E5E5;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Attribution hiding (if licensed) */
+.react-flow__attribution {
+  display: none;
+}

@@ -3,22 +3,31 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "next dev",
+    "dev:turbo": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "analyze": "ANALYZE=true npm run build",
+    "lighthouse": "npm run build && npm run start & sleep 5 && lighthouse http://localhost:3000 --output=html --output-path=./lighthouse-report.html && pkill -f 'next start'",
+    "perf": "npm run build && npm run start & sleep 5 && node scripts/performance-test.js && pkill -f 'next start'",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf .next .turbo out",
+    "export": "next build && next export"
   },
   "dependencies": {
+    "@playwright/test": "^1.54.2",
+    "next": "15.4.6",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "next": "15.4.6"
+    "reactflow": "^11.11.4"
   },
   "devDependencies": {
-    "typescript": "^5",
+    "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@tailwindcss/postcss": "^4",
-    "tailwindcss": "^4"
+    "tailwindcss": "^4",
+    "typescript": "^5"
   }
 }
