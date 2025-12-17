@@ -183,6 +183,21 @@ async def get_syntheses_by_category(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/personas")
+async def get_available_personas():
+    """
+    Get list of available AI journalist personas.
+
+    Returns all personas with their characteristics (tone, style, focus categories).
+    """
+    from app.ml.persona import get_all_personas
+    return {
+        "data": get_all_personas(),
+        "total": len(get_all_personas()),
+        "type": "personas"
+    }
+
+
 @router.get("/by-id/{synthesis_id}")
 async def get_synthesis(
     synthesis_id: str = Path(..., description="Synthesis UUID")
@@ -200,6 +215,92 @@ async def get_synthesis(
         raise
     except Exception as e:
         logger.error(f"Failed to fetch synthesis {synthesis_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/by-id/{synthesis_id}/persona/{persona_id}")
+async def get_synthesis_with_persona(
+    synthesis_id: str = Path(..., description="Synthesis UUID"),
+    persona_id: str = Path(..., description="Persona ID (le_cynique, l_optimiste, le_conteur, le_satiriste)")
+):
+    """
+    Get synthesis rewritten with a specific persona's voice and style.
+
+    Available personas:
+    - neutral: Factual journalism (default)
+    - le_cynique: Edouard Vaillant - Sardonic, skeptical (Le Canard Enchaine style)
+    - l_optimiste: Claire Horizon - Enthusiastic, solution-focused (Wired style)
+    - le_conteur: Alexandre Duval - Dramatic storytelling (feuilleton style)
+    - le_satiriste: Le Bouffon - Absurdist parody (Le Gorafi style)
+
+    Note: This generates content on-the-fly using LLM. Response may take 5-10 seconds.
+    """
+    from app.ml.persona import get_persona, PersonaType
+    from app.ml.llm import get_llm_service
+
+    # Validate persona exists
+    persona = get_persona(persona_id)
+    if not persona:
+        valid_personas = [p.value for p in PersonaType]
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid persona '{persona_id}'. Must be one of: {', '.join(valid_personas)}"
+        )
+
+    try:
+        qdrant = get_qdrant_service()
+
+        # Get original synthesis
+        synthesis = qdrant.get_synthesis_by_id(synthesis_id)
+        if not synthesis:
+            raise HTTPException(status_code=404, detail="Synthesis not found")
+
+        # If neutral, return original
+        if persona_id == PersonaType.NEUTRAL:
+            result = format_synthesis_for_frontend(synthesis)
+            result["persona"] = {
+                "id": persona.id,
+                "name": persona.name,
+                "displayName": persona.display_name,
+            }
+            return result
+
+        # Get source articles from cluster if available
+        cluster_id = synthesis.get("cluster_id")
+        articles = []
+        if cluster_id:
+            # Try to get original articles
+            try:
+                articles = qdrant.get_articles_by_cluster(cluster_id, limit=6)
+            except Exception:
+                pass
+
+        # Format base synthesis
+        base_synthesis = format_synthesis_for_frontend(synthesis)
+
+        # Generate persona version
+        llm = get_llm_service()
+        persona_synthesis = await llm.synthesize_with_persona(
+            base_synthesis=base_synthesis,
+            articles=articles,
+            persona_id=persona_id
+        )
+
+        # Merge with original metadata
+        persona_synthesis["id"] = base_synthesis["id"]
+        persona_synthesis["clusterId"] = base_synthesis.get("clusterId")
+        persona_synthesis["category"] = base_synthesis.get("category")
+        persona_synthesis["createdAt"] = base_synthesis.get("createdAt")
+        persona_synthesis["sources"] = base_synthesis.get("sources", [])
+        persona_synthesis["sourceArticles"] = base_synthesis.get("sourceArticles", [])
+        persona_synthesis["numSources"] = base_synthesis.get("numSources", 0)
+
+        return persona_synthesis
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to generate persona synthesis: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -5,18 +5,34 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import SynthesisLayout from '@/app/components/layout/SynthesisLayout';
 import { TimelinePreview } from '@/app/components/timeline';
-import { NeuralCausalGraph, NodeDetailPanel } from '@/app/components/causal';
+import HistoricalCausalGraph from '@/app/components/causal/HistoricalCausalGraph';
+import { NodeDetailPanel } from '@/app/components/causal';
+import { PersonaSwitcher, PERSONA_EMOJI, PERSONA_COLOR } from '@/app/components/ui/PersonaSwitcher';
 import { causalService } from '@/app/lib/api/services/causal';
 import {
   CausalGraphResponse,
   CausalNode,
-  CausalEdge,
+  CausalEdge
 } from '@/app/types/causal';
+
+// Related synthesis type
+interface RelatedSynthesis {
+  id: string;
+  title: string;
+  similarity: number;
+}
 
 interface SourceArticle {
   name: string;
   url: string;
   title: string;
+}
+
+interface PersonaInfo {
+  id: string;
+  name: string;
+  displayName: string;
+  tone?: string;
 }
 
 interface Synthesis {
@@ -33,6 +49,9 @@ interface Synthesis {
   complianceScore: number;
   readingTime: number;
   createdAt: string;
+  persona?: PersonaInfo;
+  signature?: string;
+  isPersonaVersion?: boolean;
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
@@ -41,13 +60,19 @@ export default function SynthesisPage() {
   const params = useParams();
   const router = useRouter();
   const [synthesis, setSynthesis] = useState<Synthesis | null>(null);
+  const [originalSynthesis, setOriginalSynthesis] = useState<Synthesis | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Persona state
+  const [currentPersona, setCurrentPersona] = useState<string>('neutral');
+  const [personaLoading, setPersonaLoading] = useState(false);
 
   // Causal graph state
   const [causalData, setCausalData] = useState<CausalGraphResponse | null>(null);
   const [causalLoading, setCausalLoading] = useState(false);
   const [selectedNode, setSelectedNode] = useState<CausalNode | null>(null);
+  const [relatedSyntheses, setRelatedSyntheses] = useState<RelatedSynthesis[]>([]);
 
   // Fetch synthesis
   useEffect(() => {
@@ -64,6 +89,7 @@ export default function SynthesisPage() {
 
         const data = await response.json();
         setSynthesis(data);
+        setOriginalSynthesis(data); // Save original for persona switching
         setError(null);
       } catch (err) {
         console.error('Failed to fetch synthesis:', err);
@@ -76,7 +102,41 @@ export default function SynthesisPage() {
     fetchSynthesis();
   }, [params?.id]);
 
-  // Fetch causal graph data
+  // Handle persona change
+  const handlePersonaChange = useCallback(async (personaId: string) => {
+    if (!params?.id || personaId === currentPersona) return;
+
+    // If switching back to neutral, restore original
+    if (personaId === 'neutral') {
+      setCurrentPersona('neutral');
+      if (originalSynthesis) {
+        setSynthesis(originalSynthesis);
+      }
+      return;
+    }
+
+    try {
+      setPersonaLoading(true);
+      const response = await fetch(
+        `${API_URL}/api/syntheses/by-id/${params.id}/persona/${personaId}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      setSynthesis(data);
+      setCurrentPersona(personaId);
+    } catch (err) {
+      console.error('Failed to fetch persona synthesis:', err);
+      // Stay on current persona on error
+    } finally {
+      setPersonaLoading(false);
+    }
+  }, [params?.id, currentPersona, originalSynthesis]);
+
+  // Fetch causal graph data and related syntheses
   useEffect(() => {
     const fetchCausalData = async () => {
       if (!params?.id) return;
@@ -93,7 +153,23 @@ export default function SynthesisPage() {
       }
     };
 
+    const fetchRelatedSyntheses = async () => {
+      if (!params?.id) return;
+      try {
+        const response = await fetch(`${API_URL}/api/time-traveler/syntheses/${params.id}/preview`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.related_syntheses) {
+            setRelatedSyntheses(data.related_syntheses.slice(0, 5));
+          }
+        }
+      } catch (err) {
+        console.log('Related syntheses not available:', err);
+      }
+    };
+
     fetchCausalData();
+    fetchRelatedSyntheses();
   }, [params?.id]);
 
   // Handle node click in causal graph
@@ -267,30 +343,19 @@ export default function SynthesisPage() {
           />
         }
         rightSidebar={
-          causalData && causalData.nodes && causalData.nodes.length > 0 ? (
-            <NeuralCausalGraph
-              nodes={causalData.nodes}
-              edges={causalData.edges}
-              centralEntity={causalData.central_entity}
-              narrativeFlow={causalData.narrative_flow}
-              onNodeClick={handleNodeClick}
-              onEdgeClick={handleEdgeClick}
-            />
-          ) : causalLoading ? (
-            <div style={styles.sidebarLoading}>
-              <div style={styles.spinnerSmall} />
-              <p>Chargement du graphe...</p>
-            </div>
-          ) : (
-            <div style={styles.sidebarEmpty}>
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.5">
-                <circle cx="12" cy="12" r="3" />
-                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-              </svg>
-              <p style={styles.emptyText}>Graphe neuronal en attente</p>
-              <p style={styles.emptySubtext}>Les relations causales seront disponibles prochainement.</p>
-            </div>
-          )
+          <HistoricalCausalGraph
+            synthesisId={synthesis.id}
+            onNodeClick={(node) => {
+              // Convert PositionedNode to CausalNode for the detail panel
+              const causalNode: CausalNode = {
+                id: node.id,
+                label: node.label,
+                node_type: node.nodeType as 'event' | 'entity' | 'decision',
+                fact_density: node.factDensity
+              };
+              setSelectedNode(causalNode);
+            }}
+          />
         }
       >
         {/* Main Content */}
@@ -322,6 +387,37 @@ export default function SynthesisPage() {
               />
               {synthesis.complianceScore}% accuracy
             </span>
+          </div>
+
+          {/* Persona Switcher */}
+          <div style={{ marginTop: '24px', marginBottom: '24px' }}>
+            <PersonaSwitcher
+              currentPersona={currentPersona}
+              onPersonaChange={handlePersonaChange}
+              isLoading={personaLoading}
+            />
+            {/* Persona indicator when not neutral */}
+            {synthesis.persona && synthesis.persona.id !== 'neutral' && (
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 16px',
+                backgroundColor: `${PERSONA_COLOR[synthesis.persona.id]}15`,
+                borderLeft: `3px solid ${PERSONA_COLOR[synthesis.persona.id]}`,
+                borderRadius: '0 4px 4px 0',
+                marginTop: '12px'
+              }}>
+                <span style={{ fontSize: '18px' }}>{PERSONA_EMOJI[synthesis.persona.id]}</span>
+                <span style={{
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  color: PERSONA_COLOR[synthesis.persona.id]
+                }}>
+                  Redige par {synthesis.persona.name}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Introduction (chapo) */}
@@ -361,6 +457,36 @@ export default function SynthesisPage() {
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+
+          {/* Persona Signature */}
+          {synthesis.signature && synthesis.isPersonaVersion && (
+            <div style={{
+              marginTop: '32px',
+              padding: '20px',
+              borderTop: '1px solid #E5E5E5',
+              fontStyle: 'italic',
+              fontSize: '15px',
+              color: '#6B7280',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
+            }}>
+              <span style={{ fontSize: '24px' }}>
+                {synthesis.persona ? PERSONA_EMOJI[synthesis.persona.id] : '📝'}
+              </span>
+              <span>{synthesis.signature}</span>
+              {synthesis.persona && (
+                <span style={{
+                  marginLeft: 'auto',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  color: synthesis.persona ? PERSONA_COLOR[synthesis.persona.id] : '#6B7280'
+                }}>
+                  — {synthesis.persona.name}
+                </span>
+              )}
             </div>
           )}
 
