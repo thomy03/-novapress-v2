@@ -1,0 +1,56 @@
+# NovaPress Backend - Docker Ignore
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# Git
+.git
+.gitignore
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment files (use Docker env vars)
+.env
+.env.*
+!.env.example
+
+# Tests
+tests/
+pytest.ini
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Documentation
+*.md
+docs/
+
+# Local data (use Docker volumes)
+data/
+*.db
+*.sqlite
+
+# Build artifacts
+*.egg-info/
+dist/
+build/
+
+# Logs
+*.log
+logs/
+
+# Misc
+.DS_Store
+Thumbs.db
