@@ -1,0 +1,339 @@
+#!/usr/bin/env python3
+"""
+NovaPress AI v2 - Backend API
+Flask API compatible avec le frontend Next.js
+"""
+from flask import Flask, jsonify, request
+from flask_cors import CORS
+import sqlite3
+import json
+from datetime import datetime
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+app = Flask(__name__)
+
+# CORS Configuration pour Next.js
+CORS(app, resources={
+    r"/api/*": {
+        "origins": ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002"],
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
+
+# Database path (adjusted for script location)
+DB_PATH = os.getenv('DATABASE_PATH', 'data/articles.db')
+
+def get_db_connection():
+    """Get database connection"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        return conn
+    except Exception as e:
+        print(f"❌ Database connection error: {e}")
+        return None
+
+def format_article(row):
+    """Format article data for API response (compatible avec frontend)"""
+    try:
+        # Extract data from row
+        article_id = row['id']
+        title = row['title'] or 'Sans titre'
+        summary = row['summary'] or ''
+        content = row['content'] or row['summary'] or ''
+        created_at = row['created_at'] or datetime.now().isoformat()
+
+        # Parse themes JSON
+        themes_raw = row['themes']
+        try:
+            tags = json.loads(themes_raw) if themes_raw else []
+            if not isinstance(tags, list):
+                tags = []
+        except:
+            tags = []
+
+        # Format as string array for frontend (as expected by Article interface)
+        formatted_tags = tags if tags else ['Actualités']
+
+        return {
+            'id': str(article_id),
+            'title': title,
+            'subtitle': summary[:100] if summary else '',
+            'content': content[:500],
+            'summary': summary[:200] if summary else content[:200],
+            'author': 'NovaPress AI',
+            'publishedAt': created_at,
+            'updatedAt': created_at,
+            'imageUrl': f'https://picsum.photos/800/400?random={article_id}',
+            'imageCaption': '',
+            'category': {
+                'id': '1',
+                'name': 'Actualités',
+                'slug': 'actualites',
+                'icon': '📰'
+            },
+            'tags': formatted_tags,
+            'readTime': max(1, len(content.split()) // 200),
+            'viewCount': 0,
+            'isBreaking': False,
+            'isFeatured': article_id <= 5,
+            'source': {
+                'id': '1',
+                'name': 'NovaPress AI',
+                'domain': 'novapress.ai',
+                'credibilityScore': 95
+            }
+        }
+    except Exception as e:
+        print(f"❌ Error formatting article {row.get('id', '?')}: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+# ===== ENDPOINTS API =====
+
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """Health check endpoint"""
+    try:
+        conn = get_db_connection()
+        if conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) as count FROM topics")
+            count = cursor.fetchone()['count']
+            conn.close()
+
+            return jsonify({
+                'status': 'healthy',
+                'database': 'connected',
+                'articlesCount': count,
+                'timestamp': datetime.now().isoformat(),
+                'version': '2.0.0'
+            })
+        else:
+            return jsonify({
+                'status': 'unhealthy',
+                'database': 'disconnected'
+            }), 500
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+@app.route('/api/articles', methods=['GET'])
+def get_articles():
+    """Get all articles with pagination and filters"""
+    try:
+        # Query parameters
+        limit = request.args.get('limit', 50, type=int)
+        offset = request.args.get('offset', 0, type=int)
+        search = request.args.get('search', '')
+        category = request.args.get('category', '')
+
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({'error': 'Database connection failed'}), 500
+
+        cursor = conn.cursor()
+
+        # Build query
+        query = """
+            SELECT id, title, summary, content, created_at, themes
+            FROM topics
+            WHERE 1=1
+        """
+        params = []
+
+        if search:
+            query += " AND (title LIKE ? OR content LIKE ?)"
+            params.extend([f'%{search}%', f'%{search}%'])
+
+        query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+
+        articles = []
+        for row in rows:
+            formatted = format_article(row)
+            if formatted:
+                articles.append(formatted)
+
+        # Get total count
+        cursor.execute("SELECT COUNT(*) as total FROM topics")
+        total = cursor.fetchone()['total']
+
+        conn.close()
+
+        # Calculate page from offset
+        page = (offset // limit) + 1 if limit > 0 else 1
+
+        return jsonify({
+            'data': articles,
+            'total': total,
+            'page': page,
+            'limit': limit,
+            'hasNext': (offset + limit) < total,
+            'hasPrev': offset > 0
+        })
+
+    except Exception as e:
+        print(f"❌ API Error: {e}")
+        return jsonify({
+            'data': [],
+            'error': str(e),
+            'status': 'error'
+        }), 500
+
+@app.route('/api/articles/<article_id>', methods=['GET'])
+def get_article(article_id):
+    """Get single article by ID"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({'error': 'Database connection failed'}), 500
+
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, title, summary, content, created_at, themes
+            FROM topics
+            WHERE id = ?
+        """, (article_id,))
+
+        row = cursor.fetchone()
+        conn.close()
+
+        if not row:
+            return jsonify({'error': 'Article not found'}), 404
+
+        article = format_article(row)
+
+        return jsonify({
+            'data': article,
+            'status': 'success'
+        })
+
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'status': 'error'
+        }), 500
+
+@app.route('/api/trending', methods=['GET'])
+def get_trending():
+    """Get trending topics"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({'error': 'Database connection failed'}), 500
+
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, title, summary, content, created_at, themes
+            FROM topics
+            ORDER BY created_at DESC
+            LIMIT 10
+        """)
+
+        rows = cursor.fetchall()
+        conn.close()
+
+        trending = []
+        for row in rows:
+            formatted = format_article(row)
+            if formatted:
+                trending.append(formatted)
+
+        return jsonify({
+            'data': trending,
+            'status': 'success'
+        })
+
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'status': 'error'
+        }), 500
+
+@app.route('/api/search', methods=['GET'])
+def search_articles():
+    """Search articles"""
+    query = request.args.get('q', '')
+    limit = request.args.get('limit', 20, type=int)
+
+    if not query:
+        return jsonify({'data': [], 'status': 'success'})
+
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({'error': 'Database connection failed'}), 500
+
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, title, summary, content, created_at, themes
+            FROM topics
+            WHERE title LIKE ? OR content LIKE ?
+            ORDER BY created_at DESC
+            LIMIT ?
+        """, (f'%{query}%', f'%{query}%', limit))
+
+        rows = cursor.fetchall()
+        conn.close()
+
+        results = []
+        for row in rows:
+            formatted = format_article(row)
+            if formatted:
+                results.append(formatted)
+
+        return jsonify({
+            'data': results,
+            'query': query,
+            'count': len(results),
+            'status': 'success'
+        })
+
+    except Exception as e:
+        return jsonify({
+            'error': str(e),
+            'status': 'error'
+        }), 500
+
+if __name__ == '__main__':
+    print("🚀 Starting NovaPress AI v2 Backend API...")
+    print(f"📁 Database path: {DB_PATH}")
+    print(f"✅ Database exists: {os.path.exists(DB_PATH)}")
+
+    # Test database connection
+    conn = get_db_connection()
+    if conn:
+        print("✅ Database connection successful")
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) as count FROM topics")
+        count = cursor.fetchone()['count']
+        print(f"📊 Total articles in database: {count}")
+        conn.close()
+    else:
+        print("❌ Database connection failed")
+
+    port = int(os.getenv('PORT', 5000))
+    host = os.getenv('HOST', '0.0.0.0')
+
+    print(f"\n🌐 API running on http://{host}:{port}")
+    print(f"📡 Frontend can connect at: http://localhost:{port}/api")
+    print("\n🔗 Available endpoints:")
+    print(f"  - GET  /api/health")
+    print(f"  - GET  /api/articles")
+    print(f"  - GET  /api/articles/<id>")
+    print(f"  - GET  /api/trending")
+    print(f"  - GET  /api/search?q=...")
+
+    app.run(debug=True, host=host, port=port)

@@ -1,0 +1,115 @@
+# NovaPress AI v2 - Production Docker Compose
+# Full stack: Frontend + Backend + Qdrant + Redis
+
+services:
+  # Next.js Frontend
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:5000}
+    container_name: novapress_frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://backend:5000}
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - novapress_network
+
+  # FastAPI Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: novapress_backend
+    ports:
+      - "5000:5000"
+    environment:
+      # Database & Cache (Docker network names)
+      DATABASE_URL: "postgresql+asyncpg://novapress:password@postgres:5432/novapress_db"
+      REDIS_URL: "redis://redis:6379/0"
+      QDRANT_URL: "http://qdrant:6333"
+      QDRANT_COLLECTION: "novapress_articles"
+
+      # ML & LLM
+      EMBEDDING_MODEL: "BAAI/bge-m3"
+      EMBEDDING_DEVICE: "cpu"
+      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY}"  # REQUIRED: Set in .env file
+
+      # Security
+      SECRET_KEY: "${SECRET_KEY}"  # REQUIRED: Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
+      ALGORITHM: "HS256"
+      ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+      REFRESH_TOKEN_EXPIRE_DAYS: "7"
+
+      # CORS (frontend container and host)
+      CORS_ORIGINS: '["http://localhost:3000","http://frontend:3000","https://novapress.ai"]'
+
+      # App Config
+      DEBUG: "false"
+      API_V1_PREFIX: "/api"
+    depends_on:
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    volumes:
+      - backend_data:/app/data
+    restart: unless-stopped
+    networks:
+      - novapress_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 120s
+      retries: 3
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: novapress_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - novapress_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    command: redis-server --appendonly yes
+
+  # Qdrant Vector Database
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: novapress_qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__HTTP_PORT: 6333
+      QDRANT__SERVICE__GRPC_PORT: 6334
+    restart: unless-stopped
+    networks:
+      - novapress_network
+
+volumes:
+  backend_data:
+  redis_data:
+  qdrant_data:
+
+networks:
+  novapress_network:
+    driver: bridge
