@@ -46,22 +46,17 @@ export function Providers({ children }: ProvidersProps) {
     setMounted(true);
   }, []);
 
-  // Avoid hydration mismatch by rendering a simple wrapper first
-  if (!mounted) {
-    return (
-      <ErrorBoundary>
-        <div style={{ visibility: 'hidden' }}>{children}</div>
-      </ErrorBoundary>
-    );
-  }
-
+  // Always render with providers to avoid useTheme errors
+  // Use visibility:hidden before mount to avoid hydration mismatch
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
           <AuthProvider>
             <ArticlesProvider>
-              {children}
+              <div style={{ visibility: mounted ? 'visible' : 'hidden' }}>
+                {children}
+              </div>
             </ArticlesProvider>
           </AuthProvider>
         </ThemeProvider>

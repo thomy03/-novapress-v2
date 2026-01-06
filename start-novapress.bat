@@ -28,11 +28,19 @@ start "NovaPress-Frontend" cmd /c "cd /d %~dp0 && npm run dev -- -p 3005"
 timeout /t 5 /nobreak >nul
 
 echo.
-echo Opening browser...
-start "" http://localhost:3005
+echo Opening Status Dashboard...
+start "" http://localhost:3005/dev/status
 
 echo.
-echo NovaPress is running!
-echo Use stop-novapress.bat to stop all services.
+echo =============================================
+echo  NovaPress AI v2 is running!
+echo.
+echo  Status:   http://localhost:3005/dev/status
+echo  Home:     http://localhost:3005
+echo  Backend:  http://localhost:5000/api/docs
+echo  Kanban:   http://localhost:3005/dev/kanban
+echo.
+echo  Use stop-novapress.bat to stop all services.
+echo =============================================
 echo.
 pause
