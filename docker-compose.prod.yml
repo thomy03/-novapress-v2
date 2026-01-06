@@ -61,6 +61,8 @@ services:
       PERPLEXITY_API_KEY: "${PERPLEXITY_API_KEY:-}"
       XAI_API_KEY: "${XAI_API_KEY:-}"
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
       qdrant:
@@ -76,6 +78,27 @@ services:
       timeout: 10s
       start_period: 120s
       retries: 3
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: novapress_postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: novapress
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: novapress_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - novapress_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U novapress -d novapress_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # Redis Cache
   redis:
@@ -113,6 +136,7 @@ services:
 
 volumes:
   backend_data:
+  postgres_data:
   redis_data:
   qdrant_data:
 
