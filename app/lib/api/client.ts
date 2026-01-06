@@ -119,13 +119,21 @@ class ApiClient {
     throw new Error('Max retry attempts reached');
   }
 
-  async get<T>(endpoint: string, params?: Record<string, any>): Promise<T> {
-    // Build URL properly - ensure trailing slash is preserved
+  async get<T>(
+    endpoint: string,
+    options?: {
+      params?: Record<string, any>;
+      headers?: Record<string, string>;
+    }
+  ): Promise<T> {
+    // Build URL properly - normalize to prevent double slashes
     let url = `${API_CONFIG.BASE_URL}${endpoint}`;
+    // Remove any double slashes (except in protocol)
+    url = url.replace(/([^:]\/)\/+/g, '$1');
 
-    if (params) {
+    if (options?.params) {
       const searchParams = new URLSearchParams();
-      Object.entries(params).forEach(([key, value]) => {
+      Object.entries(options.params).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
           searchParams.append(key, value.toString());
         }
@@ -136,7 +144,10 @@ class ApiClient {
       }
     }
 
-    return this.request<T>(url, { method: 'GET' });
+    return this.request<T>(url, {
+      method: 'GET',
+      headers: options?.headers,
+    });
   }
 
   async post<T>(endpoint: string, data?: any, options?: { headers?: Record<string, string> }): Promise<T> {

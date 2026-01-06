@@ -1,21 +1,33 @@
 """
 OpenRouter LLM Service
 Uses OpenAI Client to connect to OpenRouter API
+Includes retry logic with exponential backoff for resilience
+Circuit breaker pattern to prevent cascading failures
 """
 from typing import Optional, Dict, Any, List
 import json
+import asyncio
+import random
 from loguru import logger
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, APIError, APIConnectionError, RateLimitError, APITimeoutError
 
 from app.core.config import settings
+from app.core.circuit_breaker import get_circuit_breaker, CircuitOpenError
+
+
+# Retry configuration
+MAX_RETRIES = 3
+BASE_DELAY = 2.0
+MAX_DELAY = 30.0
 
 
 class LLMService:
-    """LLM Service via OpenRouter"""
+    """LLM Service via OpenRouter with circuit breaker"""
 
     def __init__(self):
         self.client: Optional[AsyncOpenAI] = None
         self.model = settings.OPENROUTER_MODEL
+        self.circuit_breaker = get_circuit_breaker("openrouter")
 
     async def initialize(self):
         """Initialize OpenAI client for OpenRouter"""
@@ -24,6 +36,7 @@ class LLMService:
             self.client = AsyncOpenAI(
                 api_key=settings.OPENROUTER_API_KEY,
                 base_url=settings.OPENROUTER_BASE_URL,
+                timeout=120.0,  # 2 minutes timeout for LLM calls
             )
             logger.success(f"✅ OpenRouter client initialized")
         except Exception as e:
@@ -32,50 +45,175 @@ class LLMService:
 
     async def generate(self, prompt: str, temperature: float = 0.7, max_tokens: int = 2000) -> str:
         """
-        Generate text completion
+        Generate text completion with retry logic and circuit breaker
         """
         if not self.client:
             await self.initialize()
 
+        # Check circuit breaker first
         try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=temperature,
-                max_tokens=max_tokens,
+            return await self.circuit_breaker.call(
+                self._generate_with_retry, prompt, temperature, max_tokens
             )
-            return response.choices[0].message.content
-        except Exception as e:
-            logger.error(f"LLM generation failed: {e}")
+        except CircuitOpenError as e:
+            logger.warning(f"Circuit breaker open: {e}")
             return ""
+
+    async def _generate_with_retry(self, prompt: str, temperature: float, max_tokens: int) -> str:
+        """Internal method with retry logic, called through circuit breaker"""
+        last_exception = None
+        for attempt in range(MAX_RETRIES + 1):
+            try:
+                response = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                )
+                return response.choices[0].message.content
+            except RateLimitError as e:
+                last_exception = e
+                if attempt < MAX_RETRIES:
+                    delay = min(BASE_DELAY * (2 ** attempt) + random.uniform(0, 1), MAX_DELAY)
+                    logger.warning(f"Rate limit hit, retrying in {delay:.1f}s (attempt {attempt + 1}/{MAX_RETRIES})")
+                    await asyncio.sleep(delay)
+            except (APIConnectionError, APITimeoutError) as e:
+                last_exception = e
+                if attempt < MAX_RETRIES:
+                    delay = min(BASE_DELAY * (2 ** attempt) + random.uniform(0, 1), MAX_DELAY)
+                    logger.warning(f"API connection error, retrying in {delay:.1f}s (attempt {attempt + 1}/{MAX_RETRIES})")
+                    await asyncio.sleep(delay)
+            except APIError as e:
+                # Only retry on 5xx errors
+                if hasattr(e, 'status_code') and 500 <= e.status_code < 600:
+                    last_exception = e
+                    if attempt < MAX_RETRIES:
+                        delay = min(BASE_DELAY * (2 ** attempt) + random.uniform(0, 1), MAX_DELAY)
+                        logger.warning(f"API error {e.status_code}, retrying in {delay:.1f}s (attempt {attempt + 1}/{MAX_RETRIES})")
+                        await asyncio.sleep(delay)
+                else:
+                    logger.error(f"LLM generation failed (non-retryable): {e}")
+                    raise  # Let circuit breaker track this failure
+            except Exception as e:
+                logger.error(f"LLM generation failed: {e}")
+                raise  # Let circuit breaker track this failure
+
+        logger.error(f"LLM generation failed after {MAX_RETRIES} retries: {last_exception}")
+        raise last_exception or Exception("Max retries exceeded")
 
     async def generate_json(self, prompt: str, temperature: float = 0.3, max_tokens: int = 4000) -> Dict[str, Any]:
         """
-        Generate JSON response with extended token limit for long-form content
+        Generate JSON response with extended token limit for long-form content.
+        Returns fallback structure on error instead of empty dict.
+        Includes retry logic with exponential backoff and circuit breaker.
         """
         if not self.client:
             await self.initialize()
 
-        try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": "Tu es un assistant expert en rédaction journalistique. Tu produis uniquement du JSON valide, en français."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=temperature,
-                max_tokens=max_tokens,
-                response_format={"type": "json_object"}
-            )
+        fallback_response = {
+            "title": "Synthèse d'actualité",
+            "introduction": "",
+            "body": "",
+            "summary": "",
+            "keyPoints": [],
+            "analysis": "",
+            "readingTime": 5,
+            "causal_chain": [],
+            "predictions": []
+        }
 
-            text = response.choices[0].message.content
-            return json.loads(text)
-        except json.JSONDecodeError:
-            logger.error("Failed to parse JSON from LLM")
-            return {}
-        except Exception as e:
-            logger.error(f"LLM JSON generation failed: {e}")
-            return {}
+        # Check circuit breaker first
+        try:
+            return await self.circuit_breaker.call(
+                self._generate_json_with_retry, prompt, temperature, max_tokens
+            )
+        except CircuitOpenError as e:
+            logger.warning(f"Circuit breaker open: {e}")
+            return fallback_response
+
+    async def _generate_json_with_retry(self, prompt: str, temperature: float, max_tokens: int) -> Dict[str, Any]:
+        """Internal method with retry logic for JSON generation"""
+        fallback_response = {
+            "title": "Synthèse d'actualité",
+            "introduction": "",
+            "body": "",
+            "summary": "",
+            "keyPoints": [],
+            "analysis": "",
+            "readingTime": 5,
+            "causal_chain": [],
+            "predictions": []
+        }
+
+        last_exception = None
+        text = None
+
+        for attempt in range(MAX_RETRIES + 1):
+            try:
+                response = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": "Tu es un assistant expert en rédaction journalistique. Tu produis uniquement du JSON valide, en français."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    response_format={"type": "json_object"}
+                )
+
+                text = response.choices[0].message.content
+                if not text:
+                    logger.warning("LLM returned empty response, using fallback")
+                    return fallback_response
+
+                # Try to parse JSON, handling markdown code blocks if present
+                text = text.strip()
+                if text.startswith("```"):
+                    lines = text.split("\n")
+                    json_lines = []
+                    in_block = False
+                    for line in lines:
+                        if line.startswith("```json") or line.startswith("```"):
+                            in_block = not in_block
+                            continue
+                        if in_block:
+                            json_lines.append(line)
+                    text = "\n".join(json_lines)
+
+                return json.loads(text)
+
+            except RateLimitError as e:
+                last_exception = e
+                if attempt < MAX_RETRIES:
+                    delay = min(BASE_DELAY * (2 ** attempt) + random.uniform(0, 1), MAX_DELAY)
+                    logger.warning(f"Rate limit hit, retrying in {delay:.1f}s (attempt {attempt + 1}/{MAX_RETRIES})")
+                    await asyncio.sleep(delay)
+            except (APIConnectionError, APITimeoutError) as e:
+                last_exception = e
+                if attempt < MAX_RETRIES:
+                    delay = min(BASE_DELAY * (2 ** attempt) + random.uniform(0, 1), MAX_DELAY)
+                    logger.warning(f"API connection error, retrying in {delay:.1f}s (attempt {attempt + 1}/{MAX_RETRIES})")
+                    await asyncio.sleep(delay)
+            except APIError as e:
+                if hasattr(e, 'status_code') and 500 <= e.status_code < 600:
+                    last_exception = e
+                    if attempt < MAX_RETRIES:
+                        delay = min(BASE_DELAY * (2 ** attempt) + random.uniform(0, 1), MAX_DELAY)
+                        logger.warning(f"API error {e.status_code}, retrying in {delay:.1f}s (attempt {attempt + 1}/{MAX_RETRIES})")
+                        await asyncio.sleep(delay)
+                else:
+                    logger.error(f"LLM JSON generation failed (non-retryable): {e}")
+                    raise  # Let circuit breaker track this failure
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse JSON from LLM: {e}")
+                logger.debug(f"Raw LLM response: {text[:500] if text else 'empty'}")
+                return fallback_response  # JSON parse errors are not API failures
+            except Exception as e:
+                logger.error(f"LLM JSON generation failed: {e}")
+                raise  # Let circuit breaker track this failure
+
+        logger.error(f"LLM JSON generation failed after {MAX_RETRIES} retries: {last_exception}")
+        raise last_exception or Exception("Max retries exceeded")
 
     async def synthesize_articles(self, articles: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
@@ -149,6 +287,11 @@ INSTRUCTIONS DE RÉDACTION:
    - 2-3 phrases sur les implications ou le contexte plus large
    - Perspective d'expert
 
+6. CHAÎNE CAUSALE (causal_chain) - OBLIGATOIRE:
+   - Identifie 2-4 relations cause-effet dans l'actualité
+   - Types: "causes" (direct), "triggers" (déclencheur), "enables" (permet), "prevents" (empêche)
+   - Exemple: Une annonce politique → réaction des marchés → impact sur les ménages
+
 Format JSON strict:
 {{
   "title": "Titre accrocheur et factuel",
@@ -161,6 +304,10 @@ Format JSON strict:
     "Quatrième point sur les perspectives"
   ],
   "analysis": "Analyse des enjeux plus larges et des implications futures...",
+  "causal_chain": [
+    {{"cause": "Fait déclencheur", "effect": "Conséquence observée", "type": "causes", "sources": ["Source1"]}},
+    {{"cause": "Réaction", "effect": "Impact", "type": "triggers", "sources": ["Source2"]}}
+  ],
   "readingTime": 5
 }}
 """
@@ -179,6 +326,7 @@ Format JSON strict:
             "body": body,
             "keyPoints": result.get("keyPoints", []),
             "analysis": result.get("analysis", ""),
+            "causal_chain": result.get("causal_chain", []),
             "complianceScore": 95,
             "readingTime": result.get("readingTime", 5)
         }
@@ -281,6 +429,10 @@ STRUCTURE ATTENDUE:
 
 5. ANALYSE (analysis): 2-3 phrases sur les implications
 
+6. CHAÎNE CAUSALE (causal_chain) - OBLIGATOIRE:
+   - Identifie 2-4 relations cause-effet dans les faits rapportés
+   - Types: "causes", "triggers", "enables", "prevents"
+
 Format JSON strict:
 {{
   "title": "...",
@@ -288,6 +440,10 @@ Format JSON strict:
   "body": "...",
   "keyPoints": ["...", "...", "...", "..."],
   "analysis": "...",
+  "causal_chain": [
+    {{"cause": "Événement déclencheur", "effect": "Conséquence", "type": "causes", "sources": ["Source"]}},
+    {{"cause": "Action", "effect": "Réaction", "type": "triggers", "sources": ["Source"]}}
+  ],
   "readingTime": 5,
   "hasContradictions": {"true" if contradictions else "false"}
 }}
@@ -307,6 +463,7 @@ Format JSON strict:
             "body": body,
             "keyPoints": result.get("keyPoints", []),
             "analysis": result.get("analysis", ""),
+            "causal_chain": result.get("causal_chain", []),
             "complianceScore": 95,
             "readingTime": result.get("readingTime", 5),
             "hasContradictions": result.get("hasContradictions", len(contradictions) > 0)
@@ -412,12 +569,42 @@ INSTRUCTIONS SPÉCIALES
 
 6. TIMELINE (timeline): Liste des dates clés (si histoire > 1 jour)
 
-7. CHAÎNE CAUSALE (causal_chain): Relations cause-effet OBLIGATOIRES
-   - Identifie 3-6 relations causales dans l'histoire
-   - Format: cause → effet avec type de relation
-   - Types: "causes" (direct), "triggers" (déclencheur), "enables" (permet), "prevents" (empêche)
+7. ⚠️ CHAÎNE CAUSALE (causal_chain): ABSOLUMENT OBLIGATOIRE - NE JAMAIS OMETTRE
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   🔴 CRITIQUE: Tu DOIS OBLIGATOIREMENT générer 3-6 relations causales.
+   🔴 Si tu ne génères pas de causal_chain, la synthèse est INVALIDE.
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Format JSON:
+   Comment identifier les relations causales:
+   - Lis chaque fait et demande-toi: "Qu'est-ce qui a CAUSÉ ceci?" et "Quelles CONSÉQUENCES?"
+   - Cherche les mots-clés: "car", "donc", "suite à", "en raison de", "a provoqué", "conduit à", "entraîne"
+   - Toute décision politique → ses effets sur la société/économie
+   - Tout événement → ses réactions et conséquences
+
+   Types de relations:
+   - "causes": cause directe (A provoque B)
+   - "triggers": déclencheur (A déclenche une réaction B)
+   - "enables": permet (A rend B possible)
+   - "prevents": empêche (A bloque B)
+
+8. 🔮 PRÉDICTIONS FUTURES (predictions): OBLIGATOIRE - 2-4 scénarios probables
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Basé sur les tendances identifiées, génère 2-4 conséquences FUTURES probables:
+
+   Comment identifier les prédictions:
+   - Quel est le scénario le plus PROBABLE si la tendance actuelle continue?
+   - Quelles RÉACTIONS des acteurs clés peut-on anticiper?
+   - Quels PRÉCÉDENTS historiques similaires suggèrent quelle issue?
+   - Quels RISQUES ou OPPORTUNITÉS émergent?
+
+   Types de prédictions:
+   - "economic": Impact économique (marchés, emploi, inflation)
+   - "political": Réactions politiques, élections, lois
+   - "social": Mouvements sociaux, opinion publique
+   - "geopolitical": Relations internationales, conflits
+   - "tech": Évolutions technologiques, régulations
+
+Format JSON (causal_chain + predictions OBLIGATOIRES):
 {{
   "title": "...",
   "introduction": "...",
@@ -429,16 +616,45 @@ Format JSON:
   "readingTime": 6,
   "causal_chain": [
     {{
-      "cause": "Description de la cause (événement, décision, action)",
-      "effect": "Description de l'effet/conséquence",
-      "type": "causes|triggers|enables|prevents",
-      "sources": ["Source1", "Source2"]
+      "cause": "Annonce de nouvelles sanctions économiques par l'UE",
+      "effect": "Chute de 15% de la devise locale en 24 heures",
+      "type": "triggers",
+      "sources": ["Le Monde", "Reuters"]
     }},
     {{
-      "cause": "Autre cause identifiée",
-      "effect": "Son effet",
+      "cause": "Chute de la devise locale",
+      "effect": "Hausse des prix des importations affectant le pouvoir d'achat",
+      "type": "causes",
+      "sources": ["Les Echos"]
+    }},
+    {{
+      "cause": "Mécontentement populaire face à l'inflation",
+      "effect": "Manifestations dans les grandes villes",
       "type": "triggers",
-      "sources": ["Source3"]
+      "sources": ["AFP", "France Info"]
+    }}
+  ],
+  "predictions": [
+    {{
+      "prediction": "Risque d'escalade des tensions sociales avec de nouvelles manifestations d'ici 2 semaines",
+      "probability": 0.75,
+      "type": "social",
+      "timeframe": "court_terme",
+      "rationale": "La hausse des prix et le mécontentement observé suggèrent une mobilisation croissante"
+    }},
+    {{
+      "prediction": "Négociations diplomatiques probables pour désamorcer la crise économique",
+      "probability": 0.60,
+      "type": "political",
+      "timeframe": "moyen_terme",
+      "rationale": "Les précédents historiques montrent que les sanctions prolongées mènent souvent à des pourparlers"
+    }},
+    {{
+      "prediction": "Impact négatif sur les marchés financiers européens si la crise persiste",
+      "probability": 0.45,
+      "type": "economic",
+      "timeframe": "moyen_terme",
+      "rationale": "L'interconnexion économique rend les marchés sensibles aux instabilités régionales"
     }}
   ]
 }}
@@ -463,7 +679,8 @@ Format JSON:
             "readingTime": result.get("readingTime", 6),
             "hasContradictions": len(contradictions) > 0,
             "isEnriched": True,  # Flag indicating TNA was used
-            "causal_chain": result.get("causal_chain", [])  # Causal relations for Nexus Causal
+            "causal_chain": result.get("causal_chain", []),  # Causal relations for Nexus Causal
+            "predictions": result.get("predictions", [])  # Future predictions for Nexus Causal
         }
 
     async def synthesize_with_persona(

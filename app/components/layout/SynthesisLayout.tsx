@@ -137,11 +137,11 @@ export default function SynthesisLayout({
 
   // Desktop: Full 3-column layout
   const gridColumns = leftSidebar && rightSidebar
-    ? '280px 1fr 400px'
+    ? '280px 1fr 500px'
     : leftSidebar
     ? '280px 1fr'
     : rightSidebar
-    ? '1fr 400px'
+    ? '1fr 500px'
     : '1fr';
 
   return (
@@ -222,6 +222,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     position: 'sticky',
     top: '100px',
     height: 'calc(100vh - 120px)',
+    overflow: 'hidden',
+    borderRadius: '16px',
   },
 
   // Tablet styles

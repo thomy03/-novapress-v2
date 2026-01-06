@@ -3,6 +3,7 @@ NovaPress AI v2 - FastAPI Backend
 Main application entry point
 NO GOOGLE/GEMINI - 100% Open Source Stack
 """
+import sys
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -13,7 +14,18 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
+
+# Configure loguru with settings LOG_LEVEL
+logger.remove()  # Remove default handler
+logger.add(
+    sys.stderr,
+    level=settings.LOG_LEVEL.upper(),
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+    colorize=True
+)
 from app.api.routes import articles, trending, auth, search, websocket, syntheses, time_traveler, causal, admin
+from app.core.circuit_breaker import init_circuit_breakers
+from app.core.metrics import generate_metrics, get_content_type, set_app_info
 
 # Rate limiter instance
 limiter = Limiter(key_func=get_remote_address)
@@ -32,6 +44,12 @@ async def lifespan(app: FastAPI):
     # Validate security configuration FIRST
     from app.core.security_check import validate_secrets
     validate_secrets()
+
+    # Initialize circuit breakers for external APIs
+    init_circuit_breakers()
+
+    # Set application info for Prometheus
+    set_app_info(version="2.0.0", environment="development" if settings.DEBUG else "production")
 
     # Initialize database (TEMPORARILY DISABLED - using Qdrant only)
     # logger.info("📦 Initializing database...")
@@ -93,14 +111,89 @@ app.add_middleware(
 )
 
 
-# Health Check
+# Health Checks - Kubernetes compatible
 @app.get("/health")
 async def health_check():
+    """Basic health check - always returns 200 if app is running"""
     return JSONResponse({
         "status": "healthy",
         "version": "2.0.0",
         "stack": "100% Open Source (NO Gemini)"
     })
+
+
+@app.get("/health/live")
+async def liveness_check():
+    """Liveness probe - indicates if application is alive and should not be restarted"""
+    return JSONResponse({"status": "alive"})
+
+
+@app.get("/health/ready")
+async def readiness_check():
+    """Readiness probe - checks if application is ready to serve traffic"""
+    from app.db.qdrant_client import get_qdrant_service
+    from app.core.circuit_breaker import get_all_circuit_statuses
+
+    checks = {
+        "qdrant": False,
+        "embedding_model": False,
+    }
+
+    # Check Qdrant
+    try:
+        qdrant = get_qdrant_service()
+        if qdrant and qdrant.client:
+            checks["qdrant"] = True
+    except Exception:
+        pass
+
+    # Check embedding model
+    try:
+        from app.ml.embeddings import get_embedding_service
+        embeddings = get_embedding_service()
+        if embeddings and embeddings.model:
+            checks["embedding_model"] = True
+    except Exception:
+        pass
+
+    # Get circuit breaker status
+    circuit_status = get_all_circuit_statuses()
+
+    all_ready = checks["qdrant"] and checks["embedding_model"]
+    status_code = 200 if all_ready else 503
+
+    return JSONResponse(
+        content={
+            "status": "ready" if all_ready else "not_ready",
+            "checks": checks,
+            "circuit_breakers": {
+                name: cb.get("state", "unknown")
+                for name, cb in circuit_status.items()
+            }
+        },
+        status_code=status_code
+    )
+
+
+# Prometheus Metrics Endpoint
+@app.get("/metrics")
+async def metrics():
+    """
+    Prometheus metrics endpoint.
+
+    Returns metrics in Prometheus text format for scraping.
+    Includes:
+    - Pipeline metrics (runs, duration, articles, syntheses)
+    - API metrics (requests, latency, errors)
+    - LLM metrics (calls, tokens, latency)
+    - Scraping metrics (articles fetched, errors)
+    - System gauges (WebSocket connections, circuit breakers)
+    """
+    from fastapi.responses import Response
+    return Response(
+        content=generate_metrics(),
+        media_type=get_content_type()
+    )
 
 
 # API Routes
@@ -122,5 +215,5 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=5000,
         reload=settings.DEBUG,
-        log_level="info"
+        log_level=settings.LOG_LEVEL.lower()
     )

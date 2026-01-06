@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import SynthesisLayout from '@/app/components/layout/SynthesisLayout';
 import { TimelinePreview } from '@/app/components/timeline';
-import HistoricalCausalGraph from '@/app/components/causal/HistoricalCausalGraph';
+import TimelineCausalGraph from '@/app/components/causal/TimelineCausalGraph';
 import { NodeDetailPanel } from '@/app/components/causal';
 import { PersonaSwitcher, PERSONA_EMOJI, PERSONA_COLOR } from '@/app/components/ui/PersonaSwitcher';
 import { causalService } from '@/app/lib/api/services/causal';
@@ -76,39 +76,73 @@ export default function SynthesisPage() {
 
   // Fetch synthesis
   useEffect(() => {
+    const abortController = new AbortController();
+
     const fetchSynthesis = async () => {
       if (!params?.id) return;
 
       try {
         setLoading(true);
-        const response = await fetch(`${API_URL}/api/syntheses/by-id/${params.id}`);
+        const response = await fetch(`${API_URL}/api/syntheses/by-id/${params.id}`, {
+          signal: abortController.signal
+        });
 
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
 
         const data = await response.json();
-        setSynthesis(data);
-        setOriginalSynthesis(data); // Save original for persona switching
+
+        // Don't update state if aborted
+        if (abortController.signal.aborted) return;
+
+        // Map API response persona fields to expected structure
+        const mappedData: Synthesis = {
+          ...data,
+          persona: data.personaId ? {
+            id: data.personaId,
+            name: data.personaName || 'NovaPress',
+            displayName: data.personaName || 'NovaPress (Factuel)'
+          } : undefined,
+          signature: data.personaSignature || '',
+          isPersonaVersion: data.isPersonaVersion || false
+        };
+
+        setSynthesis(mappedData);
+        setOriginalSynthesis(mappedData); // Save original for persona switching
+
+        // Set initial persona state from the synthesis
+        if (data.personaId && data.isPersonaVersion) {
+          setCurrentPersona(data.personaId);
+        }
+
         setError(null);
       } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return;
         console.error('Failed to fetch synthesis:', err);
         setError('Unable to load synthesis');
       } finally {
-        setLoading(false);
+        if (!abortController.signal.aborted) {
+          setLoading(false);
+        }
       }
     };
 
     fetchSynthesis();
+
+    return () => {
+      abortController.abort();
+    };
   }, [params?.id]);
 
   // Handle persona change
   const handlePersonaChange = useCallback(async (personaId: string) => {
     if (!params?.id || personaId === currentPersona) return;
 
-    // If switching back to neutral, restore original
-    if (personaId === 'neutral') {
-      setCurrentPersona('neutral');
+    // If switching back to original persona, restore original
+    const originalPersonaId = originalSynthesis?.persona?.id || 'neutral';
+    if (personaId === originalPersonaId) {
+      setCurrentPersona(originalPersonaId);
       if (originalSynthesis) {
         setSynthesis(originalSynthesis);
       }
@@ -126,7 +160,21 @@ export default function SynthesisPage() {
       }
 
       const data = await response.json();
-      setSynthesis(data);
+
+      // Map API response persona fields to expected structure
+      const mappedData: Synthesis = {
+        ...originalSynthesis,
+        ...data,
+        persona: data.personaId ? {
+          id: data.personaId,
+          name: data.personaName || 'NovaPress',
+          displayName: data.personaName || 'NovaPress (Factuel)'
+        } : (data.persona || undefined),
+        signature: data.personaSignature || data.signature || '',
+        isPersonaVersion: data.isPersonaVersion ?? true
+      };
+
+      setSynthesis(mappedData);
       setCurrentPersona(personaId);
     } catch (err) {
       console.error('Failed to fetch persona synthesis:', err);
@@ -138,38 +186,54 @@ export default function SynthesisPage() {
 
   // Fetch causal graph data and related syntheses
   useEffect(() => {
+    const abortController = new AbortController();
+
     const fetchCausalData = async () => {
       if (!params?.id) return;
 
       try {
         setCausalLoading(true);
         const data = await causalService.getCausalGraph(params.id as string);
-        setCausalData(data);
+        if (!abortController.signal.aborted) {
+          setCausalData(data);
+        }
       } catch (err) {
-        console.log('Causal data not available:', err);
-        setCausalData(null);
+        if (!abortController.signal.aborted) {
+          console.log('Causal data not available:', err);
+          setCausalData(null);
+        }
       } finally {
-        setCausalLoading(false);
+        if (!abortController.signal.aborted) {
+          setCausalLoading(false);
+        }
       }
     };
 
     const fetchRelatedSyntheses = async () => {
       if (!params?.id) return;
       try {
-        const response = await fetch(`${API_URL}/api/time-traveler/syntheses/${params.id}/preview`);
+        const response = await fetch(`${API_URL}/api/time-traveler/syntheses/${params.id}/preview`, {
+          signal: abortController.signal
+        });
         if (response.ok) {
           const data = await response.json();
-          if (data.related_syntheses) {
+          if (!abortController.signal.aborted && data.related_syntheses) {
             setRelatedSyntheses(data.related_syntheses.slice(0, 5));
           }
         }
       } catch (err) {
-        console.log('Related syntheses not available:', err);
+        if (!(err instanceof Error && err.name === 'AbortError')) {
+          console.log('Related syntheses not available:', err);
+        }
       }
     };
 
     fetchCausalData();
     fetchRelatedSyntheses();
+
+    return () => {
+      abortController.abort();
+    };
   }, [params?.id]);
 
   // Handle node click in causal graph
@@ -343,17 +407,22 @@ export default function SynthesisPage() {
           />
         }
         rightSidebar={
-          <HistoricalCausalGraph
+          <TimelineCausalGraph
             synthesisId={synthesis.id}
-            onNodeClick={(node) => {
-              // Convert PositionedNode to CausalNode for the detail panel
+            synthesisTitle={synthesis.title}
+            onNodeClick={(nodeId, label, section) => {
+              // Create CausalNode for the detail panel
               const causalNode: CausalNode = {
-                id: node.id,
-                label: node.label,
-                node_type: node.nodeType as 'event' | 'entity' | 'decision',
-                fact_density: node.factDensity
+                id: nodeId,
+                label: label,
+                node_type: section === 'future' ? 'decision' : 'event',
+                fact_density: 0.8
               };
               setSelectedNode(causalNode);
+            }}
+            onPredictionClick={(prediction) => {
+              console.log('Prediction clicked:', prediction);
+              // Could show a modal with prediction details
             }}
           />
         }

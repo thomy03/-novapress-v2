@@ -8,10 +8,16 @@ Each persona has:
 - Focus categories (where they excel)
 - Signature phrases
 - Detailed prompt instructions
+
+ROTATION SYSTEM:
+- Personas rotate weekly or daily across categories
+- Each category gets a different persona each period
+- Ensures diversity in article voices over time
 """
 from typing import Dict, Any, List, Optional
 from enum import Enum
 from dataclasses import dataclass
+from datetime import datetime
 
 
 class PersonaType(str, Enum):
@@ -284,3 +290,141 @@ Format JSON strict:
   "readingTime": 5
 }}
 """
+
+
+# ═══════════════════════════════════════════════════════════════
+# ROTATION SYSTEM - Personas rotate weekly/daily across categories
+# ═══════════════════════════════════════════════════════════════
+
+# Fixed order of categories for rotation
+ROTATION_CATEGORIES = [
+    "POLITIQUE",
+    "ECONOMIE",
+    "MONDE",
+    "TECH",
+    "SCIENCES",
+    "CULTURE",
+    "SPORT",
+]
+
+# Non-neutral personas that participate in rotation
+ROTATION_PERSONAS = [
+    PersonaType.LE_CYNIQUE,
+    PersonaType.L_OPTIMISTE,
+    PersonaType.LE_CONTEUR,
+    PersonaType.LE_SATIRISTE,
+]
+
+
+def get_rotation_period(mode: str = "weekly") -> int:
+    """
+    Get the current rotation period number.
+
+    Args:
+        mode: "weekly" (default) or "daily"
+
+    Returns:
+        Period number (week of year or day of year)
+    """
+    now = datetime.now()
+
+    if mode == "daily":
+        # Day of year (1-366)
+        return now.timetuple().tm_yday
+    else:
+        # Week of year (1-53) - default
+        return now.isocalendar()[1]
+
+
+def get_rotating_persona_for_category(
+    category: str,
+    rotation_mode: str = "weekly"
+) -> Persona:
+    """
+    Get the persona assigned to a category based on current rotation.
+
+    The rotation ensures:
+    - Each category gets a different persona each period
+    - At any given time, different categories have different personas
+    - The pattern cycles through all personas over time
+
+    Args:
+        category: The article category (e.g., "TECH", "POLITIQUE")
+        rotation_mode: "weekly" (default) or "daily"
+
+    Returns:
+        The Persona assigned for this category during current period
+
+    Example (weekly rotation):
+        Week 1: POLITIQUE=Cynique, ECONOMIE=Optimiste, MONDE=Conteur...
+        Week 2: POLITIQUE=Optimiste, ECONOMIE=Conteur, MONDE=Satiriste...
+        Week 3: POLITIQUE=Conteur, ECONOMIE=Satiriste, MONDE=Cynique...
+    """
+    category_upper = category.upper()
+
+    # Get category index (offset)
+    if category_upper in ROTATION_CATEGORIES:
+        category_index = ROTATION_CATEGORIES.index(category_upper)
+    else:
+        # Unknown category -> use neutral
+        return PERSONAS[PersonaType.NEUTRAL]
+
+    # Get current period
+    period = get_rotation_period(rotation_mode)
+
+    # Calculate persona index: (period + category_offset) mod num_personas
+    # This ensures different categories get different personas
+    num_personas = len(ROTATION_PERSONAS)
+    persona_index = (period + category_index) % num_personas
+
+    persona_type = ROTATION_PERSONAS[persona_index]
+    return PERSONAS[persona_type]
+
+
+def get_current_rotation_schedule(rotation_mode: str = "weekly") -> Dict[str, Dict[str, Any]]:
+    """
+    Get the full rotation schedule for all categories.
+
+    Returns a dict showing which persona is assigned to each category
+    for the current period.
+
+    Args:
+        rotation_mode: "weekly" or "daily"
+
+    Returns:
+        Dict[category] = {persona_id, persona_name, period}
+    """
+    period = get_rotation_period(rotation_mode)
+    schedule = {}
+
+    for category in ROTATION_CATEGORIES:
+        persona = get_rotating_persona_for_category(category, rotation_mode)
+        schedule[category] = {
+            "persona_id": persona.id,
+            "persona_name": persona.name,
+            "persona_display_name": persona.display_name,
+            "period": period,
+            "mode": rotation_mode,
+        }
+
+    return schedule
+
+
+def get_rotation_info() -> Dict[str, Any]:
+    """
+    Get rotation system information for API/debugging.
+
+    Returns current period, mode, and full schedule.
+    """
+    weekly_period = get_rotation_period("weekly")
+    daily_period = get_rotation_period("daily")
+
+    return {
+        "current_week": weekly_period,
+        "current_day_of_year": daily_period,
+        "active_mode": "weekly",  # Default mode
+        "weekly_schedule": get_current_rotation_schedule("weekly"),
+        "daily_schedule": get_current_rotation_schedule("daily"),
+        "rotation_personas": [p.value for p in ROTATION_PERSONAS],
+        "rotation_categories": ROTATION_CATEGORIES,
+    }

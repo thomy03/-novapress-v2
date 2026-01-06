@@ -1,10 +1,11 @@
 # NovaPress AI v2 - Documentation Technique
 ## Bible du Projet - Référence Compacte
 
-**Version**: 2.0.0-alpha | **Status**: 100% Complet | **Mise à jour**: 1 Dec 2025
-**Pipeline IA**: 100% OPÉRATIONNELLE + **Advanced RAG** + **TNA** + **Search Enrichment** + **Nexus Causal** 🚀
+**Version**: 2.0.0-alpha | **Status**: 100% Complet | **Mise à jour**: 21 Dec 2025
+**Pipeline IA**: 100% OPÉRATIONNELLE + **Advanced RAG** + **TNA** + **Search Enrichment** + **Nexus Causal** + **Persona Rotation** 🚀
 **Synthèses**: Évolutives avec contexte historique, détection de contradictions, timeline narrative, enrichissement web, graphe causal ✅
 **Navigation Dynamique**: 100% TESTÉE - Catégories + EN DIRECT + Breaking Ticker ✅
+**Persona Rotation**: 4 personas + rotation hebdomadaire par catégorie ✅
 
 ---
 
@@ -187,7 +188,36 @@ synthesize_articles_advanced()  # + Chunks factuels + Contradictions
 
 # Niveau 3: RAG + TNA + Search + Causal (ULTIMATE)
 synthesize_with_history()       # + Contexte historique + Timeline + Causal chain + Web/Social
+
+# Niveau 4: Persona Rewriting
+synthesize_with_persona()       # Réécriture avec style/ton d'un persona
 ```
+
+### Persona Rotation System (`backend/app/ml/persona.py`) - NEW 21 Dec 2025
+
+| Persona ID | Nom | Ton | Style |
+|------------|-----|-----|-------|
+| `neutral` | NovaPress | Factuel | Journalisme standard |
+| `le_cynique` | Edouard Vaillant | Sardonique | Le Canard Enchaîné |
+| `l_optimiste` | Claire Horizon | Enthousiaste | Wired/solutions |
+| `le_conteur` | Alexandre Duval | Dramatique | Feuilleton narratif |
+| `le_satiriste` | Le Bouffon | Absurdiste | Le Gorafi/parodie |
+
+**Rotation Algorithm** (`persona.py`):
+```python
+# Rotation hebdomadaire par catégorie
+offset = ROTATION_ORDER[category]  # POLITIQUE=0, ECONOMIE=1, MONDE=2, etc.
+persona_index = (week_number + offset) % len(personas)
+```
+
+**Frontend Persona Switcher** (`PersonaSwitcher.tsx`):
+- Composant UI pour changer de persona en temps réel
+- Appel API: `GET /api/syntheses/by-id/{id}/persona/{persona_id}`
+
+**Endpoints Persona**:
+- `GET /api/syntheses/personas` - Liste des personas disponibles
+- `GET /api/syntheses/rotation-schedule` - Planning rotation actuel
+- `GET /api/syntheses/by-id/{id}/persona/{persona_id}` - Synthèse avec persona
 
 ---
 
@@ -252,8 +282,14 @@ novapress-v2/
 | `GET /api/causal/syntheses/:id/causal-preview` | ✅ | Preview causale (sidebar) |
 | `GET /api/causal/entities/:name/causal-profile` | ✅ | Profil causal d'une entité |
 | `GET /api/causal/stats` | ✅ | Statistiques causales |
+| `GET /api/admin/status` | ✅ | **NEW** État du pipeline (sans auth) |
+| `GET /api/admin/stats` | ✅ | **NEW** Stats admin (avec x-admin-key) |
+| `GET /api/admin/sources` | ✅ | **NEW** Sources disponibles |
+| `POST /api/admin/pipeline/start` | ✅ | **NEW** Lancer pipeline (avec x-admin-key) |
+| `POST /api/admin/pipeline/stop` | ✅ | **NEW** Arrêter pipeline (avec x-admin-key) |
+| `WS /ws/pipeline` | ✅ | **NEW** WebSocket temps réel pipeline |
 | `POST /api/auth/login` | ⏳ | Authentification |
-| `WS /ws/updates` | ⏳ | Temps réel |
+| `WS /ws/updates` | ⏳ | Temps réel articles |
 
 ---
 
@@ -306,9 +342,13 @@ CORS_ORIGINS=["http://localhost:3000","http://localhost:3002","http://localhost:
 | Synthèse LLM | 100% ✅ | **OpenRouter, articles 400-600 mots** |
 | **Pages Synthèses** | 100% ✅ | **`/synthesis/[id]` avec contenu complet** |
 | **Time-Traveler** | 100% ✅ | **Timeline historique + Entités + Contradictions** |
-| **Neural Causal Graph** | 100% ✅ | **NEW: React Flow + Layout 3 colonnes + Animations** |
-| **Navigation Dynamique** | 100% ✅ | **NEW: Catégories + EN DIRECT + Page /live** |
+| **Neural Causal Graph** | 100% ✅ | **React Flow + Layout 3 colonnes + Animations** |
+| **Navigation Dynamique** | 100% ✅ | **Catégories + EN DIRECT + Page /live** |
+| **Persona Rotation** | 100% ✅ | **4 personas + rotation hebdomadaire + switcher UI** |
 | **Connexion FE↔BE** | 100% ✅ | **Page accueil + Article + Synthèse OK** |
+| **Admin Pipeline UI** | 100% ✅ | **Bouton header + WebSocket + Contrôle pipeline** |
+| **Pré-génération Multi-Personas** | 0% ⏳ | Génération batch des 5 versions |
+| **Agents Relecteurs** | 0% ⏳ | Quality assurance personas |
 | Déploiement | 0% ❌ | À planifier |
 
 **Prochaines étapes**:
@@ -325,7 +365,12 @@ CORS_ORIGINS=["http://localhost:3000","http://localhost:3002","http://localhost:
 11. ~~Time-Traveler~~ ✅ FAIT (Timeline historique + Entités + Contradictions)
 12. ~~Navigation dynamique~~ ✅ FAIT (Catégories + EN DIRECT + /live)
 13. ~~Neural Causal Graph~~ ✅ FAIT (React Flow + Layout 3 colonnes + Animations)
-14. Déploiement production
+14. ~~Persona Rotation~~ ✅ FAIT (4 personas + rotation hebdomadaire)
+15. ~~Admin Pipeline UI~~ ✅ FAIT (Bouton header + WebSocket + CORS + API fixes)
+16. **Pré-génération multi-personas** ⏳ À implémenter (voir Session 21 Dec)
+17. **Agents relecteurs qualité** ⏳ À implémenter (voir Session 21 Dec)
+18. **Fix graphes causaux vides** ⏳ À implémenter (renforcer prompt LLM)
+19. Déploiement production
 
 ---
 
@@ -340,6 +385,190 @@ CORS_ORIGINS=["http://localhost:3000","http://localhost:3002","http://localhost:
 ---
 
 ## 🐛 Fixes Importants (Référence)
+
+### Session 21 Dec 2025 - Analyse Architecture Persona + Graphes Causaux
+
+**Objectif**: Analyser les problèmes signalés et documenter les solutions
+
+#### 1. Perte des sources lors du changement de persona
+
+**Analyse**: Le code dans `syntheses.py:309-316` tente de récupérer les articles via `get_articles_by_cluster(cluster_id)`. Cependant, les sources SONT conservées (ligne 335: `persona_synthesis["sourceArticles"] = base_synthesis.get("sourceArticles", [])`).
+
+**Cause probable**: Si `source_articles` n'était pas correctement stocké lors de la génération initiale, elles seront vides lors de la régénération.
+
+**Solution actuelle**: Le code préserve les `sourceArticles` de la synthèse de base.
+
+**Amélioration proposée**: Stocker `article_ids` dans la synthèse et récupérer les articles directement par ID plutôt que par `cluster_id`.
+
+#### 2. Pré-génération multi-personas (économie de coûts)
+
+**Problème**: Actuellement, les synthèses persona sont générées on-demand via l'API, causant des appels LLM à chaque requête utilisateur.
+
+**Solution proposée - Architecture Multi-Persona**:
+```python
+# Dans pipeline.py:_generate_syntheses()
+# Après génération de la synthèse de base:
+
+PERSONAS_TO_PREGENERATE = ["le_cynique", "l_optimiste", "le_conteur", "le_satiriste"]
+
+for persona_id in PERSONAS_TO_PREGENERATE:
+    persona_synthesis = await self.llm_service.synthesize_with_persona(
+        base_synthesis=synthesis,
+        articles=articles,
+        persona_id=persona_id
+    )
+    # Stocker avec lien vers synthèse de base
+    persona_synthesis["base_synthesis_id"] = synthesis["id"]
+    persona_synthesis["persona_id"] = persona_id
+    await self._store_synthesis(persona_synthesis)
+```
+
+**Avantages**:
+- 0 appel LLM à la lecture (coût = 0)
+- Temps de réponse instantané
+- Coût batch au moment du pipeline (prévisible)
+
+**Stockage Qdrant**:
+- Champ `base_synthesis_id` pour lier les versions
+- Frontend fetch la version demandée directement
+
+#### 3. Agents Relecteurs (Quality Assurance)
+
+**Concept proposé**: `PersonaQualityReviewer`
+
+```python
+class PersonaQualityReviewer:
+    """Évalue la qualité d'une synthèse par rapport au profil persona"""
+
+    def evaluate(self, synthesis: Dict, persona: Persona) -> Dict:
+        return {
+            "tone_score": self._analyze_tone(synthesis, persona),
+            "style_markers": self._count_style_markers(synthesis, persona),
+            "signature_present": persona.signature in synthesis.get("signature", ""),
+            "vocabulary_alignment": self._check_vocabulary(synthesis, persona),
+            "overall_score": 0.0  # Moyenne pondérée
+        }
+
+    def _analyze_tone(self, synthesis, persona) -> float:
+        # Analyse sentiment vs ton attendu (cynique, optimiste, etc.)
+        pass
+
+    def _count_style_markers(self, synthesis, persona) -> int:
+        # Compte les marqueurs stylistiques caractéristiques
+        pass
+```
+
+**Intégration pipeline**:
+1. Après génération persona, évaluer avec le reviewer
+2. Si score < threshold (ex: 0.6), régénérer ou garder version neutre
+3. Logger les scores pour monitoring qualité
+
+#### 4. Graphes Historiques/Causaux Absents
+
+**Analyse du flux de données**:
+1. `synthesize_with_history()` génère `causal_chain` (llm.py:430-443)
+2. `qdrant_client.py:446-513` convertit `causal_chain` → `causal_graph`
+3. API `/api/causal/syntheses/{id}/historical-graph` lit `causal_graph`
+4. Frontend `HistoricalCausalGraph.tsx` appelle `causalService.getHistoricalGraph()`
+
+**Causes possibles des graphes vides**:
+1. **LLM ne génère pas `causal_chain`**: Le prompt demande les relations causales mais le LLM peut ne pas les fournir
+2. **Parsing JSON échoue**: Si le format JSON est incorrect, `causal_chain` est vide
+3. **Fallback regex inefficace**: `_extract_causal_fallback()` utilise des patterns qui ne matchent pas le texte
+
+**Solutions proposées**:
+
+1. **Renforcer le prompt LLM** (llm.py):
+```python
+# Ajouter dans synthesize_with_history prompt:
+"""
+⚠️ CHAÎNE CAUSALE OBLIGATOIRE:
+Tu DOIS identifier au minimum 3 relations causales.
+Format EXACT requis:
+"causal_chain": [
+  {"cause": "...", "effect": "...", "type": "causes|triggers|enables", "sources": [...]}
+]
+Si tu ne trouves pas de relations claires, crée-en basées sur la logique des événements.
+"""
+```
+
+2. **Améliorer le fallback regex** (causal_extraction.py):
+```python
+# Patterns français pour extraction causale
+CAUSAL_PATTERNS_FR = [
+    r"(?P<cause>.+?) a (provoqué|causé|entraîné|déclenché) (?P<effect>.+)",
+    r"suite à (?P<cause>.+?), (?P<effect>.+)",
+    r"(?P<cause>.+?) a conduit à (?P<effect>.+)",
+    r"en raison de (?P<cause>.+?), (?P<effect>.+)",
+]
+```
+
+3. **Log de diagnostic** (pipeline.py):
+```python
+# Après génération synthèse
+causal_chain = synthesis.get("causal_chain", [])
+if not causal_chain:
+    logger.warning(f"⚠️ Cluster {cluster['cluster_id']}: No causal_chain generated")
+else:
+    logger.info(f"✅ Cluster {cluster['cluster_id']}: {len(causal_chain)} causal relations")
+```
+
+#### 5. Admin Pipeline - Corrections Interface (21 Dec 2025 soir)
+
+**Objectif**: Rendre la page admin fonctionnelle pour lancer le pipeline manuellement
+
+**Problèmes rencontrés et solutions**:
+
+1. **Lien Admin manquant dans Header**
+   - Ajouté bouton violet "ADMIN" dans [Header.tsx:93-118](app/components/layout/Header.tsx#L93-L118)
+   - Style: fond violet transparent, icône ⚙️
+
+2. **CORS bloquant port 3001**
+   - Frontend sur port 3001 (3000 occupé)
+   - Fix: Ajouté `http://localhost:3001` dans:
+     - [config.py:68](backend/app/core/config.py#L68)
+     - [.env:38](backend/.env#L38)
+
+3. **URL Admin endpoint manquant trailing slash**
+   - Avant: `ADMIN: '/api/admin'` → URLs `/api/adminstatus`
+   - Après: `ADMIN: '/api/admin/'` → URLs `/api/admin/status`
+   - Fix: [config.ts:11](app/lib/api/config.ts#L11)
+
+4. **WebSocket URL incorrecte**
+   - Erreur: `WebSocket connection to 'ws://localhost:5000/' failed`
+   - Cause: `NEXT_PUBLIC_WS_URL=ws://localhost:5000` sans path
+   - Fix: Construction URL dynamique dans [page.tsx:46-48](app/admin/pipeline/page.tsx#L46-L48):
+   ```typescript
+   const wsBaseUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:5000';
+   const wsUrl = `${wsBaseUrl}/ws/pipeline`;
+   ```
+
+5. **apiClient.get() passait headers comme query params**
+   - Erreur: `GET /api/admin/stats?headers=%5Bobject+Object%5D`
+   - Cause: Signature `get(endpoint, params)` traitait tout comme query string
+   - Fix: Nouvelle signature dans [client.ts:122-151](app/lib/api/client.ts#L122-L151):
+   ```typescript
+   async get<T>(endpoint: string, options?: {
+     params?: Record<string, any>;
+     headers?: Record<string, string>;
+   }): Promise<T>
+   ```
+
+6. **NameError: pipeline_state undefined**
+   - Erreur backend: `NameError: name 'pipeline_state' is not defined`
+   - Cause: Variable utilisée sans être définie dans `get_admin_stats()`
+   - Fix: [admin.py:136-138](backend/app/api/routes/admin.py#L136-L138):
+   ```python
+   manager = get_pipeline_manager()
+   pipeline_state = manager.get_state()
+   ```
+
+7. **Docker auto-restart**
+   - Ajouté `restart: always` à tous les services dans [docker-compose.yml](backend/docker-compose.yml)
+
+**Résultat**: Page admin fonctionnelle avec WebSocket temps réel et contrôle du pipeline.
+
+---
 
 ### Session 1 Dec 2025 (soir) - Neural Causal Graph Interactif ✅
 

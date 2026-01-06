@@ -1,0 +1,88 @@
+import React, { createContext, useContext, useState, useCallback } from 'react';
+import { PipelineStep, PipelineLog, KnowledgeGraphData } from '../types';
+import { useArticles } from './ArticlesContext';
+import { PipelineEngine } from '../services/backend/pipeline';
+
+export type PipelineMode = 'SIMULATION' | 'REAL';
+
+interface PipelineContextType {
+  isPipelineOpen: boolean;
+  togglePipeline: () => void;
+  startCollection: () => void;
+  currentStep: PipelineStep;
+  logs: PipelineLog[];
+  progress: number;
+  mode: PipelineMode;
+  setMode: (mode: PipelineMode) => void;
+  graphData: KnowledgeGraphData; // New: Store graph data
+}
+
+const PipelineContext = createContext<PipelineContextType | undefined>(undefined);
+
+export const PipelineProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [isPipelineOpen, setIsPipelineOpen] = useState(false);
+  const [currentStep, setCurrentStep] = useState<PipelineStep>('IDLE');
+  const [logs, setLogs] = useState<PipelineLog[]>([]);
+  const [progress, setProgress] = useState(0);
+  const [mode, setMode] = useState<PipelineMode>('SIMULATION'); 
+  const [graphData, setGraphData] = useState<KnowledgeGraphData>({ nodes: [], edges: [] });
+  
+  const { refreshArticles } = useArticles();
+
+  const addLog = useCallback((message: string, step: PipelineStep, type: PipelineLog['type'] = 'info') => {
+    setCurrentStep(step);
+    setLogs(prev => [...prev, {
+      id: Math.random().toString(36).substr(2, 9),
+      timestamp: new Date().toLocaleTimeString(),
+      message,
+      step,
+      type
+    }]);
+  }, []);
+
+  const togglePipeline = () => setIsPipelineOpen(prev => !prev);
+
+  const startCollection = useCallback(async () => {
+    if (currentStep !== 'IDLE' && currentStep !== 'COMPLETED') return;
+
+    setLogs([]);
+    setProgress(0);
+    setGraphData({ nodes: [], edges: [] }); // Reset graph
+    
+    try {
+      // Pass callback to update graph data in real-time
+      await PipelineEngine.run(addLog, setProgress, mode, setGraphData);
+      
+      refreshArticles();
+      
+    } catch (e) {
+      console.error(e);
+      addLog('Erreur critique dans le pipeline', 'IDLE', 'error');
+      setCurrentStep('IDLE');
+    }
+  }, [currentStep, refreshArticles, addLog, mode]);
+
+  return (
+    <PipelineContext.Provider value={{
+      isPipelineOpen,
+      togglePipeline,
+      startCollection,
+      currentStep,
+      logs,
+      progress,
+      mode,
+      setMode,
+      graphData
+    }}>
+      {children}
+    </PipelineContext.Provider>
+  );
+};
+
+export const usePipeline = () => {
+  const context = useContext(PipelineContext);
+  if (context === undefined) {
+    throw new Error('usePipeline must be used within a PipelineProvider');
+  }
+  return context;
+};

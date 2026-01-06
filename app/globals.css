@@ -305,3 +305,137 @@ button:disabled {
 .react-flow__attribution {
   display: none;
 }
+
+/* ==========================================
+   Hover Effect Utility Classes
+   Replaces inline style mutations for better performance
+   ========================================== */
+
+/* Button hover effects */
+.btn-hover-bg {
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.btn-hover-bg:hover {
+  background-color: var(--hover-bg, #f3f4f6);
+}
+
+.btn-hover-primary {
+  transition: background-color 0.2s ease;
+}
+
+.btn-hover-primary:hover {
+  background-color: #1d4ed8 !important;
+}
+
+.btn-hover-danger {
+  transition: background-color 0.2s ease;
+}
+
+.btn-hover-danger:hover {
+  background-color: #b91c1c !important;
+}
+
+.btn-hover-outline-danger {
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.btn-hover-outline-danger:hover {
+  background-color: #DC2626 !important;
+  color: white !important;
+}
+
+/* Link hover effects */
+.link-hover-underline {
+  text-decoration: none;
+  transition: text-decoration 0.2s ease;
+}
+
+.link-hover-underline:hover {
+  text-decoration: underline;
+}
+
+.link-hover-color {
+  transition: color 0.2s ease;
+}
+
+.link-hover-color:hover {
+  color: var(--hover-color, #2563EB);
+}
+
+/* Card hover effects */
+.card-hover-shadow {
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.card-hover-shadow:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.card-hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card-hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Nav item hover */
+.nav-item-hover {
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.nav-item-hover:hover:not(.nav-item-active) {
+  background-color: var(--nav-hover-bg, #f3f4f6);
+}
+
+.nav-item-active {
+  background-color: var(--nav-active-bg, #f3f4f6);
+  color: var(--nav-active-color, #DC2626);
+}
+
+/* Tag hover */
+.tag-hover {
+  transition: background-color 0.2s ease;
+}
+
+.tag-hover:hover {
+  background-color: var(--tag-hover-bg, #e5e7eb);
+}
+
+/* Source link hover */
+.source-link-hover {
+  transition: color 0.2s ease;
+}
+
+.source-link-hover:hover {
+  color: var(--source-hover-color, #1d4ed8);
+}
+
+/* Icon button hover */
+.icon-btn-hover {
+  transition: background-color 0.2s ease;
+}
+
+.icon-btn-hover:hover {
+  background-color: var(--icon-hover-bg, rgba(0, 0, 0, 0.05));
+}
+
+/* Opacity hover */
+.opacity-hover {
+  transition: opacity 0.2s ease;
+}
+
+.opacity-hover:hover {
+  opacity: 0.7;
+}
+
+/* Border hover */
+.border-hover {
+  transition: border-color 0.2s ease;
+}
+
+.border-hover:hover {
+  border-color: var(--border-hover-color, #2563EB);
+}

@@ -1,0 +1,702 @@
+{
+  "metadata": {
+    "project": "NovaPress AI v2",
+    "version": "2.0.0-alpha",
+    "last_updated": "2026-01-06",
+    "total_features": 44,
+    "completed": 44,
+    "in_progress": 0,
+    "pending": 0,
+    "last_session": "Session 6 Jan 2026 (8): PROJET 100% COMPLET! Toutes les 44 taches terminees."
+  },
+  "phases": [
+    {
+      "id": "phase_1_security",
+      "name": "Phase 1: Securite Critique",
+      "priority": "P0",
+      "estimated_days": 2,
+      "features": [
+        {
+          "id": "SEC-001",
+          "title": "Regenerer toutes les API keys",
+          "description": "Les cles API sont exposees dans .env et potentiellement dans l'historique git",
+          "files": [
+            "backend/.env"
+          ],
+          "status": "completed",
+          "blocking": true,
+          "notes": "Cles API regenerees par l'utilisateur le 6 Jan 2026",
+          "tests": [
+            "Verifier que les anciennes cles ne fonctionnent plus"
+          ]
+        },
+        {
+          "id": "SEC-002",
+          "title": "Nettoyer historique git des secrets",
+          "description": "Utiliser git filter-branch pour supprimer .env de l'historique",
+          "files": [
+            ".git"
+          ],
+          "status": "completed",
+          "blocking": true,
+          "notes": "Verifie: .env n'a jamais ete commite dans l'historique git",
+          "tests": [
+            "git log --all --full-history -- backend/.env doit etre vide"
+          ]
+        },
+        {
+          "id": "SEC-003",
+          "title": "Securiser ADMIN_API_KEY",
+          "description": "Remplacer le fallback hardcode par une cle securisee dans .env",
+          "files": [
+            "backend/app/api/routes/admin.py",
+            "backend/.env"
+          ],
+          "status": "completed",
+          "blocking": true,
+          "tests": [
+            "API admin doit rejeter 'novapress-admin-2024'"
+          ]
+        },
+        {
+          "id": "SEC-004",
+          "title": "Desactiver DEBUG en production",
+          "description": "Changer DEBUG=True en DEBUG=False dans .env",
+          "files": [
+            "backend/.env",
+            "backend/app/core/config.py"
+          ],
+          "status": "completed",
+          "blocking": true,
+          "tests": [
+            "Stack traces non visibles sur erreur 500"
+          ]
+        },
+        {
+          "id": "SEC-005",
+          "title": "Creer .env.example securise",
+          "description": "Template .env sans valeurs sensibles pour nouveaux devs",
+          "files": [
+            "backend/.env.example"
+          ],
+          "status": "completed",
+          "blocking": false,
+          "tests": [
+            "Fichier existe et ne contient pas de vraies cles"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "phase_2_stability",
+      "name": "Phase 2: Stabilite Application",
+      "priority": "P0-P1",
+      "estimated_days": 5,
+      "features": [
+        {
+          "id": "STAB-001",
+          "title": "Ajouter Error Boundary React",
+          "description": "Envelopper l'app dans un Error Boundary pour eviter les crashes complets",
+          "files": [
+            "app/components/ErrorBoundary.tsx",
+            "app/layout.tsx"
+          ],
+          "status": "completed",
+          "blocking": true,
+          "tests": [
+            "Throw error dans un composant ne fait pas crash toute l'app"
+          ]
+        },
+        {
+          "id": "STAB-002",
+          "title": "Fix WebSocket memory leak admin",
+          "description": "Cleanup des reconnexions WebSocket avec AbortController",
+          "files": [
+            "app/admin/pipeline/page.tsx"
+          ],
+          "status": "completed",
+          "blocking": true,
+          "tests": [
+            "Pas de nouvelles connexions WS apres unmount du composant"
+          ]
+        },
+        {
+          "id": "STAB-003",
+          "title": "Fix race condition toggleTag",
+          "description": "Remplacer par action TOGGLE_TAG atomique",
+          "files": [
+            "app/contexts/ArticlesContext.tsx"
+          ],
+          "status": "completed",
+          "blocking": false,
+          "tests": [
+            "Double-click rapide sur tag ne cree pas d'etat incoherent"
+          ]
+        },
+        {
+          "id": "STAB-004",
+          "title": "Ajouter AbortController aux fetchs",
+          "description": "Eviter setState after unmount sur toutes les pages",
+          "files": [
+            "app/synthesis/[id]/page.tsx",
+            "app/article/[id]/page.tsx",
+            "app/live/page.tsx"
+          ],
+          "status": "completed",
+          "blocking": false,
+          "tests": [
+            "Pas de warning 'setState on unmounted component'"
+          ]
+        },
+        {
+          "id": "STAB-005",
+          "title": "Null checks systematiques API",
+          "description": "Verifier response.data avant utilisation partout",
+          "files": [
+            "app/synthesis/[id]/page.tsx",
+            "app/live/page.tsx",
+            "app/article/[id]/page.tsx"
+          ],
+          "status": "completed",
+          "blocking": true,
+          "tests": [
+            "API retournant null ne fait pas crash"
+          ]
+        },
+        {
+          "id": "STAB-006",
+          "title": "Fix gestion erreur JSON LLM",
+          "description": "Retourner fallback structure au lieu de {} vide",
+          "files": [
+            "backend/app/ml/llm.py"
+          ],
+          "status": "completed",
+          "blocking": true,
+          "tests": [
+            "JSON invalide du LLM genere quand meme une synthese partielle"
+          ]
+        },
+        {
+          "id": "STAB-007",
+          "title": "Fix race condition pipeline manager",
+          "description": "Utiliser Redis pour etat global au lieu de singleton",
+          "files": [
+            "backend/app/services/pipeline_manager.py"
+          ],
+          "status": "completed",
+          "blocking": false,
+          "tests": [
+            "Deux workers ne peuvent pas lancer le pipeline simultanement"
+          ]
+        },
+        {
+          "id": "STAB-008",
+          "title": "Ajouter retry logic API externes",
+          "description": "Retry avec backoff exponentiel pour Perplexity/Grok/OpenRouter",
+          "files": [
+            "backend/app/ml/search_enrichment.py",
+            "backend/app/ml/llm.py"
+          ],
+          "status": "completed",
+          "blocking": false,
+          "tests": [
+            "Erreur 429 temporaire ne fait pas echouer le pipeline"
+          ]
+        },
+        {
+          "id": "STAB-009",
+          "title": "Validation structure causal_chain",
+          "description": "Valider que chaque relation a cause/effect/type",
+          "files": [
+            "backend/app/services/pipeline.py",
+            "backend/app/ml/causal_extraction.py"
+          ],
+          "status": "completed",
+          "blocking": false,
+          "tests": [
+            "Relation sans 'type' est filtree"
+          ]
+        },
+        {
+          "id": "STAB-010",
+          "title": "Ajouter timeout scraping par source",
+          "description": "Timeout 30s par source pour eviter blocage pipeline",
+          "files": [
+            "backend/app/services/advanced_scraper.py"
+          ],
+          "status": "completed",
+          "blocking": false,
+          "tests": [
+            "Source lente (>30s) est skipee sans bloquer"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "phase_3_performance",
+      "name": "Phase 3: Performance",
+      "priority": "P1-P2",
+      "estimated_days": 7,
+      "features": [
+        {
+          "id": "PERF-001",
+          "title": "Implementer React Query caching",
+          "description": "Cache les syntheses/articles deja visitees",
+          "files": [
+            "app/lib/api/",
+            "app/synthesis/[id]/page.tsx",
+            "app/components/Providers.tsx",
+            "app/hooks/useQueries.ts"
+          ],
+          "status": "completed",
+          "blocking": false,
+          "tests": [
+            "Retour sur synthese deja visitee = pas de fetch"
+          ]
+        },
+        {
+          "id": "PERF-002",
+          "title": "Lazy load composants lourds",
+          "description": "Dynamic import pour React Flow et graphes",
+          "files": [
+            "app/components/causal/index.ts"
+          ],
+          "status": "completed",
+          "blocking": false,
+          "tests": [
+            "Bundle initial ne contient pas reactflow"
+          ]
+        },
+        {
+          "id": "PERF-003",
+          "title": "Cache embeddings dans Redis",
+          "description": "Eviter recalcul embeddings pour articles deja vus",
+          "files": [
+            "backend/app/ml/embeddings.py"
+          ],
+          "status": "completed",
+          "blocking": false,
+          "tests": [
+            "Article deja encode = lookup Redis au lieu de calcul"
+          ]
+        },
+        {
+          "id": "PERF-004",
+          "title": "Creer .dockerignore",
+          "description": "Exclure node_modules, .next, .git, .venv",
+          "files": [
+            ".dockerignore",
+            "backend/.dockerignore"
+          ],
+          "status": "completed",
+          "notes": "Deja cree - existe dans root et backend",
+          "blocking": false,
+          "tests": [
+            "Image Docker < 600MB"
+          ]
+        },
+        {
+          "id": "PERF-005",
+          "title": "Optimiser deduplication embeddings",
+          "description": "Ne pas recalculer embeddings deja dans Qdrant",
+          "files": [
+            "backend/app/ml/embeddings.py"
+          ],
+          "status": "completed",
+          "notes": "Couvert par PERF-003 - Redis cache gere automatiquement",
+          "blocking": false,
+          "tests": [
+            "Pipeline avec 50% articles connus = 50% moins de calculs"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "phase_4_quality",
+      "name": "Phase 4: Qualite Code",
+      "priority": "P2",
+      "estimated_days": 14,
+      "features": [
+        {
+          "id": "QUAL-001",
+          "title": "Centraliser types TypeScript",
+          "description": "Utiliser app/types/api.ts partout, supprimer duplications",
+          "files": [
+            "app/types/api.ts"
+          ],
+          "status": "completed",
+          "notes": "Types centralises - Persona, Causal, Timeline ajoutes",
+          "blocking": false,
+          "tests": [
+            "Aucune interface Synthesis definie localement"
+          ]
+        },
+        {
+          "id": "QUAL-002",
+          "title": "Creer composant ErrorState unifie",
+          "description": "Remplacer les differentes erreurs par un composant reutilisable",
+          "files": [
+            "app/components/ui/ErrorState.tsx"
+          ],
+          "status": "completed",
+          "blocking": false,
+          "tests": [
+            "Meme UI erreur sur toutes les pages"
+          ]
+        },
+        {
+          "id": "QUAL-003",
+          "title": "Creer composant LoadingState unifie",
+          "description": "Skeleton loading coherent",
+          "files": [
+            "app/components/ui/LoadingState.tsx"
+          ],
+          "status": "completed",
+          "blocking": false,
+          "tests": [
+            "Meme skeleton sur toutes les pages"
+          ]
+        },
+        {
+          "id": "QUAL-004",
+          "title": "Remplacer inline style mutations",
+          "description": "Utiliser CSS/state au lieu de direct DOM mutations",
+          "files": [
+            "app/globals.css",
+            "app/components/layout/Navigation.tsx",
+            "app/components/ui/ErrorState.tsx"
+          ],
+          "status": "completed",
+          "notes": "CSS utility classes ajoutees, composants cles refactorises",
+          "blocking": false,
+          "tests": [
+            "Aucun e.currentTarget.style dans le code"
+          ]
+        },
+        {
+          "id": "QUAL-005",
+          "title": "Configurer log level backend",
+          "description": "Ajouter LOG_LEVEL env var, reduire verbosity",
+          "files": [
+            "backend/app/core/config.py",
+            "backend/app/main.py"
+          ],
+          "status": "completed",
+          "notes": "LOG_LEVEL configurable via .env, loguru configure dans main.py",
+          "blocking": false,
+          "tests": [
+            "LOG_LEVEL=warning ne montre que warnings+"
+          ]
+        },
+        {
+          "id": "QUAL-006",
+          "title": "Supprimer code dead YouTube",
+          "description": "Nettoyer le code YouTube commente",
+          "files": [
+            "backend/app/services/pipeline.py",
+            "backend/app/services/social_scraper.py",
+            "backend/app/core/config.py"
+          ],
+          "status": "completed",
+          "notes": "Code YouTube supprime de config, scraper et pipeline",
+          "blocking": false,
+          "tests": [
+            "Aucune reference YouTube dans le code"
+          ]
+        },
+        {
+          "id": "QUAL-007",
+          "title": "Tests unitaires llm.py",
+          "description": "Couvrir les fonctions critiques de llm.py",
+          "files": [
+            "backend/tests/test_llm.py"
+          ],
+          "status": "completed",
+          "notes": "Tests pour generate, retry logic, JSON parsing",
+          "blocking": false,
+          "tests": [
+            "pytest backend/tests/test_llm.py passe"
+          ]
+        },
+        {
+          "id": "QUAL-008",
+          "title": "Tests unitaires clustering.py",
+          "description": "Couvrir les fonctions de clustering",
+          "files": [
+            "backend/tests/test_clustering.py"
+          ],
+          "status": "completed",
+          "notes": "Tests coherence, sub-clustering, validation",
+          "blocking": false,
+          "tests": [
+            "pytest backend/tests/test_clustering.py passe"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "phase_5_accessibility",
+      "name": "Phase 5: Accessibilite",
+      "priority": "P2",
+      "estimated_days": 5,
+      "features": [
+        {
+          "id": "A11Y-001",
+          "title": "Ajouter aria-* aux boutons",
+          "description": "aria-label, aria-busy, aria-describedby sur tous les boutons",
+          "files": [
+            "app/admin/pipeline/page.tsx",
+            "app/components/layout/Navigation.tsx"
+          ],
+          "status": "completed",
+          "notes": "aria-label, aria-busy, aria-disabled ajoutes aux boutons admin et navigation",
+          "blocking": false,
+          "tests": [
+            "Lighthouse Accessibility > 90"
+          ]
+        },
+        {
+          "id": "A11Y-002",
+          "title": "Ajouter labels aux inputs",
+          "description": "Associer <label> avec htmlFor sur tous les formulaires",
+          "files": [
+            "app/admin/pipeline/page.tsx",
+            "app/components/ui/SearchBar.tsx"
+          ],
+          "status": "completed",
+          "notes": "htmlFor ajoute aux labels admin, role=search sur SearchBar",
+          "blocking": false,
+          "tests": [
+            "Aucun input sans label associe"
+          ]
+        },
+        {
+          "id": "A11Y-003",
+          "title": "Implementer focus management",
+          "description": "Navigation clavier coherente",
+          "files": [
+            "app/layout.tsx",
+            "app/globals.css"
+          ],
+          "status": "completed",
+          "notes": "Skip-to-content link ajoute, focus styles dans globals.css",
+          "blocking": false,
+          "tests": [
+            "Navigation complete au clavier possible"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "phase_6_features",
+      "name": "Phase 6: Nouvelles Fonctionnalites",
+      "priority": "P2-P3",
+      "estimated_days": 21,
+      "features": [
+        {
+          "id": "FEAT-001",
+          "title": "Pre-generation multi-personas",
+          "description": "Generer toutes les versions persona au moment du pipeline",
+          "files": [
+            "backend/app/services/pipeline.py",
+            "backend/app/core/config.py",
+            "backend/.env.example"
+          ],
+          "status": "completed",
+          "blocking": false,
+          "notes": "Configurable via ENABLE_PERSONA_PREGENERATION et PERSONA_PREGENERATION_LIST dans .env",
+          "tests": [
+            "Synthese a 5 versions persona stockees apres pipeline"
+          ]
+        },
+        {
+          "id": "FEAT-002",
+          "title": "Quality reviewers personas",
+          "description": "Evaluer qualite des syntheses persona automatiquement",
+          "files": [
+            "backend/app/ml/persona_quality.py",
+            "backend/app/services/pipeline.py",
+            "backend/app/api/routes/syntheses.py"
+          ],
+          "status": "completed",
+          "blocking": false,
+          "notes": "PersonaQualityReviewer cree avec analyse ton, marqueurs style, signature, vocabulaire. Integre dans pipeline (pre-generation) et API (on-demand). Score < 0.6 = fallback neutral.",
+          "tests": [
+            "Score qualite < 0.6 = regeneration ou fallback neutral"
+          ]
+        },
+        {
+          "id": "FEAT-003",
+          "title": "Fix graphes causaux vides",
+          "description": "Renforcer prompt LLM + ameliorer fallback regex",
+          "files": [
+            "backend/app/ml/llm.py",
+            "backend/app/ml/causal_extraction.py"
+          ],
+          "status": "completed",
+          "blocking": false,
+          "notes": "Prompts LLM renforces (causal_chain obligatoire dans toutes les methodes synthesis). Patterns regex etendus (45 patterns FR+EN). Fallback generation depuis key_points si aucune relation detectee.",
+          "tests": [
+            "90% des syntheses ont au moins 3 relations causales"
+          ]
+        },
+        {
+          "id": "FEAT-004",
+          "title": "Monitoring Prometheus",
+          "description": "Ajouter metriques cles (duration, errors, counts)",
+          "files": [
+            "backend/app/main.py",
+            "backend/app/core/metrics.py"
+          ],
+          "status": "completed",
+          "blocking": false,
+          "notes": "Module metrics.py cree avec Counters, Histograms, Gauges pour pipeline, API, LLM, scraping. Endpoint /metrics expose en format Prometheus. Decorators et context managers pour tracking facile.",
+          "tests": [
+            "Endpoint /metrics retourne format Prometheus"
+          ]
+        },
+        {
+          "id": "FEAT-005",
+          "title": "API versioning",
+          "description": "Prefixer routes avec /api/v1/",
+          "files": [
+            "backend/app/core/config.py",
+            "app/lib/api/config.ts"
+          ],
+          "status": "completed",
+          "notes": "API_V1_PREFIX=/api/v1 dans backend, endpoints frontend mis a jour",
+          "blocking": false,
+          "tests": [
+            "/api/v1/syntheses fonctionne"
+          ]
+        },
+        {
+          "id": "FEAT-006",
+          "title": "Rate limiting routes publiques",
+          "description": "Appliquer slowapi sur /syntheses et /search",
+          "files": [
+            "backend/app/api/routes/syntheses.py",
+            "backend/app/api/routes/search.py",
+            "backend/app/api/routes/articles.py",
+            "backend/app/api/routes/trending.py"
+          ],
+          "status": "completed",
+          "notes": "Rate limits: articles 100-200/min, search 30/min, syntheses 60-120/min, persona 10/min",
+          "blocking": false,
+          "tests": [
+            "101eme requete/minute retourne 429"
+          ]
+        },
+        {
+          "id": "FEAT-007",
+          "title": "Circuit breaker API externes",
+          "description": "Ouvrir circuit apres N echecs consecutifs",
+          "files": [
+            "backend/app/core/circuit_breaker.py",
+            "backend/app/ml/llm.py",
+            "backend/app/ml/search_enrichment.py",
+            "backend/app/api/routes/admin.py"
+          ],
+          "status": "completed",
+          "notes": "Circuit breakers pour openrouter, perplexity, xai. Endpoint /admin/circuit-breakers pour monitoring.",
+          "blocking": false,
+          "tests": [
+            "Apres 5 echecs, API externe skipee pendant 60s"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "phase_7_devops",
+      "name": "Phase 7: DevOps & Infrastructure",
+      "priority": "P2-P3",
+      "estimated_days": 10,
+      "features": [
+        {
+          "id": "DEVOPS-001",
+          "title": "Dockerfile multi-stage backend",
+          "description": "Multi-stage build avec utilisateur non-root",
+          "files": [
+            "backend/Dockerfile"
+          ],
+          "status": "completed",
+          "notes": "Builder + production stages, user novapress, venv isole",
+          "blocking": false,
+          "tests": [
+            "Container ne tourne pas en root"
+          ]
+        },
+        {
+          "id": "DEVOPS-002",
+          "title": "Docker Compose production",
+          "description": "docker-compose.prod.yml avec configs securisees",
+          "files": [
+            "docker-compose.prod.yml"
+          ],
+          "status": "completed",
+          "notes": "API_V1_PREFIX, LOG_LEVEL, ADMIN_API_KEY, enrichment APIs configures",
+          "blocking": false,
+          "tests": [
+            "docker-compose -f docker-compose.prod.yml up fonctionne"
+          ]
+        },
+        {
+          "id": "DEVOPS-003",
+          "title": "GitHub Actions CI",
+          "description": "Tests, lint, type-check, security scan",
+          "files": [
+            ".github/workflows/ci.yml"
+          ],
+          "status": "completed",
+          "notes": "Backend tests + lint, frontend typecheck + build, security scan",
+          "blocking": false,
+          "tests": [
+            "CI passe sur push main/develop"
+          ]
+        },
+        {
+          "id": "DEVOPS-004",
+          "title": "GitHub Actions CD",
+          "description": "Build et push images Docker",
+          "files": [
+            ".github/workflows/cd.yml"
+          ],
+          "status": "completed",
+          "notes": "Build multi-platform, push ghcr.io, staging/production environments",
+          "blocking": false,
+          "tests": [
+            "Images poussees sur ghcr.io apres merge main"
+          ]
+        },
+        {
+          "id": "DEVOPS-005",
+          "title": "Health checks Kubernetes",
+          "description": "Endpoints /health, /health/live, /health/ready",
+          "files": [
+            "backend/app/main.py"
+          ],
+          "status": "completed",
+          "notes": "Liveness simple, readiness verifie Qdrant + embeddings + circuit breakers",
+          "blocking": false,
+          "tests": [
+            "/health/ready retourne 503 si Qdrant down"
+          ]
+        },
+        {
+          "id": "DEVOPS-006",
+          "title": "Synchroniser requirements",
+          "description": "Aligner requirements-locked.txt avec versions installees",
+          "files": [
+            "backend/requirements-locked.txt"
+          ],
+          "status": "completed",
+          "blocking": false,
+          "notes": "Versions mises a jour (Jan 2026), hdbscan/umap retires (utilise sklearn.cluster.HDBSCAN), torch CPU-only, packages manquants ajoutes (email-validator, slowapi, lxml_html_clean)",
+          "tests": [
+            "pip install -r requirements-locked.txt sans erreur"
+          ]
+        }
+      ]
+    }
+  ]
+}

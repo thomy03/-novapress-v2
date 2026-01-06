@@ -42,9 +42,6 @@ class Settings(BaseSettings):
     # xAI Grok - https://docs.x.ai/
     XAI_API_KEY: str = ""
 
-    # YouTube Data API v3 (Optional - get from https://console.cloud.google.com)
-    YOUTUBE_API_KEY: str = ""
-
     # BGE-M3 Embeddings (Open Source)
     EMBEDDING_MODEL: str = "BAAI/bge-m3"
     EMBEDDING_DEVICE: str = "cpu"  # or "cuda" if GPU available
@@ -64,9 +61,10 @@ class Settings(BaseSettings):
     REDDIT_RATE_LIMIT: float = 2.0
 
     # API Settings
-    API_V1_PREFIX: str = "/api"
-    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:3002"]
+    API_V1_PREFIX: str = "/api/v1"
+    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:3003"]
     DEBUG: bool = False  # Set to True only in development via .env
+    LOG_LEVEL: str = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
 
     # Clustering (HDBSCAN) - Paramètres équilibrés
     MIN_CLUSTER_SIZE: int = 3          # Minimum 3 articles par cluster
@@ -87,6 +85,12 @@ class Settings(BaseSettings):
     # Pipeline
     PIPELINE_INTERVAL_MINUTES: int = 15  # Run pipeline every 15 minutes
     MAX_ARTICLES_PER_SOURCE: int = 20
+
+    # Persona Pre-generation
+    # Enable pre-generation of all persona versions during pipeline execution
+    # Note: Each persona adds ~30-60 seconds of LLM call time per synthesis
+    ENABLE_PERSONA_PREGENERATION: bool = True  # Set to False to disable (saves LLM costs)
+    PERSONA_PREGENERATION_LIST: str = "le_cynique,l_optimiste,le_conteur,le_satiriste"  # Personas to pre-generate
 
     @property
     def rss_feeds_list(self) -> List[str]:
