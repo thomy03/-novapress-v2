@@ -124,15 +124,17 @@ export const SynthesisHero = memo(function SynthesisHero({ synthesis }: Synthesi
           </span>
         </div>
 
-        {/* Title */}
+        {/* UI-007: Improved Title with balanced text wrapping */}
         <h2
           style={{
             fontFamily: 'Georgia, "Times New Roman", serif',
-            fontSize: '36px',
-            fontWeight: '700',
-            lineHeight: '1.2',
+            fontSize: '38px',
+            fontWeight: '800',
+            lineHeight: '1.15',
             marginBottom: '20px',
-            maxWidth: '800px'
+            maxWidth: '850px',
+            letterSpacing: '-0.03em',
+            textWrap: 'balance' as 'balance'
           }}
         >
           {synthesis.title}

@@ -18,6 +18,7 @@ const NODE_COLORS: Record<NodeType, { bg: string; border: string; text: string }
   entity: { bg: '#DBEAFE', border: '#1E40AF', text: '#1E40AF' },
   event: { bg: '#FEE2E2', border: '#DC2626', text: '#DC2626' },
   decision: { bg: '#D1FAE5', border: '#059669', text: '#059669' },
+  keyword: { bg: '#FEF3C7', border: '#D97706', text: '#D97706' },  // Yellow/amber for keywords
 };
 
 function TangleNodeComponent({ data, selected }: NodeProps<TangleNodeData>) {

@@ -5,7 +5,8 @@ import {
   CausalPreviewResponse,
   EntityCausalProfileResponse,
   CausalStatsResponse,
-  HistoricalCausalGraphResponse
+  HistoricalCausalGraphResponse,
+  PredictionsResponse
 } from '@/app/types/causal';
 
 export const causalService = {
@@ -60,6 +61,19 @@ export const causalService = {
   async getCausalStats(): Promise<CausalStatsResponse> {
     return apiClient.get<CausalStatsResponse>(
       `${API_CONFIG.ENDPOINTS.CAUSAL}/stats`
+    );
+  },
+
+  /**
+   * Get predictions/future scenarios for a synthesis (Phase 7)
+   * Returns pre-computed predictions generated during synthesis creation
+   *
+   * @param synthesisId - The synthesis ID
+   * @returns Predictions with probability, type, timeframe, and rationale
+   */
+  async getPredictions(synthesisId: string): Promise<PredictionsResponse> {
+    return apiClient.get<PredictionsResponse>(
+      `${API_CONFIG.ENDPOINTS.CAUSAL}/syntheses/${synthesisId}/predictions`
     );
   },
 };

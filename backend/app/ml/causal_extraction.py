@@ -333,7 +333,9 @@ class CausalExtractor:
         fact_density: float,
         llm_causal_output: Optional[Dict[str, Any]] = None,
         key_points: Optional[List[str]] = None,
-        title: Optional[str] = None
+        title: Optional[str] = None,
+        analysis: Optional[str] = None,
+        body: Optional[str] = None
     ) -> CausalGraph:
         """
         Methode principale: extrait le graphe causal depuis une synthese.
@@ -345,6 +347,8 @@ class CausalExtractor:
             llm_causal_output: JSON optionnel du LLM contenant causal_chain
             key_points: Points cles de la synthese (pour fallback)
             title: Titre de la synthese (pour fallback)
+            analysis: Texte d'analyse (pour fallback enrichi)
+            body: Corps de l'article (pour extraction de phrases)
 
         Returns:
             CausalGraph complet
@@ -352,35 +356,49 @@ class CausalExtractor:
         # 1. Extraire les relations (priorite au JSON LLM)
         if llm_causal_output:
             relations = self.extract_from_llm_json(llm_causal_output, fact_density)
+            if relations:
+                logger.info(f"Extracted {len(relations)} relations from LLM causal_chain")
         else:
             relations = []
+            logger.debug("No LLM causal output provided")
 
         # 2. Completer avec extraction regex si peu de relations
         if len(relations) < 3:
+            logger.info(f"Only {len(relations)} LLM relations, attempting regex extraction...")
             text_relations = self.extract_from_text(synthesis_text, fact_density)
             # Ajouter seulement les nouvelles relations
             existing_pairs = {(r.cause_text[:30], r.effect_text[:30]) for r in relations}
+            added_count = 0
             for rel in text_relations:
                 pair = (rel.cause_text[:30], rel.effect_text[:30])
                 if pair not in existing_pairs:
                     relations.append(rel)
                     existing_pairs.add(pair)
+                    added_count += 1
+            if added_count > 0:
+                logger.info(f"Added {added_count} relations from regex extraction")
 
-        # 3. FALLBACK: Generate from key points if still insufficient
-        if len(relations) < 3 and key_points:
-            logger.info("Using fallback generation from key points...")
+        # 3. FALLBACK: Generate from key points/entities/analysis if still insufficient
+        if len(relations) < 3:
+            logger.info(f"Only {len(relations)} relations total, using enhanced fallback generation...")
             fallback_relations = self.generate_fallback_relations(
-                key_points=key_points,
+                key_points=key_points or [],
                 title=title or "",
                 entities=entities,
-                fact_density=fact_density
+                fact_density=fact_density,
+                analysis=analysis or "",
+                body=body or ""
             )
             existing_pairs = {(r.cause_text[:30], r.effect_text[:30]) for r in relations}
+            added_count = 0
             for rel in fallback_relations:
                 pair = (rel.cause_text[:30], rel.effect_text[:30])
                 if pair not in existing_pairs:
                     relations.append(rel)
                     existing_pairs.add(pair)
+                    added_count += 1
+            if added_count > 0:
+                logger.info(f"Added {added_count} relations from fallback generation")
 
         # 4. Construire les noeuds depuis les relations + entites
         nodes = self._build_nodes(relations, entities, fact_density)
@@ -502,7 +520,9 @@ class CausalExtractor:
         key_points: List[str],
         title: str,
         entities: List[str],
-        fact_density: float = 0.5
+        fact_density: float = 0.5,
+        analysis: str = "",
+        body: str = ""
     ) -> List[CausalRelation]:
         """
         Generate fallback causal relations from key points if no relations were extracted.
@@ -517,56 +537,155 @@ class CausalExtractor:
             title: Synthesis title (used as initial cause)
             entities: Key entities from the synthesis
             fact_density: Base confidence score
+            analysis: Optional analysis text for additional context
+            body: Optional body text for sentence-level extraction
 
         Returns:
             List of generated CausalRelation objects
         """
-        if not key_points or len(key_points) < 2:
-            logger.debug("Not enough key points for fallback causal generation")
-            return []
-
         relations = []
-        confidence = fact_density * 0.6  # Lower confidence for fallback
+        confidence = fact_density * 0.7  # Slightly higher confidence for improved fallback
 
-        # Strategy 1: Title -> First key point
+        # Strategy 1: Title -> First key point (if available)
         if title and key_points:
-            relations.append(CausalRelation(
-                cause_text=self._clean_text(title)[:150],
-                effect_text=self._clean_text(key_points[0])[:150],
-                relation_type="triggers",
-                confidence=confidence,
-                evidence=["Generated from title and first key point"],
-                source_articles=[]
-            ))
-
-        # Strategy 2: Chain consecutive key points
-        for i in range(len(key_points) - 1):
-            cause = self._clean_text(key_points[i])
-            effect = self._clean_text(key_points[i + 1])
-
-            if len(cause) > 10 and len(effect) > 10:
+            clean_title = self._clean_text(title)
+            first_point = self._clean_text(key_points[0]) if key_points else ""
+            if len(clean_title) > 10 and len(first_point) > 10:
                 relations.append(CausalRelation(
-                    cause_text=cause[:150],
-                    effect_text=effect[:150],
+                    cause_text=clean_title[:150],
+                    effect_text=first_point[:150],
                     relation_type="triggers",
                     confidence=confidence,
-                    evidence=["Generated from consecutive key points"],
+                    evidence=["Inferred: title introduces first consequence"],
                     source_articles=[]
                 ))
 
-        # Strategy 3: Entity-based relations (if entities available)
-        if entities and len(entities) >= 2:
-            for i in range(min(len(entities) - 1, 2)):  # Max 2 entity relations
+        # Strategy 2: Chain consecutive key points
+        if key_points and len(key_points) >= 2:
+            for i in range(len(key_points) - 1):
+                cause = self._clean_text(key_points[i])
+                effect = self._clean_text(key_points[i + 1])
+
+                if len(cause) > 10 and len(effect) > 10:
+                    relations.append(CausalRelation(
+                        cause_text=cause[:150],
+                        effect_text=effect[:150],
+                        relation_type="triggers",
+                        confidence=confidence * 0.9,
+                        evidence=["Inferred: sequential development in key points"],
+                        source_articles=[]
+                    ))
+
+        # Strategy 3: Entity-based relations (more robust)
+        if entities and len(entities) >= 1:
+            # Single entity: entity action -> consequences
+            if len(entities) == 1:
                 relations.append(CausalRelation(
-                    cause_text=f"Actions de {entities[i]}",
-                    effect_text=f"Réaction de {entities[i + 1]}" if i + 1 < len(entities) else "Conséquences observées",
+                    cause_text=f"Décision/action de {entities[0]}",
+                    effect_text="Réactions et conséquences observées",
                     relation_type="causes",
-                    confidence=confidence * 0.8,  # Even lower for entity-generated
-                    evidence=["Generated from key entities"],
+                    confidence=confidence * 0.7,
+                    evidence=["Inferred: main entity action-reaction"],
                     source_articles=[]
                 ))
+            else:
+                # Multiple entities: create interaction relations
+                for i in range(min(len(entities) - 1, 3)):  # Max 3 entity relations
+                    relations.append(CausalRelation(
+                        cause_text=f"Position/action de {entities[i]}",
+                        effect_text=f"Réaction de {entities[i + 1]}",
+                        relation_type="triggers",
+                        confidence=confidence * 0.65,
+                        evidence=["Inferred: entity interaction pattern"],
+                        source_articles=[]
+                    ))
 
-        logger.info(f"Generated {len(relations)} fallback causal relations from key points")
+        # Strategy 4: Extract from analysis text if provided
+        if analysis and len(analysis) > 50:
+            # Look for implication keywords in analysis
+            implication_patterns = [
+                (r"cela\s+(pourrait|devrait|risque\s+de)\s+(?P<effect>.+?)(?:\.|,|$)", "enables"),
+                (r"(impact|conséquence|effet)\s+(?:est|sera)\s+(?P<effect>.+?)(?:\.|,|$)", "causes"),
+                (r"(en\s+réaction|face\s+à\s+cela),?\s*(?P<effect>.+?)(?:\.|,|$)", "triggers"),
+            ]
+            for pattern, rel_type in implication_patterns:
+                for match in re.finditer(pattern, analysis, re.IGNORECASE):
+                    effect = match.group("effect") if "effect" in match.groupdict() else match.group(0)
+                    if effect and len(effect) > 15:
+                        relations.append(CausalRelation(
+                            cause_text="Situation actuelle analysée",
+                            effect_text=self._clean_text(effect)[:150],
+                            relation_type=rel_type,
+                            confidence=confidence * 0.75,
+                            evidence=["Extracted from analysis section"],
+                            source_articles=[]
+                        ))
+                        break  # One per pattern
+
+        # Strategy 5: Generate logical generic relations if still insufficient
+        if len(relations) < 3:
+            # Add generic but contextually relevant relations
+            if title:
+                # Title often contains the main event
+                title_lower = title.lower()
+
+                # Detect type of news and generate appropriate relation
+                if any(word in title_lower for word in ["annonce", "announce", "déclare", "declares", "présente"]):
+                    relations.append(CausalRelation(
+                        cause_text=f"Annonce: {self._clean_text(title)[:100]}",
+                        effect_text="Réactions des acteurs concernés et marchés",
+                        relation_type="triggers",
+                        confidence=confidence * 0.6,
+                        evidence=["Generic: announcement triggers reactions"],
+                        source_articles=[]
+                    ))
+                elif any(word in title_lower for word in ["crise", "crisis", "conflit", "conflict", "guerre", "war"]):
+                    relations.append(CausalRelation(
+                        cause_text=f"Crise/conflit: {self._clean_text(title)[:100]}",
+                        effect_text="Mesures d'urgence et négociations diplomatiques",
+                        relation_type="triggers",
+                        confidence=confidence * 0.6,
+                        evidence=["Generic: crisis triggers emergency response"],
+                        source_articles=[]
+                    ))
+                elif any(word in title_lower for word in ["vote", "élection", "election", "loi", "law"]):
+                    relations.append(CausalRelation(
+                        cause_text=f"Décision politique: {self._clean_text(title)[:100]}",
+                        effect_text="Impact sur la société et réactions politiques",
+                        relation_type="causes",
+                        confidence=confidence * 0.6,
+                        evidence=["Generic: political decision causes societal impact"],
+                        source_articles=[]
+                    ))
+                else:
+                    # Default generic
+                    relations.append(CausalRelation(
+                        cause_text=f"Événement: {self._clean_text(title)[:100]}",
+                        effect_text="Développements et réactions attendus",
+                        relation_type="triggers",
+                        confidence=confidence * 0.5,
+                        evidence=["Generic: event triggers developments"],
+                        source_articles=[]
+                    ))
+
+        # Ensure minimum 3 relations
+        while len(relations) < 3 and key_points:
+            # Add more from key points if needed
+            idx = len(relations) % len(key_points)
+            next_idx = (idx + 1) % len(key_points)
+            if idx != next_idx:
+                relations.append(CausalRelation(
+                    cause_text=self._clean_text(key_points[idx])[:120],
+                    effect_text=self._clean_text(key_points[next_idx])[:120],
+                    relation_type="causes",
+                    confidence=confidence * 0.5,
+                    evidence=["Fallback: ensure minimum relations"],
+                    source_articles=[]
+                ))
+            else:
+                break
+
+        logger.info(f"Generated {len(relations)} fallback causal relations (strategies: title, keypoints, entities, analysis, generic)")
         return relations
 
 

@@ -2,7 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   // Enable standalone output for Docker deployment
-  output: 'standalone',
+  // Note: Comment this line for local development, uncomment for Docker build
+  // output: 'standalone',
   images: {
     // Allow any external image (for news sources)
     unoptimized: true,

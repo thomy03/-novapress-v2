@@ -84,22 +84,24 @@ const ArticleCard = memo(function ArticleCard({
         />
         
         {/* Catégorie */}
-        <div style={{ 
-          position: 'absolute', 
-          top: '10px', 
-          left: '10px', 
-          backgroundColor: article.category.icon ? '#4f46e5' : '#059669', 
-          color: 'white', 
-          padding: '4px 12px', 
-          borderRadius: '15px',
-          fontSize: '11px',
-          fontWeight: 'bold',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '4px'
-        }}>
-          {article.category.icon} {article.category.name}
-        </div>
+        {article.category && (
+          <div style={{
+            position: 'absolute',
+            top: '10px',
+            left: '10px',
+            backgroundColor: article.category?.icon ? '#4f46e5' : '#059669',
+            color: 'white',
+            padding: '4px 12px',
+            borderRadius: '15px',
+            fontSize: '11px',
+            fontWeight: 'bold',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px'
+          }}>
+            {article.category?.icon} {article.category?.name}
+          </div>
+        )}
 
         {/* Indicateurs */}
         <div style={{

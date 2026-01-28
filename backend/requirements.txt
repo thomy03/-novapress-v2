@@ -42,6 +42,7 @@ newspaper3k>=0.2.8
 feedparser>=6.0.0
 lxml>=5.0.0
 lxml_html_clean>=0.1.0
+playwright>=1.40.0  # Fallback for JS-rendered sites (Phase 1 - Plan Backend)
 
 # LLM (OpenRouter)
 openai>=1.0.0
@@ -58,6 +59,9 @@ slowapi>=0.1.9  # Rate limiting
 
 # WebSocket
 websockets>=13.0
+
+# Text-to-Speech
+edge-tts>=6.1.0  # Microsoft Edge TTS for audio summaries
 
 # Utilities
 python-dateutil>=2.9.0

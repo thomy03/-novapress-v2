@@ -23,7 +23,7 @@ export default function TimelineView({
   compact = false,
   showFactDensity = true,
 }: TimelineViewProps) {
-  const phaseConfig = PHASE_CONFIG[narrativeArc];
+  const phaseConfig = PHASE_CONFIG[narrativeArc] || PHASE_CONFIG.emerging;
 
   if (events.length === 0) {
     return (

@@ -58,6 +58,15 @@ class TimelineResponse(BaseModel):
     previous_key_points: List[str]
 
 
+class RelatedSynthesisItem(BaseModel):
+    """Related synthesis summary for sidebar display"""
+    id: str
+    title: str
+    date: str
+    category: str
+    similarity: float = 0.0
+
+
 class TimelinePreviewResponse(BaseModel):
     synthesis_id: str
     narrative_arc: str
@@ -65,6 +74,7 @@ class TimelinePreviewResponse(BaseModel):
     recent_events: List[TimelineEvent]
     status: str
     has_contradictions: bool
+    related_syntheses: List[RelatedSynthesisItem] = []
 
 
 # ==========================================
@@ -229,13 +239,34 @@ async def get_timeline_preview(synthesis_id: str):
                 similarity=round(event.get('similarity', 0), 2)
             ))
 
+        # Build related_syntheses list for sidebar display
+        related_syntheses_items = []
+        for rel in historical_context.related_syntheses[:5]:
+            created_at = rel.get('created_at', 0)
+            if isinstance(created_at, (int, float)) and created_at > 0:
+                try:
+                    date_str = datetime.fromtimestamp(created_at).strftime('%d/%m/%Y')
+                except:
+                    date_str = ''
+            else:
+                date_str = str(created_at)[:10] if created_at else ''
+
+            related_syntheses_items.append(RelatedSynthesisItem(
+                id=str(rel.get('id', '')),
+                title=rel.get('title', '')[:100],
+                date=date_str,
+                category=rel.get('category', 'MONDE'),
+                similarity=round(rel.get('similarity', 0), 2)
+            ))
+
         return TimelinePreviewResponse(
             synthesis_id=synthesis_id,
             narrative_arc=historical_context.narrative_arc,
             days_tracked=historical_context.days_tracked,
             recent_events=recent_events,
             status="resolved" if historical_context.narrative_arc == "resolved" else "evolving",
-            has_contradictions=len(historical_context.contradiction_history) > 0
+            has_contradictions=len(historical_context.contradiction_history) > 0,
+            related_syntheses=related_syntheses_items
         )
 
     except Exception as e:

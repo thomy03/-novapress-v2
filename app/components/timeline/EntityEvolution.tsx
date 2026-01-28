@@ -30,7 +30,7 @@ export default function EntityEvolution({
 
       <div style={styles.entityList}>
         {displayEntities.map((entity, index) => {
-          const typeConfig = ENTITY_TYPE_CONFIG[entity.entity_type];
+          const typeConfig = ENTITY_TYPE_CONFIG[entity.entity_type] || ENTITY_TYPE_CONFIG.person;
           const trendIcon = getTrendIcon(entity.trend);
 
           return (

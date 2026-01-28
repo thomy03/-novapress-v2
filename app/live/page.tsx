@@ -1,12 +1,15 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useTheme } from '../contexts/ThemeContext';
 import { synthesesService } from '../lib/api/services/syntheses';
 import { Synthesis, SynthesisCategory } from '../types/api';
 import { Header } from '../components/layout/Header';
 import { NewsTicker } from '../components/layout/NewsTicker';
+import { useInfiniteScroll } from '../hooks/useInfiniteScroll';
+
+const PAGE_SIZE = 20;
 
 // Category emoji and colors
 const CATEGORY_CONFIG: Record<SynthesisCategory, { emoji: string; color: string }> = {
@@ -20,24 +23,44 @@ const CATEGORY_CONFIG: Record<SynthesisCategory, { emoji: string; color: string 
 };
 
 export default function LivePage() {
-  const { theme, darkMode } = useTheme();
+  const { theme } = useTheme();
   const [syntheses, setSyntheses] = useState<Synthesis[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedHours, setSelectedHours] = useState(24);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [hasMore, setHasMore] = useState(true);
+  const [offset, setOffset] = useState(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  const fetchLiveSyntheses = useCallback(async (signal?: AbortSignal) => {
+  const fetchLiveSyntheses = useCallback(async (
+    currentOffset: number,
+    hours: number,
+    append: boolean = false,
+    signal?: AbortSignal
+  ) => {
     try {
-      setIsLoading(true);
+      if (append) {
+        setLoadingMore(true);
+      } else {
+        setIsLoading(true);
+      }
       setError(null);
-      const response = await synthesesService.getLiveSyntheses(selectedHours, 100);
+
+      const response = await synthesesService.getLiveSynthesesPaginated(hours, PAGE_SIZE, currentOffset);
 
       // Don't update state if aborted
       if (signal?.aborted) return;
 
       if (response.data) {
-        setSyntheses(response.data);
+        if (append) {
+          setSyntheses(prev => [...prev, ...response.data]);
+        } else {
+          setSyntheses(response.data);
+        }
+        setHasMore(response.hasMore || false);
+        setOffset(response.nextOffset || currentOffset + PAGE_SIZE);
       }
       setLastRefresh(new Date());
     } catch (err) {
@@ -47,19 +70,32 @@ export default function LivePage() {
     } finally {
       if (!signal?.aborted) {
         setIsLoading(false);
+        setLoadingMore(false);
       }
     }
-  }, [selectedHours]);
+  }, []);
 
+  // Initial fetch and when hours change
   useEffect(() => {
+    // Abort previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
     const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
-    fetchLiveSyntheses(abortController.signal);
+    // Reset state when hours change
+    setOffset(0);
+    setHasMore(true);
+    fetchLiveSyntheses(0, selectedHours, false, abortController.signal);
 
-    // Auto-refresh every 2 minutes
+    // Auto-refresh every 2 minutes (only first page)
     const interval = setInterval(() => {
       if (!abortController.signal.aborted) {
-        fetchLiveSyntheses(abortController.signal);
+        setOffset(0);
+        setHasMore(true);
+        fetchLiveSyntheses(0, selectedHours, false, abortController.signal);
       }
     }, 2 * 60 * 1000);
 
@@ -67,7 +103,21 @@ export default function LivePage() {
       abortController.abort();
       clearInterval(interval);
     };
-  }, [fetchLiveSyntheses]);
+  }, [selectedHours, fetchLiveSyntheses]);
+
+  // Load more function for infinite scroll
+  const loadMore = useCallback(() => {
+    if (!loadingMore && hasMore) {
+      fetchLiveSyntheses(offset, selectedHours, true, abortControllerRef.current?.signal);
+    }
+  }, [offset, selectedHours, loadingMore, hasMore, fetchLiveSyntheses]);
+
+  // Infinite scroll hook
+  const { loadingRef } = useInfiniteScroll({
+    hasNextPage: hasMore,
+    isFetching: loadingMore,
+    fetchNextPage: loadMore,
+  });
 
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
@@ -170,7 +220,7 @@ export default function LivePage() {
                 Dernière MAJ: {lastRefresh.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
               </span>
               <button
-                onClick={fetchLiveSyntheses}
+                onClick={() => fetchLiveSyntheses(0, selectedHours, false)}
                 disabled={isLoading}
                 style={{
                   padding: '8px 16px',
@@ -392,9 +442,49 @@ export default function LivePage() {
           </div>
         ))}
 
+        {/* Infinite Scroll Trigger & Loading Indicator */}
+        <div
+          ref={loadingRef}
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: '32px 0',
+            minHeight: '80px',
+          }}
+        >
+          {loadingMore && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              color: theme.textSecondary,
+              fontSize: '14px',
+            }}>
+              <div style={{
+                width: '20px',
+                height: '20px',
+                border: `2px solid ${theme.border}`,
+                borderTopColor: '#DC2626',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite',
+              }} />
+              Chargement...
+            </div>
+          )}
+          {!hasMore && syntheses.length > 0 && (
+            <p style={{
+              color: theme.textSecondary,
+              fontSize: '14px',
+            }}>
+              Fin du fil d'actualités
+            </p>
+          )}
+        </div>
+
         {/* Back to home link */}
         <div style={{
-          marginTop: '40px',
+          marginTop: '20px',
           paddingTop: '20px',
           borderTop: `1px solid ${theme.border}`,
           textAlign: 'center'

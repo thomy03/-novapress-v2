@@ -2,6 +2,18 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { useTheme } from '../../contexts/ThemeContext';
+import EnrichmentBadge from '@/app/components/ui/EnrichmentBadge';
+import { RecurringTopicBadge } from '@/app/components/topics';
+import { EnrichmentData } from '@/app/types/api';
+import { AIBadge, Badge } from '../ui/Badge';
+
+interface SynthesisTopic {
+  id: string;
+  name: string;
+  narrative_arc?: 'emerging' | 'developing' | 'peak' | 'declining' | 'resolved';
+  synthesis_count?: number;
+}
 
 interface Synthesis {
   id: string;
@@ -16,6 +28,8 @@ interface Synthesis {
   complianceScore: number;
   readingTime: number;
   createdAt: string;
+  enrichment?: EnrichmentData;
+  topics?: SynthesisTopic[];
 }
 
 interface SynthesisCardProps {
@@ -23,6 +37,8 @@ interface SynthesisCardProps {
 }
 
 export default function SynthesisCard({ synthesis }: SynthesisCardProps) {
+  const { theme } = useTheme();
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('fr-FR', {
@@ -40,52 +56,68 @@ export default function SynthesisCard({ synthesis }: SynthesisCardProps) {
 
   return (
     <article
+      className="card-interactive"
       style={{
-        backgroundColor: '#FFFFFF',
-        border: '1px solid #E5E5E5',
-        padding: '24px',
-        marginBottom: '16px',
-        position: 'relative'
+        backgroundColor: theme.card,
+        border: `1px solid ${theme.border}`,
+        borderRadius: '12px',
+        padding: '28px',
+        marginBottom: '20px',
+        position: 'relative',
+        overflow: 'hidden',
       }}
     >
-      {/* AI Badge */}
+      {/* Accent line on hover */}
+      <div
+        className="accent-line-reveal"
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: '3px',
+          background: theme.brand.secondary,
+        }}
+      />
+
+      {/* AI Badge + Enrichment Badge */}
       <div
         style={{
           position: 'absolute',
-          top: '12px',
-          right: '12px',
-          backgroundColor: '#2563EB',
-          color: '#FFFFFF',
-          padding: '4px 10px',
-          fontSize: '11px',
-          fontWeight: '600',
-          letterSpacing: '0.5px',
-          textTransform: 'uppercase'
+          top: '16px',
+          right: '16px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
         }}
       >
-        AI SYNTHESIS
+        {/* Enrichment Badge (compact) */}
+        {synthesis.enrichment && (
+          <EnrichmentBadge enrichment={synthesis.enrichment} compact />
+        )}
+        {/* AI Badge */}
+        <AIBadge size="md" />
       </div>
 
       {/* Header */}
-      <div style={{ marginBottom: '16px' }}>
+      <div style={{ marginBottom: '20px' }}>
         <Link
           href={`/synthesis/${synthesis.id}`}
           style={{ textDecoration: 'none' }}
         >
           <h3
+            className="opacity-hover"
             style={{
-              fontFamily: 'Georgia, "Times New Roman", serif',
-              fontSize: '22px',
-              fontWeight: '700',
-              lineHeight: '1.3',
-              color: '#000000',
-              marginBottom: '8px',
-              paddingRight: '100px',
+              fontFamily: 'var(--font-serif)',
+              fontSize: '24px',
+              fontWeight: 700,
+              lineHeight: 1.3,
+              color: theme.text,
+              marginBottom: '10px',
+              paddingRight: '120px',
               cursor: 'pointer',
-              transition: 'color 0.2s'
+              transition: 'color 200ms ease',
             }}
-            onMouseEnter={(e) => e.currentTarget.style.color = '#2563EB'}
-            onMouseLeave={(e) => e.currentTarget.style.color = '#000000'}
           >
             {synthesis.title}
           </h3>
@@ -97,29 +129,99 @@ export default function SynthesisCard({ synthesis }: SynthesisCardProps) {
             alignItems: 'center',
             gap: '16px',
             fontSize: '12px',
-            color: '#6B7280'
+            color: theme.textSecondary,
           }}
         >
-          <span>{synthesis.numSources} sources</span>
-          <span style={{ color: '#E5E5E5' }}>|</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 500 }}>
+            {synthesis.numSources} sources
+          </span>
+          <span style={{ color: theme.border }}>|</span>
           <span>{synthesis.readingTime} min read</span>
-          <span style={{ color: '#E5E5E5' }}>|</span>
+          <span style={{ color: theme.border }}>|</span>
           <span>{formatDate(synthesis.createdAt)}</span>
         </div>
+
+        {/* Phase 10: Topic Tags / Fils Rouges - styled by popularity */}
+        {synthesis.topics && synthesis.topics.length > 0 && (
+          <div style={{
+            display: 'flex',
+            gap: '8px',
+            marginTop: '14px',
+            flexWrap: 'wrap'
+          }}>
+            {synthesis.topics.map((topic) => {
+              const arcColors: Record<string, { bg: string; text: string; border: string }> = {
+                emerging: { bg: theme.infoBg, text: theme.info, border: `${theme.info}40` },
+                developing: { bg: theme.successBg, text: theme.success, border: `${theme.success}40` },
+                peak: { bg: theme.warningBg, text: theme.warning, border: `${theme.warning}40` },
+                declining: { bg: theme.errorBg, text: theme.error, border: `${theme.error}40` },
+                resolved: { bg: theme.bgTertiary, text: theme.textSecondary, border: theme.border }
+              };
+              const colors = arcColors[topic.narrative_arc || 'emerging'];
+              const count = topic.synthesis_count || 1;
+              const isProminent = count >= 4;
+
+              return (
+                <Link
+                  key={topic.id}
+                  href={`/topics/${encodeURIComponent(topic.name)}`}
+                  className="card-lift"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: isProminent ? '6px 12px' : '5px 10px',
+                    fontSize: isProminent ? '12px' : '11px',
+                    fontWeight: isProminent ? 600 : 500,
+                    backgroundColor: colors.bg,
+                    color: colors.text,
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: '8px',
+                    textDecoration: 'none',
+                    transition: 'all 200ms ease',
+                  }}
+                  title={`${count} synthèse${count > 1 ? 's' : ''} sur ce sujet`}
+                >
+                  <span>#{topic.name}</span>
+                  {isProminent && (
+                    <span style={{
+                      backgroundColor: colors.text,
+                      color: '#fff',
+                      padding: '2px 6px',
+                      borderRadius: '6px',
+                      fontSize: '9px',
+                      fontWeight: 700,
+                      marginLeft: '2px'
+                    }}>
+                      {count}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Fallback: RecurringTopicBadge if no topics in response */}
+        {(!synthesis.topics || synthesis.topics.length === 0) && (
+          <div style={{ marginTop: '10px' }}>
+            <RecurringTopicBadge synthesisId={synthesis.id} />
+          </div>
+        )}
       </div>
 
       {/* Introduction (chapo) - always visible */}
       {synthesis.introduction && (
         <p
           style={{
-            fontFamily: 'Georgia, "Times New Roman", serif',
+            fontFamily: 'var(--font-serif)',
             fontSize: '17px',
-            fontWeight: '500',
-            lineHeight: '1.6',
-            color: '#1F2937',
-            marginBottom: '16px',
-            borderLeft: '3px solid #2563EB',
-            paddingLeft: '16px'
+            fontWeight: 500,
+            lineHeight: 1.65,
+            color: theme.text,
+            marginBottom: '20px',
+            borderLeft: `3px solid ${theme.brand.secondary}`,
+            paddingLeft: '18px',
           }}
         >
           {synthesis.introduction}
@@ -129,15 +231,15 @@ export default function SynthesisCard({ synthesis }: SynthesisCardProps) {
       {/* Body preview (first 2 paragraphs) */}
       <div
         style={{
-          fontFamily: 'Georgia, "Times New Roman", serif',
+          fontFamily: 'var(--font-serif)',
           fontSize: '15px',
-          lineHeight: '1.8',
-          color: '#374151',
-          marginBottom: '16px'
+          lineHeight: 1.8,
+          color: theme.textSecondary,
+          marginBottom: '20px',
         }}
       >
         {previewParagraphs.map((paragraph, idx) => (
-          <p key={idx} style={{ marginBottom: '12px' }}>
+          <p key={idx} style={{ marginBottom: '14px' }}>
             {paragraph}
           </p>
         ))}
@@ -146,40 +248,43 @@ export default function SynthesisCard({ synthesis }: SynthesisCardProps) {
       {/* Read More Link */}
       <Link
         href={`/synthesis/${synthesis.id}`}
+        className="btn-hover-primary"
         style={{
           display: 'inline-flex',
           alignItems: 'center',
-          gap: '6px',
-          color: '#2563EB',
+          gap: '8px',
+          color: theme.brand.secondary,
           fontSize: '14px',
-          fontWeight: '600',
+          fontWeight: 600,
           textDecoration: 'none',
-          marginBottom: '16px'
+          marginBottom: '20px',
+          padding: '8px 0',
+          transition: 'gap 200ms ease',
         }}
       >
         <span>Lire l'article complet</span>
-        <span style={{ fontSize: '12px' }}>&rarr;</span>
+        <span style={{ fontSize: '14px' }}>&rarr;</span>
       </Link>
 
       {/* Key Points Preview */}
       {synthesis.keyPoints && synthesis.keyPoints.length > 0 && (
-        <div style={{ marginBottom: '16px' }}>
+        <div style={{ marginBottom: '20px' }}>
           <h4
             style={{
-              fontSize: '12px',
-              fontWeight: '600',
-              color: '#6B7280',
+              fontSize: '11px',
+              fontWeight: 700,
+              color: theme.textSecondary,
               textTransform: 'uppercase',
-              letterSpacing: '0.5px',
-              marginBottom: '10px'
+              letterSpacing: '0.1em',
+              marginBottom: '12px',
             }}
           >
-            Points Cles
+            Points Clés
           </h4>
           <ul
             style={{
               margin: 0,
-              paddingLeft: '20px'
+              paddingLeft: '20px',
             }}
           >
             {synthesis.keyPoints.slice(0, 3).map((point, index) => (
@@ -187,9 +292,9 @@ export default function SynthesisCard({ synthesis }: SynthesisCardProps) {
                 key={index}
                 style={{
                   fontSize: '14px',
-                  lineHeight: '1.6',
-                  color: '#374151',
-                  marginBottom: '6px'
+                  lineHeight: 1.6,
+                  color: theme.text,
+                  marginBottom: '8px',
                 }}
               >
                 {point}
@@ -199,9 +304,9 @@ export default function SynthesisCard({ synthesis }: SynthesisCardProps) {
               <li
                 style={{
                   fontSize: '14px',
-                  lineHeight: '1.6',
-                  color: '#6B7280',
-                  fontStyle: 'italic'
+                  lineHeight: 1.6,
+                  color: theme.textSecondary,
+                  fontStyle: 'italic',
                 }}
               >
                 + {synthesis.keyPoints.length - 3} autres points...
@@ -215,17 +320,18 @@ export default function SynthesisCard({ synthesis }: SynthesisCardProps) {
       {synthesis.sources && synthesis.sources.length > 0 && (
         <div
           style={{
-            borderTop: '1px solid #E5E5E5',
-            paddingTop: '12px',
-            marginTop: '16px'
+            borderTop: `1px solid ${theme.border}`,
+            paddingTop: '14px',
+            marginTop: '20px',
           }}
         >
           <span
             style={{
               fontSize: '11px',
-              color: '#6B7280',
+              color: theme.textSecondary,
               textTransform: 'uppercase',
-              letterSpacing: '0.5px'
+              letterSpacing: '0.05em',
+              fontWeight: 600,
             }}
           >
             Sources:{' '}
@@ -233,7 +339,7 @@ export default function SynthesisCard({ synthesis }: SynthesisCardProps) {
           <span
             style={{
               fontSize: '12px',
-              color: '#6B7280'
+              color: theme.textSecondary,
             }}
           >
             {synthesis.sources.join(', ')}
@@ -245,11 +351,11 @@ export default function SynthesisCard({ synthesis }: SynthesisCardProps) {
       <div
         style={{
           position: 'absolute',
-          bottom: '12px',
-          right: '12px',
+          bottom: '16px',
+          right: '16px',
           display: 'flex',
           alignItems: 'center',
-          gap: '6px'
+          gap: '6px',
         }}
       >
         <div
@@ -257,13 +363,14 @@ export default function SynthesisCard({ synthesis }: SynthesisCardProps) {
             width: '8px',
             height: '8px',
             borderRadius: '50%',
-            backgroundColor: synthesis.complianceScore >= 90 ? '#10B981' : '#F59E0B'
+            backgroundColor: synthesis.complianceScore >= 90 ? theme.success : theme.warning,
           }}
         />
         <span
           style={{
             fontSize: '11px',
-            color: '#6B7280'
+            color: theme.textSecondary,
+            fontFamily: 'var(--font-mono)',
           }}
         >
           {synthesis.complianceScore}% accuracy

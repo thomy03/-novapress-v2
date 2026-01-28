@@ -33,6 +33,7 @@ export interface NewsSource {
   type?: string;
 }
 
+// REF-011: Consolidated Category type (merged from api.ts + Article.ts)
 export interface Category {
   id: string;
   name: string;
@@ -40,6 +41,8 @@ export interface Category {
   color?: string;
   icon?: string;
   priority?: number;
+  description?: string;
+  parentId?: string;
 }
 
 export interface TrendingTopic {
@@ -161,6 +164,61 @@ export interface SourceArticle {
   title: string;
 }
 
+// ========== Enrichment Types (NEW) ==========
+
+export interface WebSource {
+  url: string;
+  title: string;
+}
+
+export interface PerplexityEnrichment {
+  enabled: boolean;
+  context: string;
+  sources: WebSource[];
+}
+
+export interface GrokEnrichment {
+  enabled: boolean;
+  context: string;
+  sentiment: 'positive' | 'negative' | 'neutral' | 'mixed' | 'unknown' | '';
+  trendingReactions: string[];
+}
+
+export interface FactCheckEnrichment {
+  notes: string[];
+  count: number;
+}
+
+export type EnrichmentStatus =
+  | 'complete'
+  | 'partial_no_results'
+  | 'failed_null_response'
+  | 'skipped_no_topic'
+  | 'disabled'
+  | 'pending'
+  | 'unknown'
+  | string;
+
+export interface EnrichmentData {
+  status: EnrichmentStatus;
+  isEnriched: boolean;
+  timestamp: string;
+  perplexity: PerplexityEnrichment;
+  grok: GrokEnrichment;
+  factCheck: FactCheckEnrichment;
+}
+
+// ========== Topic Interface (Phase 10) ==========
+
+export interface SynthesisTopic {
+  id: string;
+  name: string;
+  narrative_arc?: 'emerging' | 'developing' | 'peak' | 'declining' | 'resolved';
+  synthesis_count?: number;  // Number of syntheses referencing this topic
+}
+
+// ========== Synthesis Interface ==========
+
 export interface Synthesis {
   id: string;
   title: string;
@@ -172,12 +230,37 @@ export interface Synthesis {
   sources: string[];
   sourceArticles: SourceArticle[];
   numSources: number;
+  sourceCount?: number;  // Alias for numSources (API compatibility)
   clusterId: number;
+  imageUrl?: string;  // Featured image URL for cards
   complianceScore: number;
   readingTime: number;
   createdAt: string;
   category: SynthesisCategory;
   categoryConfidence: number;
+  // Persona fields
+  personaId?: string;
+  personaName?: string;
+  personaSignature?: string;
+  isPersonaVersion?: boolean;
+  // Enrichment data (NEW)
+  enrichment?: EnrichmentData;
+  searchEnriched?: boolean;  // Legacy
+  socialSentiment?: string;  // Legacy
+  // Update tracking (Phase 6)
+  updateNotice?: string;  // "Mise à jour le 07/01/2026 à 15:30 (synthèse originale du 05/01/2026)"
+  originalCreatedAt?: string;  // ISO date of original synthesis
+  lastUpdatedAt?: string;  // ISO date of last update
+  isUpdate?: boolean;  // true if this is an update of an existing synthesis
+  // Author display
+  author?: {
+    name: string;
+    persona_id: string;
+    persona_type: string;  // "Le Cynique", "L'Optimiste", etc.
+    display: string;  // "par Edouard Vaillant › Le Cynique"
+  };
+  // Phase 10: Topics/Tags
+  topics?: SynthesisTopic[];
   type: 'synthesis';
 }
 
@@ -311,4 +394,34 @@ export interface TimelineData {
   events: TimelineEvent[];
   startDate: string;
   endDate: string;
+}
+
+// ========== Bias Analysis Types ==========
+
+export interface SourceBiasInfo {
+  name: string;
+  domain: string;
+  political_bias: number;  // -2 (far left) to +2 (far right)
+  bias_label: string;  // "Far Left", "Left", "Center", "Right", "Far Right"
+  bias_code: string;  // "FL", "L", "C", "R", "FR"
+  reliability: number;  // 1-5
+  reliability_label: string;
+  country: string;
+  type: string;
+  tags: string[];
+}
+
+export interface SynthesisBiasResponse {
+  left_count: number;
+  center_count: number;
+  right_count: number;
+  total_sources: number;
+  average_bias: number;
+  bias_spread: number;
+  average_reliability: number;
+  balance_score: number;  // 0-100
+  coverage_label: string;  // "Balanced", "Left-Leaning", etc.
+  is_balanced: boolean;
+  sources: SourceBiasInfo[];
+  unknown_sources: string[];
 }

@@ -213,3 +213,107 @@ def get_category_display_name(category: str) -> str:
         "SCIENCES": "Sciences"
     }
     return display_names.get(category.upper(), category)
+
+
+# ==========================================
+# Phase 7: Recurring Topics Endpoints
+# ==========================================
+
+@router.get("/recurring-topics")
+@limiter.limit("30/minute")
+async def get_recurring_topics(
+    request: Request,
+    days: int = Query(30, ge=7, le=90),
+    limit: int = Query(20, ge=1, le=50)
+):
+    """
+    Get topics that recur across multiple syntheses (3+).
+
+    A topic is considered "recurring" when it appears in at least 3 syntheses.
+    Returns topics with synthesis counts, key entities, and narrative arc.
+    """
+    try:
+        from app.ml.topic_tracker import get_topic_tracker
+
+        tracker = get_topic_tracker()
+        topics = await tracker.detect_recurring_topics(days=days, limit=limit)
+
+        return {
+            "data": topics,
+            "total": len(topics),
+            "days": days,
+            "type": "recurring-topics"
+        }
+    except Exception as e:
+        logger.error(f"Failed to fetch recurring topics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/topics/{topic_name}/dashboard")
+@limiter.limit("30/minute")
+async def get_topic_dashboard(
+    request: Request,
+    topic_name: str
+):
+    """
+    Get full dashboard data for a recurring topic.
+
+    Returns:
+    - Aggregated causal graph from all related syntheses
+    - Sentiment evolution over time
+    - Key entities with counts
+    - Predictions summary
+    - Geographic focus
+    """
+    try:
+        from app.ml.topic_tracker import get_topic_tracker
+
+        tracker = get_topic_tracker()
+        dashboard = await tracker.get_topic_dashboard(topic_name)
+
+        if not dashboard:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Topic '{topic_name}' not found or not recurring (needs 3+ syntheses)"
+            )
+
+        return dashboard
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to fetch topic dashboard: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/syntheses/{synthesis_id}/topic-info")
+@limiter.limit("60/minute")
+async def get_synthesis_topic_info(
+    request: Request,
+    synthesis_id: str
+):
+    """
+    Check if a synthesis belongs to a recurring topic.
+
+    Returns topic info if the synthesis is part of a recurring topic,
+    including topic name, total synthesis count, and related IDs.
+    """
+    try:
+        from app.ml.topic_tracker import get_topic_tracker
+
+        tracker = get_topic_tracker()
+        topic_info = await tracker.check_topic_recurrence(synthesis_id)
+
+        if not topic_info:
+            return {
+                "synthesis_id": synthesis_id,
+                "is_recurring": False,
+                "topic_name": None
+            }
+
+        return {
+            "synthesis_id": synthesis_id,
+            **topic_info
+        }
+    except Exception as e:
+        logger.error(f"Failed to check topic recurrence: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

@@ -3,6 +3,10 @@ NovaPress AI v2 - FastAPI Backend
 Main application entry point
 NO GOOGLE/GEMINI - 100% Open Source Stack
 """
+# Suppress SyntaxWarnings from newspaper3k (Python 3.12+ strict regex escapes)
+import warnings
+warnings.filterwarnings("ignore", category=SyntaxWarning, module="newspaper")
+
 import sys
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,7 +27,7 @@ logger.add(
     format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
     colorize=True
 )
-from app.api.routes import articles, trending, auth, search, websocket, syntheses, time_traveler, causal, admin
+from app.api.routes import articles, trending, auth, search, websocket, syntheses, time_traveler, causal, admin, intelligence, artifacts
 from app.core.circuit_breaker import init_circuit_breakers
 from app.core.metrics import generate_metrics, get_content_type, set_app_info
 
@@ -79,6 +83,15 @@ async def lifespan(app: FastAPI):
         await init_knowledge_graph()
     except Exception as e:
         logger.warning(f"⚠️ spaCy not available: {e}. Continuing without NLP.")
+
+    # Initialize Topic Detection Service (Phase 10)
+    try:
+        logger.info("🔍 Initializing Topic Detection Service...")
+        from app.ml.topic_detection import init_topic_detection
+        await init_topic_detection()
+        logger.success("✅ Topic Detection Service ready")
+    except Exception as e:
+        logger.warning(f"⚠️ Topic Detection Service not available: {e}")
 
     logger.success("✅ Backend ready!")
 
@@ -206,6 +219,8 @@ app.include_router(websocket.router, prefix="/ws", tags=["WebSocket"])
 app.include_router(time_traveler.router, prefix=f"{settings.API_V1_PREFIX}/time-traveler", tags=["Time-Traveler"])
 app.include_router(causal.router, prefix=f"{settings.API_V1_PREFIX}/causal", tags=["Nexus-Causal"])
 app.include_router(admin.router, prefix=f"{settings.API_V1_PREFIX}/admin", tags=["Admin"])
+app.include_router(intelligence.router, prefix=f"{settings.API_V1_PREFIX}/intelligence", tags=["Intelligence-Hub"])
+app.include_router(artifacts.router, prefix=f"{settings.API_V1_PREFIX}/artifacts", tags=["Artifacts"])
 
 
 if __name__ == "__main__":

@@ -177,6 +177,7 @@ export default function SynthesisLayout({
   );
 }
 
+// Newspaper Style Theme (NYT, Le Monde)
 const styles: { [key: string]: React.CSSProperties } = {
   // Desktop styles
   desktopContainer: {
@@ -191,7 +192,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     position: 'sticky',
     top: '100px',
     height: 'calc(100vh - 120px)',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F9FAFB',
     border: '1px solid #E5E5E5',
     display: 'flex',
     flexDirection: 'column',
@@ -202,7 +203,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '8px',
     padding: '16px',
     borderBottom: '2px solid #000000',
-    color: '#374151',
+    color: '#6B7280',
   },
   sidebarTitle: {
     fontFamily: 'Georgia, serif',
@@ -222,8 +223,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     position: 'sticky',
     top: '100px',
     height: 'calc(100vh - 120px)',
-    overflow: 'hidden',
-    borderRadius: '16px',
+    overflowY: 'auto',
+    backgroundColor: '#F9FAFB',
+    border: '1px solid #E5E5E5',
+    padding: '16px',
   },
 
   // Tablet styles
@@ -241,7 +244,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     position: 'sticky',
     top: '100px',
     height: 'calc(100vh - 200px)',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F9FAFB',
     border: '1px solid #E5E5E5',
     overflowY: 'auto',
     padding: '16px',
@@ -251,7 +254,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   tabletBottomPanel: {
     marginTop: '32px',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F9FAFB',
     border: '1px solid #E5E5E5',
   },
   tabletPanelHeader: {
@@ -273,7 +276,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   accordion: {
     marginBottom: '16px',
     border: '1px solid #E5E5E5',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F9FAFB',
   },
   accordionButton: {
     display: 'flex',
@@ -294,6 +297,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
+    color: '#000000',
   },
   accordionIcon: {
     transition: 'transform 0.3s ease',

@@ -232,6 +232,30 @@ export default function AdminPipelinePage() {
     }
   };
 
+  // Reset pipeline lock (for stuck pipelines)
+  const handleResetLock = async () => {
+    if (!adminKey) {
+      setError('Veuillez entrer la clef admin');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await adminService.resetPipelineLock(adminKey);
+      console.log('Reset lock result:', result);
+      // Show success message
+      setError(`Lock reinitialise: ${result.actions.join(', ')}`);
+      // Refresh status
+      const newStatus = await adminService.getStatus();
+      setStatus(newStatus);
+    } catch (err: any) {
+      setError(err.message || 'Erreur lors de la reinitialisation du lock');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Handle login
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -596,9 +620,30 @@ export default function AdminPipelinePage() {
                   </button>
                 </div>
 
+                {/* Reset Lock Button - for stuck pipelines */}
+                <button
+                  onClick={handleResetLock}
+                  disabled={loading || status?.is_running}
+                  aria-label="Reinitialiser le lock du pipeline"
+                  style={{
+                    width: '100%',
+                    marginTop: '12px',
+                    padding: '10px',
+                    backgroundColor: '#F59E0B',
+                    color: 'white',
+                    border: 'none',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    cursor: loading || status?.is_running ? 'not-allowed' : 'pointer',
+                    opacity: loading || status?.is_running ? 0.5 : 1
+                  }}
+                >
+                  Reset Lock (si pipeline bloque)
+                </button>
+
                 {error && (
                   <p style={{
-                    color: '#DC2626',
+                    color: error.startsWith('Lock reinitialise') ? '#10B981' : '#DC2626',
                     fontSize: '13px',
                     marginTop: '16px'
                   }}>

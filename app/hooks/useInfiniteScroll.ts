@@ -49,19 +49,9 @@ export function useInfiniteScroll({
     };
   }, [handleIntersection, rootMargin]);
 
-  // Fallback scroll listener for older browsers
-  useEffect(() => {
-    const handleScroll = () => {
-      if (window.innerHeight + document.documentElement.scrollTop >= document.documentElement.offsetHeight - threshold) {
-        if (hasNextPage && !isFetching) {
-          fetchNextPage();
-        }
-      }
-    };
-    
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [threshold, hasNextPage, isFetching, fetchNextPage]);
+  // REF-005: Removed fallback scroll listener
+  // IntersectionObserver has 98%+ browser support in 2026
+  // The dual observer pattern was causing race conditions and double-fetches
 
   return { loadingRef };
 }

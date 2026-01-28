@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
 import { useArticles } from '../../contexts/ArticlesContext';
 import { synthesesService } from '../../lib/api/services/syntheses';
 import { Synthesis, SynthesisCategory } from '../../types/api';
@@ -190,6 +191,32 @@ export default function IntelligenceSection() {
                 Syntheses
               </div>
             </div>
+            <Link
+              href="/live"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '10px 20px',
+                backgroundColor: '#DC2626',
+                color: '#FFFFFF',
+                textDecoration: 'none',
+                fontSize: '13px',
+                fontWeight: '700',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                marginLeft: '16px'
+              }}
+            >
+              <span style={{
+                width: '8px',
+                height: '8px',
+                backgroundColor: '#FFFFFF',
+                borderRadius: '50%',
+                animation: 'pulse 2s infinite'
+              }} />
+              Toutes les syntheses
+            </Link>
           </div>
         )}
       </div>
@@ -292,14 +319,21 @@ export default function IntelligenceSection() {
                 >
                   Plus d'actualites
                 </h3>
-                <span
+                <Link
+                  href="/live"
                   style={{
-                    fontSize: '12px',
-                    color: '#6B7280'
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    color: '#DC2626',
+                    textDecoration: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
                   }}
                 >
-                  {moreSyntheses.length} synthese{moreSyntheses.length > 1 ? 's' : ''}
-                </span>
+                  Voir toutes les syntheses
+                  <span style={{ fontSize: '16px' }}>→</span>
+                </Link>
               </div>
               <div
                 style={{

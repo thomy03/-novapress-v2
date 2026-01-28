@@ -19,6 +19,7 @@ import {
 
 interface HistoricalCausalGraphProps {
   synthesisId: string;
+  focusNodeId?: string | null;  // Node ID to focus on initially
   onNodeClick?: (node: PositionedNode) => void;
 }
 
@@ -67,13 +68,14 @@ const SVG_PADDING = 40;
 
 export default function HistoricalCausalGraph({
   synthesisId,
+  focusNodeId,
   onNodeClick
 }: HistoricalCausalGraphProps) {
   const [data, setData] = useState<HistoricalCausalGraphResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
-  const [selectedNode, setSelectedNode] = useState<string | null>(null);
+  const [selectedNode, setSelectedNode] = useState<string | null>(focusNodeId || null);
 
   // Fetch data
   useEffect(() => {
@@ -92,6 +94,13 @@ export default function HistoricalCausalGraph({
     };
     fetchData();
   }, [synthesisId]);
+
+  // Set focused node when focusNodeId prop changes
+  useEffect(() => {
+    if (focusNodeId) {
+      setSelectedNode(focusNodeId);
+    }
+  }, [focusNodeId]);
 
   // Calculate positioned nodes
   const positionedNodes = useMemo(() => {

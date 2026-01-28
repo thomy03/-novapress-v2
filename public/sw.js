@@ -200,6 +200,70 @@ async function staleWhileRevalidateStrategy(request, cacheName) {
   return cachedResponse || fetchPromise;
 }
 
+// Push notification event handler
+self.addEventListener('push', (event) => {
+  console.log('[SW] Push notification received');
+
+  if (!event.data) return;
+
+  let data;
+  try {
+    data = event.data.json();
+  } catch {
+    data = {
+      title: 'NovaPress AI',
+      body: event.data.text(),
+    };
+  }
+
+  const options = {
+    body: data.body || '',
+    icon: data.icon || '/icon-192.png',
+    badge: '/icon-192.png',
+    tag: data.tag || `novapress-${Date.now()}`,
+    data: {
+      url: data.url || '/',
+    },
+    requireInteraction: data.requireInteraction || false,
+    actions: [
+      { action: 'open', title: 'Lire' },
+      { action: 'close', title: 'Fermer' },
+    ],
+    vibrate: [100, 50, 100],
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'NovaPress AI', options)
+  );
+});
+
+// Notification click handler
+self.addEventListener('notificationclick', (event) => {
+  console.log('[SW] Notification clicked:', event.action);
+  event.notification.close();
+
+  if (event.action === 'close') return;
+
+  const url = event.notification.data?.url || '/';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // Check if there's already a NovaPress window open
+      for (const client of clientList) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          client.navigate(url);
+          return client.focus();
+        }
+      }
+
+      // Open a new window
+      if (clients.openWindow) {
+        return clients.openWindow(url);
+      }
+    })
+  );
+});
+
 // Background sync for offline actions
 self.addEventListener('sync', (event) => {
   if (event.tag === 'background-sync') {

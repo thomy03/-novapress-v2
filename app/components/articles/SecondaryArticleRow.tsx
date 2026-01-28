@@ -72,7 +72,7 @@ const SecondaryCard = memo(function SecondaryCard({
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={article.featuredImage || `https://picsum.photos/600/400?random=${article.id}`}
-          alt=""
+          alt={article.title || 'Article image'}
           style={{
             width: '100%',
             height: '100%',

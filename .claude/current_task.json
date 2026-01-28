@@ -1,0 +1,21 @@
+{
+  "featureId": "UI-001c",
+  "phaseId": "phase_9_ui_refonte",
+  "feature": {
+    "id": "UI-001",
+    "title": "Dark mode par defaut",
+    "subtask": {
+      "id": "UI-001c",
+      "title": "TNR Dark Mode",
+      "description": "Verifier first load, localStorage, toggle functionality"
+    }
+  },
+  "phase": {
+    "id": "phase_9_ui_refonte",
+    "name": "Phase 9: UI Refonte - Design Moderne"
+  },
+  "prompt": "UI-001a et UI-001b COMPLETE. Executer TNR Dark Mode: verifier que la page charge en dark mode, que localStorage fonctionne, que le toggle marche.",
+  "startedAt": "2026-01-09T10:30:00.000Z",
+  "completedAt": null,
+  "status": "in_progress"
+}

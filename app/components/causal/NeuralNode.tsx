@@ -5,7 +5,7 @@ import { Handle, Position, NodeProps } from 'reactflow';
 
 export interface NeuralNodeData {
   label: string;
-  nodeType: 'event' | 'entity' | 'decision';
+  nodeType: 'event' | 'entity' | 'decision' | 'keyword';  // Added 'keyword' for causal types
   factDensity: number;
   sourcesCount: number;
   isActivated?: boolean;

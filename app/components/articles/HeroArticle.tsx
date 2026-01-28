@@ -3,6 +3,7 @@
 import React, { memo } from 'react';
 import { Article } from '../../types/Article';
 import { useTheme } from '../../contexts/ThemeContext';
+import { Badge, BreakingBadge, AIBadge, CategoryBadge } from '../ui/Badge';
 
 interface HeroArticleProps {
   article: Article;
@@ -13,7 +14,7 @@ export const HeroArticle = memo(function HeroArticle({
   article,
   onArticleClick
 }: HeroArticleProps) {
-  const { theme } = useTheme();
+  const { theme, darkMode, getGlass } = useTheme();
 
   // Check if article has AI features (synthesis)
   const isSynthesis = article.source?.name === 'NovaPress AI' ||
@@ -45,24 +46,25 @@ export const HeroArticle = memo(function HeroArticle({
 
   return (
     <article
+      className="img-zoom"
       style={{
         position: 'relative',
         width: '100%',
         height: '70vh',
         minHeight: '500px',
         maxHeight: '700px',
-        borderRadius: '0',
+        borderRadius: '16px',
         overflow: 'hidden',
         cursor: 'pointer',
-        marginBottom: '48px'
+        marginBottom: '48px',
       }}
       onClick={() => onArticleClick(article)}
     >
-      {/* Background Image */}
+      {/* Background Image with zoom on hover */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={article.featuredImage || `https://picsum.photos/1600/900?random=${article.id}`}
-        alt=""
+        alt={article.title || 'Article image'}
         style={{
           position: 'absolute',
           top: 0,
@@ -70,176 +72,155 @@ export const HeroArticle = memo(function HeroArticle({
           width: '100%',
           height: '100%',
           objectFit: 'cover',
-          transition: 'transform 0.5s ease'
+          transition: 'transform 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
         }}
         loading="eager"
       />
 
-      {/* Dark Overlay - Bottom gradient only */}
+      {/* Dark Overlay - Bottom gradient with glassmorphism hint */}
       <div style={{
         position: 'absolute',
         bottom: 0,
         left: 0,
         right: 0,
-        height: '70%',
-        background: 'linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.6) 50%, transparent 100%)',
-        pointerEvents: 'none'
+        height: '75%',
+        background: darkMode
+          ? 'linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.7) 40%, transparent 100%)'
+          : 'linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.5) 40%, transparent 100%)',
+        pointerEvents: 'none',
       }} />
 
-      {/* Category Badge - Top Left */}
-      <div style={{
-        position: 'absolute',
-        top: '32px',
-        left: '32px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px'
-      }}>
-        {article.trending && (
-          <span style={{
-            backgroundColor: '#DC2626',
-            color: 'white',
-            padding: '8px 16px',
-            fontSize: '11px',
-            fontWeight: '700',
-            textTransform: 'uppercase',
-            letterSpacing: '0.1em'
-          }}>
-            Breaking
-          </span>
-        )}
-        <span style={{
-          backgroundColor: 'rgba(255,255,255,0.95)',
-          color: '#000000',
-          padding: '8px 16px',
-          fontSize: '11px',
-          fontWeight: '600',
-          textTransform: 'uppercase',
-          letterSpacing: '0.05em'
-        }}>
-          {article.category?.name || 'Actualité'}
-        </span>
+      {/* Category Badge - Top Left with glassmorphism */}
+      <div
+        className="glass-subtle animate-fade-in-up"
+        style={{
+          position: 'absolute',
+          top: '24px',
+          left: '24px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          padding: '10px 14px',
+          borderRadius: '12px',
+          ...getGlass(),
+        }}
+      >
+        {article.trending && <BreakingBadge size="md" />}
+
+        <CategoryBadge
+          category={article.category?.name || 'Actualité'}
+          size="md"
+        />
 
         {/* AI Badge */}
-        {isSynthesis && (
-          <span style={{
-            backgroundColor: '#2563EB',
-            color: 'white',
-            padding: '8px 16px',
-            fontSize: '11px',
-            fontWeight: '700',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px'
-          }}>
-            <span style={{ fontSize: '14px' }}>⚡</span> AI Synthèse
-          </span>
-        )}
+        {isSynthesis && <AIBadge size="md" />}
 
         {/* Timeline Badge */}
         {hasTimeline && (
-          <span style={{
-            backgroundColor: '#059669',
-            color: 'white',
-            padding: '8px 12px',
-            fontSize: '10px',
-            fontWeight: '600',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px'
-          }}>
-            <span style={{ fontSize: '12px' }}>📅</span> Timeline
-          </span>
+          <Badge variant="success" size="md">
+            Timeline
+          </Badge>
         )}
 
         {/* Causal Badge */}
         {hasCausal && (
-          <span style={{
-            backgroundColor: '#7C3AED',
-            color: 'white',
-            padding: '8px 12px',
-            fontSize: '10px',
-            fontWeight: '600',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px'
-          }}>
-            <span style={{ fontSize: '12px' }}>🔗</span> Causal
-          </span>
+          <Badge
+            size="md"
+            style={{
+              backgroundColor: theme.brand.accent,
+              color: '#FFFFFF',
+            }}
+          >
+            Causal
+          </Badge>
         )}
       </div>
 
-      {/* Content Overlay - Bottom */}
+      {/* Content Overlay - Bottom with animations */}
       <div style={{
         position: 'absolute',
         bottom: 0,
         left: 0,
         right: 0,
         padding: '48px',
-        color: 'white'
+        color: 'white',
       }}>
-        {/* Title */}
-        <h1 style={{
-          fontSize: 'clamp(28px, 4vw, 48px)',
-          fontWeight: '700',
-          marginBottom: '16px',
-          lineHeight: '1.15',
-          fontFamily: 'Georgia, "Times New Roman", serif',
-          maxWidth: '900px',
-          textShadow: '0 2px 4px rgba(0,0,0,0.3)'
-        }}>
+        {/* Title with kinetic reveal animation */}
+        <h1
+          className="animate-title-reveal"
+          style={{
+            fontSize: 'clamp(32px, 4.5vw, 52px)',
+            fontWeight: 800,
+            marginBottom: '18px',
+            lineHeight: 1.1,
+            fontFamily: 'var(--font-serif)',
+            maxWidth: '900px',
+            textShadow: '0 4px 20px rgba(0,0,0,0.4)',
+            letterSpacing: '-0.02em',
+          }}
+        >
           {truncate(article.title, 120)}
         </h1>
 
-        {/* Summary - 2 lines max */}
-        <p style={{
-          fontSize: '18px',
-          lineHeight: '1.6',
-          marginBottom: '24px',
-          color: 'rgba(255,255,255,0.9)',
-          maxWidth: '700px',
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical',
-          overflow: 'hidden'
-        }}>
+        {/* Summary - 2 lines max with fade animation */}
+        <p
+          className="animate-fade-in-up"
+          style={{
+            fontSize: '18px',
+            lineHeight: 1.65,
+            marginBottom: '28px',
+            color: 'rgba(255,255,255,0.9)',
+            maxWidth: '750px',
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+            animationDelay: '0.2s',
+          }}
+        >
           {truncate(article.summary || article.subtitle || '', 180)}
         </p>
 
-        {/* Meta Row */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '24px',
-          fontSize: '14px',
-          color: 'rgba(255,255,255,0.8)'
-        }}>
+        {/* Meta Row with glassmorphism CTA */}
+        <div
+          className="animate-fade-in-up"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '24px',
+            fontSize: '14px',
+            color: 'rgba(255,255,255,0.8)',
+            animationDelay: '0.3s',
+          }}
+        >
           {article.author?.name && (
-            <span style={{ fontWeight: '500' }}>
+            <span style={{ fontWeight: 500 }}>
               {article.author.name}
             </span>
           )}
-          <span>{formatDate(article.publishedAt || article.createdAt)}</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px' }}>
+            {formatDate(article.publishedAt || article.createdAt)}
+          </span>
           {article.readingTime && (
             <span>{article.readingTime} min de lecture</span>
           )}
-          <span style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            marginLeft: 'auto',
-            padding: '8px 20px',
-            border: '1px solid rgba(255,255,255,0.4)',
-            fontSize: '13px',
-            fontWeight: '500',
-            transition: 'all 0.2s ease'
-          }}>
+          <span
+            className="btn-hover-primary"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              marginLeft: 'auto',
+              padding: '12px 24px',
+              background: 'rgba(255,255,255,0.15)',
+              backdropFilter: 'blur(10px)',
+              border: '1px solid rgba(255,255,255,0.25)',
+              borderRadius: '10px',
+              fontSize: '14px',
+              fontWeight: 600,
+              transition: 'all 200ms ease',
+            }}
+          >
             Lire l'article
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M5 12h14M12 5l7 7-7 7"/>

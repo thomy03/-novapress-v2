@@ -523,11 +523,12 @@ class SearchEnrichmentEngine:
         return result
 
     async def _get_grok_context(self, topic: str) -> Dict[str, Any]:
-        """Get Grok social context"""
+        """Get Grok social context and breaking news"""
         result = {
             "grok_context": "",
             "social_sentiment": "",
-            "trending_reactions": []
+            "trending_reactions": [],
+            "has_breaking": False
         }
 
         # Social sentiment analysis
@@ -536,10 +537,17 @@ class SearchEnrichmentEngine:
         result["social_sentiment"] = social.get("sentiment", "")
         result["trending_reactions"] = social.get("reactions", [])
 
-        # Breaking news (optional, adds latency)
-        # breaking = await self.grok.get_breaking_context(topic)
-        # if breaking:
-        #     result["grok_context"] += f"\n\nBreaking: {breaking}"
+        # Breaking news (enabled via config)
+        if getattr(settings, 'ENABLE_BREAKING_NEWS', False):
+            try:
+                breaking = await self.grok.get_breaking_context(topic)
+                if breaking:
+                    result["grok_context"] += f"\n\n🔴 DERNIERE HEURE: {breaking}"
+                    result["has_breaking"] = True
+                    logger.info(f"Breaking news found for topic: {topic[:50]}...")
+            except Exception as e:
+                logger.warning(f"Breaking news fetch failed (non-critical): {e}")
+                result["has_breaking"] = False
 
         return result
 
@@ -603,6 +611,131 @@ Sentiment: {context.social_sentiment.upper() if context.social_sentiment else 'N
 📝 CONSIGNE: Utilise ce contexte additionnel pour enrichir ta synthèse.
    Cite les sources web si pertinent. Mentionne le sentiment social si significatif.
 """
+
+
+# ═══════════════════════════════════════════════════════════════
+# COST CONTROL - Phase 6 Scraping Improvement Plan
+# ═══════════════════════════════════════════════════════════════
+
+# Source tiers for cost control decisions
+# Tier 1 = Major sources (justify Perplexity cost if scraping fails)
+# Tier 2 = Standard sources
+# Tier 3 = Minor sources (never use expensive APIs)
+SOURCE_TIERS: Dict[int, List[str]] = {
+    1: [
+        "lemonde.fr", "lefigaro.fr", "nytimes.com", "theguardian.com",
+        "bbc.com", "reuters.com", "washingtonpost.com", "ft.com",
+        "economist.com", "wsj.com", "bloomberg.com"
+    ],
+    2: [
+        "liberation.fr", "20minutes.fr", "franceinfo.fr", "cnn.com",
+        "techcrunch.com", "theverge.com", "wired.com", "france24.com"
+    ],
+    3: []  # Minor sources
+}
+
+
+def get_source_tier(domain: str) -> int:
+    """Get tier level for a source domain"""
+    domain_clean = domain.lower().replace("www.", "")
+    for tier, domains in SOURCE_TIERS.items():
+        if domain_clean in domains:
+            return tier
+    return 2  # Default to tier 2
+
+
+def should_use_perplexity(
+    scrape_success: bool,
+    content_length: int,
+    topic_importance: str = "normal",
+    source_tier: int = 2,
+    min_content_length: int = 500
+) -> tuple[bool, str]:
+    """
+    Decide if we should call Perplexity API (cost control).
+
+    COST CONTROL RULES:
+    1. Scraping OK (>500 chars) → NEVER use Perplexity (cost = 0)
+    2. Scraping KO + Breaking/Hot → Perplexity OK (justified)
+    3. Scraping KO + Normal + Source Tier 1 → Perplexity OK (important source)
+    4. Scraping KO + Minor topic → NO Perplexity (not worth the cost)
+
+    Args:
+        scrape_success: Was the scrape successful?
+        content_length: Length of scraped content
+        topic_importance: "breaking", "hot", "normal", or "minor"
+        source_tier: 1 (major), 2 (standard), 3 (minor)
+        min_content_length: Minimum content length to consider scrape "successful"
+
+    Returns:
+        Tuple of (should_use: bool, reason: str)
+    """
+    # Rule 1: Successful scrape = no need for expensive API
+    if scrape_success and content_length >= min_content_length:
+        return False, "scrape_success"
+
+    # Rule 4: Minor topic = not worth API cost
+    if topic_importance == "minor":
+        return False, "minor_topic"
+
+    # Rule 2: Breaking/Hot = always enrich (justified by urgency)
+    if topic_importance in ["breaking", "hot"]:
+        return True, f"urgent_{topic_importance}"
+
+    # Rule 3: Major source with failed scrape = enrich
+    if source_tier == 1 and (not scrape_success or content_length < min_content_length):
+        return True, "tier1_scrape_failed"
+
+    # Default: Don't use expensive API for standard cases
+    return False, "cost_control"
+
+
+def determine_topic_importance(
+    cluster_size: int,
+    avg_recency_hours: float,
+    source_diversity: int,
+    has_breaking_keywords: bool = False
+) -> str:
+    """
+    Determine topic importance for cost control decisions.
+
+    Args:
+        cluster_size: Number of articles in cluster
+        avg_recency_hours: Average age of articles in hours
+        source_diversity: Number of unique sources
+        has_breaking_keywords: Contains breaking news keywords
+
+    Returns:
+        "breaking", "hot", "normal", or "minor"
+    """
+    # Breaking: Very recent + many sources covering it
+    if has_breaking_keywords or (avg_recency_hours < 2 and source_diversity >= 4):
+        return "breaking"
+
+    # Hot: Recent + good coverage
+    if avg_recency_hours < 6 and (cluster_size >= 5 or source_diversity >= 3):
+        return "hot"
+
+    # Minor: Old or single source
+    if avg_recency_hours > 48 or source_diversity == 1:
+        return "minor"
+
+    return "normal"
+
+
+# Breaking news keywords for automatic detection
+BREAKING_KEYWORDS = [
+    "urgent", "breaking", "flash", "alerte", "just in",
+    "live", "en direct", "dernière heure", "dernière minute",
+    "explosion", "attentat", "séisme", "crash", "mort de",
+    "décès de", "démission", "élection", "guerre"
+]
+
+
+def detect_breaking_news(title: str, content: str = "") -> bool:
+    """Check if article contains breaking news keywords"""
+    text_lower = (title + " " + content).lower()
+    return any(kw in text_lower for kw in BREAKING_KEYWORDS)
 
 
 # Global instance

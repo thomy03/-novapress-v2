@@ -1,20 +1,15 @@
 // Types pour la gestion des articles NovaPress AI
 
+// REF-011: Import and re-export consolidated Category from api.ts
+import type { Category } from './api';
+export type { Category };
+
 export interface Tag {
   id: string;
   name: string;
   slug: string;
   color?: string;
   count?: number;
-}
-
-export interface Category {
-  id: string;
-  name: string;
-  slug: string;
-  description?: string;
-  icon?: string;
-  parentId?: string;
 }
 
 export interface Author {

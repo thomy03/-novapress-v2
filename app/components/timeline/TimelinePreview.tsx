@@ -60,7 +60,7 @@ export default function TimelinePreview({
     return null; // No history to show
   }
 
-  const phaseConfig = PHASE_CONFIG[data.narrative_arc];
+  const phaseConfig = PHASE_CONFIG[data.narrative_arc] || PHASE_CONFIG.emerging;
 
   return (
     <div style={styles.container}>
@@ -91,18 +91,42 @@ export default function TimelinePreview({
 
       {/* Compact timeline */}
       <div style={styles.timeline}>
-        {data.recent_events.slice(0, 3).map((event, index) => (
-          <div key={event.synthesis_id || index} style={styles.timelineItem}>
-            <div style={{
-              ...styles.dot,
-              backgroundColor: PHASE_CONFIG[event.narrative_phase].color,
-            }} />
-            <div style={styles.eventContent}>
-              <span style={styles.eventDate}>{formatDateShort(event.date)}</span>
-              <span style={styles.eventTitle}>{truncate(event.title, 50)}</span>
+        {data.recent_events.slice(0, 3).map((event, index) => {
+          // Make event clickable if it has a synthesis_id
+          const isClickable = event.synthesis_id && event.synthesis_id !== synthesisId;
+
+          const content = (
+            <>
+              <div style={{
+                ...styles.dot,
+                backgroundColor: PHASE_CONFIG[event.narrative_phase].color,
+              }} />
+              <div style={styles.eventContent}>
+                <span style={styles.eventDate}>{formatDateShort(event.date)}</span>
+                <span style={{
+                  ...styles.eventTitle,
+                  ...(isClickable ? styles.eventTitleClickable : {}),
+                }}>
+                  {truncate(event.title, 50)}
+                </span>
+              </div>
+            </>
+          );
+
+          return isClickable ? (
+            <Link
+              key={event.synthesis_id}
+              href={`/synthesis/${event.synthesis_id}`}
+              style={styles.timelineItemLink}
+            >
+              {content}
+            </Link>
+          ) : (
+            <div key={event.synthesis_id || index} style={styles.timelineItem}>
+              {content}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Link to full timeline */}
@@ -202,6 +226,19 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '8px',
     marginBottom: '8px',
   },
+  timelineItemLink: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '8px',
+    marginBottom: '8px',
+    textDecoration: 'none',
+    padding: '4px',
+    marginLeft: '-4px',
+    marginRight: '-4px',
+    borderRadius: '4px',
+    transition: 'background-color 0.2s ease',
+    cursor: 'pointer',
+  },
   dot: {
     width: '8px',
     height: '8px',
@@ -224,6 +261,12 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '13px',
     color: '#374151',
     lineHeight: 1.3,
+  },
+  eventTitleClickable: {
+    color: '#2563EB',
+    textDecoration: 'underline',
+    textDecorationColor: 'transparent',
+    transition: 'text-decoration-color 0.2s ease',
   },
   viewAllLink: {
     display: 'block',

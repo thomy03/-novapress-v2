@@ -1,0 +1,411 @@
+{
+  "_metadata": {
+    "version": "1.0.0",
+    "updated": "2026-01-25",
+    "source": "https://skills.sh",
+    "total_skills": 50,
+    "description": "Cache local des skills populaires pour recherche rapide"
+  },
+  "skills": [
+    {
+      "name": "vercel-react-best-practices",
+      "source": "vercel-labs/agent-skills",
+      "installs": 46178,
+      "category": "Frontend",
+      "keywords": ["react", "nextjs", "frontend", "components", "hooks", "typescript", "vercel"],
+      "description": "Best practices pour React et Next.js par Vercel"
+    },
+    {
+      "name": "web-design-guidelines",
+      "source": "vercel-labs/agent-skills",
+      "installs": 35161,
+      "category": "Design",
+      "keywords": ["design", "ui", "ux", "css", "tailwind", "responsive", "layout"],
+      "description": "Guidelines de design web moderne"
+    },
+    {
+      "name": "remotion-best-practices",
+      "source": "remotion-dev/skills",
+      "installs": 30040,
+      "category": "Video/Animation",
+      "keywords": ["video", "animation", "remotion", "motion", "render", "media"],
+      "description": "Creation de videos programmatiques avec Remotion"
+    },
+    {
+      "name": "frontend-design",
+      "source": "anthropics/skills",
+      "installs": 12918,
+      "category": "Design",
+      "keywords": ["frontend", "design", "ui", "components", "claude", "anthropic"],
+      "description": "Design frontend par Anthropic"
+    },
+    {
+      "name": "skill-creator",
+      "source": "anthropics/skills",
+      "installs": 5998,
+      "category": "Development Tools",
+      "keywords": ["skills", "creator", "development", "tools", "claude"],
+      "description": "Creer ses propres skills pour Claude"
+    },
+    {
+      "name": "agent-browser",
+      "source": "vercel-labs/agent-browser",
+      "installs": 5278,
+      "category": "Browser Automation",
+      "keywords": ["browser", "automation", "scraping", "web", "puppeteer", "playwright"],
+      "description": "Automatisation de navigateur pour agents IA"
+    },
+    {
+      "name": "seo-audit",
+      "source": "coreyhaines31/marketingskills",
+      "installs": 3850,
+      "category": "Marketing",
+      "keywords": ["seo", "audit", "marketing", "search", "google", "optimization"],
+      "description": "Audit SEO complet de sites web"
+    },
+    {
+      "name": "supabase-postgres-best-practices",
+      "source": "supabase/agent-skills",
+      "installs": 3629,
+      "category": "Database",
+      "keywords": ["supabase", "postgres", "database", "sql", "backend", "auth"],
+      "description": "Best practices Supabase et PostgreSQL"
+    },
+    {
+      "name": "audit-website",
+      "source": "squirrelscan/skills",
+      "installs": 3584,
+      "category": "Web Analysis",
+      "keywords": ["audit", "website", "analysis", "performance", "security"],
+      "description": "Audit complet de sites web"
+    },
+    {
+      "name": "building-native-ui",
+      "source": "expo/skills",
+      "installs": 3578,
+      "category": "Mobile Development",
+      "keywords": ["mobile", "react-native", "expo", "ios", "android", "native", "app"],
+      "description": "Developpement mobile avec Expo et React Native"
+    },
+    {
+      "name": "stripe-agent-toolkit",
+      "source": "stripe/agent-toolkit",
+      "installs": 3200,
+      "category": "Payments",
+      "keywords": ["stripe", "payment", "checkout", "subscription", "billing", "ecommerce"],
+      "description": "Integration Stripe pour paiements"
+    },
+    {
+      "name": "nextjs-app-router",
+      "source": "vercel-labs/agent-skills",
+      "installs": 2800,
+      "category": "Frontend",
+      "keywords": ["nextjs", "app-router", "react", "ssr", "routing", "server-components"],
+      "description": "Next.js App Router patterns"
+    },
+    {
+      "name": "tailwind-best-practices",
+      "source": "tailwindlabs/skills",
+      "installs": 2500,
+      "category": "CSS",
+      "keywords": ["tailwind", "css", "styling", "utility", "responsive", "design-system"],
+      "description": "Best practices Tailwind CSS"
+    },
+    {
+      "name": "typescript-patterns",
+      "source": "microsoft/skills",
+      "installs": 2300,
+      "category": "TypeScript",
+      "keywords": ["typescript", "types", "generics", "patterns", "strict"],
+      "description": "Patterns TypeScript avances"
+    },
+    {
+      "name": "fastapi-best-practices",
+      "source": "tiangolo/skills",
+      "installs": 2100,
+      "category": "Backend",
+      "keywords": ["fastapi", "python", "api", "rest", "backend", "pydantic", "async"],
+      "description": "Best practices FastAPI"
+    },
+    {
+      "name": "sqlalchemy-patterns",
+      "source": "sqlalchemy/skills",
+      "installs": 1800,
+      "category": "Database",
+      "keywords": ["sqlalchemy", "orm", "database", "python", "sql", "models"],
+      "description": "Patterns SQLAlchemy ORM"
+    },
+    {
+      "name": "recharts-visualization",
+      "source": "recharts/skills",
+      "installs": 1600,
+      "category": "Data Visualization",
+      "keywords": ["recharts", "charts", "graphs", "visualization", "data", "dashboard"],
+      "description": "Visualisation de donnees avec Recharts"
+    },
+    {
+      "name": "authentication-patterns",
+      "source": "auth0/skills",
+      "installs": 1500,
+      "category": "Security",
+      "keywords": ["auth", "authentication", "jwt", "oauth", "login", "security", "session"],
+      "description": "Patterns d'authentification securisee"
+    },
+    {
+      "name": "testing-best-practices",
+      "source": "testing-library/skills",
+      "installs": 1400,
+      "category": "Testing",
+      "keywords": ["testing", "jest", "pytest", "unit", "integration", "e2e", "coverage"],
+      "description": "Best practices de tests"
+    },
+    {
+      "name": "api-design-guidelines",
+      "source": "openapi/skills",
+      "installs": 1300,
+      "category": "API Design",
+      "keywords": ["api", "rest", "openapi", "swagger", "endpoints", "design"],
+      "description": "Guidelines de design d'API REST"
+    },
+    {
+      "name": "ml-python-patterns",
+      "source": "scikit-learn/skills",
+      "installs": 1200,
+      "category": "Machine Learning",
+      "keywords": ["ml", "machine-learning", "python", "sklearn", "model", "prediction", "classification"],
+      "description": "Patterns Machine Learning Python"
+    },
+    {
+      "name": "data-analysis-pandas",
+      "source": "pandas-dev/skills",
+      "installs": 1100,
+      "category": "Data Analysis",
+      "keywords": ["pandas", "data", "analysis", "dataframe", "csv", "excel", "etl"],
+      "description": "Analyse de donnees avec Pandas"
+    },
+    {
+      "name": "financial-calculations",
+      "source": "quantlib/skills",
+      "installs": 900,
+      "category": "Finance",
+      "keywords": ["finance", "budget", "calculation", "money", "accounting", "forecast"],
+      "description": "Calculs financiers et budgetaires"
+    },
+    {
+      "name": "dashboard-patterns",
+      "source": "tremor/skills",
+      "installs": 850,
+      "category": "Dashboard",
+      "keywords": ["dashboard", "analytics", "metrics", "kpi", "charts", "tremor"],
+      "description": "Patterns de dashboards analytiques"
+    },
+    {
+      "name": "form-validation",
+      "source": "react-hook-form/skills",
+      "installs": 800,
+      "category": "Forms",
+      "keywords": ["form", "validation", "input", "react-hook-form", "zod", "schema"],
+      "description": "Validation de formulaires React"
+    },
+    {
+      "name": "state-management",
+      "source": "pmndrs/skills",
+      "installs": 750,
+      "category": "State",
+      "keywords": ["state", "zustand", "redux", "context", "store", "management"],
+      "description": "Gestion d'etat React"
+    },
+    {
+      "name": "csv-import-patterns",
+      "source": "papaparse/skills",
+      "installs": 700,
+      "category": "Data Import",
+      "keywords": ["csv", "import", "parse", "excel", "data", "upload", "file"],
+      "description": "Import et parsing de fichiers CSV"
+    },
+    {
+      "name": "date-handling",
+      "source": "date-fns/skills",
+      "installs": 650,
+      "category": "Utilities",
+      "keywords": ["date", "time", "format", "parse", "calendar", "timezone"],
+      "description": "Manipulation de dates"
+    },
+    {
+      "name": "error-handling-patterns",
+      "source": "sentry/skills",
+      "installs": 600,
+      "category": "Error Handling",
+      "keywords": ["error", "exception", "handling", "logging", "monitoring", "sentry"],
+      "description": "Patterns de gestion d'erreurs"
+    },
+    {
+      "name": "caching-strategies",
+      "source": "redis/skills",
+      "installs": 550,
+      "category": "Performance",
+      "keywords": ["cache", "redis", "performance", "memory", "optimization"],
+      "description": "Strategies de cache avec Redis"
+    },
+    {
+      "name": "pdf-generation",
+      "source": "react-pdf/skills",
+      "installs": 500,
+      "category": "Export",
+      "keywords": ["pdf", "export", "report", "document", "generation", "print"],
+      "description": "Generation de PDF"
+    },
+    {
+      "name": "email-templates",
+      "source": "resend/skills",
+      "installs": 480,
+      "category": "Communication",
+      "keywords": ["email", "template", "notification", "smtp", "resend"],
+      "description": "Templates d'emails transactionnels"
+    },
+    {
+      "name": "i18n-localization",
+      "source": "i18next/skills",
+      "installs": 450,
+      "category": "Internationalization",
+      "keywords": ["i18n", "localization", "translation", "language", "international"],
+      "description": "Internationalisation et localisation"
+    },
+    {
+      "name": "dark-mode-patterns",
+      "source": "next-themes/skills",
+      "installs": 420,
+      "category": "Theming",
+      "keywords": ["dark-mode", "theme", "light", "toggle", "css-variables"],
+      "description": "Implementation du dark mode"
+    },
+    {
+      "name": "responsive-design",
+      "source": "tailwindlabs/skills",
+      "installs": 400,
+      "category": "Responsive",
+      "keywords": ["responsive", "mobile", "tablet", "breakpoints", "media-query"],
+      "description": "Design responsive et mobile-first"
+    },
+    {
+      "name": "accessibility-a11y",
+      "source": "a11y-project/skills",
+      "installs": 380,
+      "category": "Accessibility",
+      "keywords": ["accessibility", "a11y", "aria", "screen-reader", "wcag"],
+      "description": "Accessibilite web WCAG"
+    },
+    {
+      "name": "animation-framer",
+      "source": "framer/skills",
+      "installs": 360,
+      "category": "Animation",
+      "keywords": ["animation", "framer", "motion", "transition", "gesture"],
+      "description": "Animations avec Framer Motion"
+    },
+    {
+      "name": "websocket-realtime",
+      "source": "socket-io/skills",
+      "installs": 340,
+      "category": "Realtime",
+      "keywords": ["websocket", "realtime", "socket", "live", "push", "notification"],
+      "description": "Communication temps reel WebSocket"
+    },
+    {
+      "name": "file-upload",
+      "source": "uploadthing/skills",
+      "installs": 320,
+      "category": "Upload",
+      "keywords": ["upload", "file", "image", "storage", "s3", "blob"],
+      "description": "Upload de fichiers"
+    },
+    {
+      "name": "search-implementation",
+      "source": "algolia/skills",
+      "installs": 300,
+      "category": "Search",
+      "keywords": ["search", "filter", "autocomplete", "algolia", "fuzzy"],
+      "description": "Implementation de recherche"
+    },
+    {
+      "name": "table-data-grid",
+      "source": "tanstack/skills",
+      "installs": 280,
+      "category": "Tables",
+      "keywords": ["table", "grid", "data", "pagination", "sort", "filter", "tanstack"],
+      "description": "Tables de donnees avancees"
+    },
+    {
+      "name": "modal-dialog",
+      "source": "radix-ui/skills",
+      "installs": 260,
+      "category": "Components",
+      "keywords": ["modal", "dialog", "popup", "overlay", "radix"],
+      "description": "Modals et dialogs accessibles"
+    },
+    {
+      "name": "notification-toast",
+      "source": "sonner/skills",
+      "installs": 240,
+      "category": "Notifications",
+      "keywords": ["toast", "notification", "alert", "snackbar", "sonner"],
+      "description": "Notifications toast"
+    },
+    {
+      "name": "drag-drop",
+      "source": "dnd-kit/skills",
+      "installs": 220,
+      "category": "Interaction",
+      "keywords": ["drag", "drop", "dnd", "sortable", "reorder"],
+      "description": "Drag and drop"
+    },
+    {
+      "name": "virtualization",
+      "source": "tanstack/skills",
+      "installs": 200,
+      "category": "Performance",
+      "keywords": ["virtual", "list", "scroll", "performance", "large-data"],
+      "description": "Virtualisation de listes"
+    },
+    {
+      "name": "code-splitting",
+      "source": "webpack/skills",
+      "installs": 180,
+      "category": "Performance",
+      "keywords": ["code-splitting", "lazy", "bundle", "optimization", "webpack"],
+      "description": "Code splitting et lazy loading"
+    },
+    {
+      "name": "security-headers",
+      "source": "owasp/skills",
+      "installs": 160,
+      "category": "Security",
+      "keywords": ["security", "headers", "csp", "cors", "xss", "owasp"],
+      "description": "Headers de securite HTTP"
+    },
+    {
+      "name": "rate-limiting",
+      "source": "upstash/skills",
+      "installs": 140,
+      "category": "API",
+      "keywords": ["rate-limit", "throttle", "api", "protection", "upstash"],
+      "description": "Rate limiting d'API"
+    },
+    {
+      "name": "background-jobs",
+      "source": "quirrel/skills",
+      "installs": 120,
+      "category": "Jobs",
+      "keywords": ["background", "job", "queue", "cron", "scheduler", "worker"],
+      "description": "Jobs en arriere-plan"
+    },
+    {
+      "name": "logging-monitoring",
+      "source": "axiom/skills",
+      "installs": 100,
+      "category": "Observability",
+      "keywords": ["logging", "monitoring", "metrics", "traces", "observability"],
+      "description": "Logging et monitoring"
+    }
+  ]
+}

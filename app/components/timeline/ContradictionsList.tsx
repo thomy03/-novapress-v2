@@ -54,7 +54,7 @@ export default function ContradictionsList({
 
       <div style={styles.list}>
         {displayItems.map((item, index) => {
-          const config = CONTRADICTION_CONFIG[item.type];
+          const config = CONTRADICTION_CONFIG[item.type] || CONTRADICTION_CONFIG.factual;
 
           return (
             <div key={index} style={styles.item}>

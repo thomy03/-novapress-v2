@@ -72,7 +72,7 @@ export const SynthesisCompactCard = memo(function SynthesisCompactCard({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={getImageUrl()}
-            alt=""
+            alt={synthesis.title || 'Synthesis image'}
             style={{
               width: '100%',
               height: '100%',
@@ -165,19 +165,21 @@ export const SynthesisCompactCard = memo(function SynthesisCompactCard({
           flexDirection: 'column',
           flex: 1
         }}>
-          {/* Title */}
+          {/* UI-007: Improved Title with newspaper style */}
           <h3 style={{
             fontFamily: 'Georgia, "Times New Roman", serif',
-            fontSize: '18px',
+            fontSize: '17px',
             fontWeight: '700',
-            lineHeight: '1.35',
+            lineHeight: '1.3',
             color: '#000000',
             margin: 0,
             marginBottom: '12px',
             display: '-webkit-box',
             WebkitLineClamp: 3,
             WebkitBoxOrient: 'vertical',
-            overflow: 'hidden'
+            overflow: 'hidden',
+            letterSpacing: '-0.02em',
+            textWrap: 'balance' as 'balance'
           }}>
             {synthesis.title}
           </h3>

@@ -14,6 +14,8 @@ from enum import Enum
 import redis
 
 from app.core.config import settings
+from app.services.source_discovery import get_discovery_service, SourceDiscoveryService
+from app.services.advanced_scraper import SourceBlockedError
 
 # Thread pool for CPU-bound operations (embeddings, clustering)
 # This prevents blocking the async event loop
@@ -96,9 +98,14 @@ class PipelineManager:
         self._last_result = None
         self._subscribers: List[Callable] = []
         self._source_stats: Dict[str, Dict] = {}
+        self._blacklisted_sources: Dict[str, Dict] = {}  # domain -> {reason, timestamp, failures}
+        self._discovered_sources: Dict[str, Dict] = {}  # Auto-discovered replacement sources
+        self._empty_source_counts: Dict[str, int] = {}  # Track consecutive empty results
 
         # Configuration
-        self.SOURCE_TIMEOUT = 30  # seconds per source
+        self.SOURCE_TIMEOUT = 15  # seconds per source (reduced from 30)
+        self.MAX_CONSECUTIVE_FAILURES = 3  # blacklist after X failures
+        self.MAX_CONSECUTIVE_EMPTY = 2  # trigger discovery after X consecutive empty results
         self.MAX_LOGS = 500  # keep last 500 logs
 
     @property
@@ -186,8 +193,93 @@ class PipelineManager:
             "last_run": self._last_run,
             "last_result": self._last_result,
             "source_stats": self._source_stats,
+            "blacklisted_sources": list(self._blacklisted_sources.keys()),
+            "discovered_sources": list(self._discovered_sources.keys()),
             "logs_count": len(self._logs)
         }
+
+    def _blacklist_source(self, domain: str, reason: str):
+        """Add a source to the blacklist"""
+        if domain in self._blacklisted_sources:
+            self._blacklisted_sources[domain]["failures"] += 1
+        else:
+            self._blacklisted_sources[domain] = {
+                "reason": reason,
+                "timestamp": datetime.now().isoformat(),
+                "failures": 1
+            }
+        logger.warning(f"⛔ Source blacklisted: {domain} - {reason}")
+
+    async def _try_discover_replacement(self, domain: str, reason: str, source_config: dict = None):
+        """
+        Try to discover a replacement source when one is blacklisted.
+        Non-blocking - runs in background if enabled.
+        """
+        if not getattr(settings, 'ENABLE_AUTO_DISCOVERY', False):
+            return None
+
+        # Check if we've already discovered enough sources
+        max_sources = getattr(settings, 'AUTO_DISCOVERY_MAX_SOURCES', 10)
+        if len(self._discovered_sources) >= max_sources:
+            logger.info(f"Max discovered sources reached ({max_sources}), skipping discovery")
+            return None
+
+        try:
+            discovery = get_discovery_service()
+            self.add_log("info", f"🔍 Searching replacement for {domain}...")
+
+            replacement = await discovery.find_replacement(
+                blocked_domain=domain,
+                blocked_reason=reason,
+                source_config=source_config,
+                max_suggestions=3
+            )
+
+            if replacement:
+                # Store discovered source
+                self._discovered_sources[replacement.get("name", domain)] = replacement
+                self.add_log("success", f"✅ Discovered replacement: {replacement.get('name')} ({replacement.get('url')})")
+
+                # Add to scraper's sources dynamically
+                from app.services.advanced_scraper import AdvancedNewsScraper
+                new_domain = replacement.get("url", "").replace("https://", "").replace("http://", "").split("/")[0].replace("www.", "")
+                if new_domain:
+                    AdvancedNewsScraper.WORLD_NEWS_SOURCES[new_domain] = replacement
+                    logger.info(f"Added {new_domain} to active sources")
+
+                return replacement
+
+        except Exception as e:
+            logger.error(f"Auto-discovery failed for {domain}: {e}")
+            self.add_log("error", f"Auto-discovery failed: {str(e)[:50]}")
+
+        return None
+
+    def _is_blacklisted(self, domain: str) -> bool:
+        """Check if a source is blacklisted"""
+        return domain in self._blacklisted_sources
+
+    def clear_blacklist(self, domain: str = None):
+        """Clear blacklist - all or specific domain"""
+        if domain:
+            self._blacklisted_sources.pop(domain, None)
+            logger.info(f"✅ Removed {domain} from blacklist")
+        else:
+            self._blacklisted_sources.clear()
+            logger.info("✅ Cleared all blacklisted sources")
+
+    def get_blacklist(self) -> Dict[str, Dict]:
+        """Get current blacklist"""
+        return self._blacklisted_sources.copy()
+
+    def get_discovered_sources(self) -> Dict[str, Dict]:
+        """Get auto-discovered replacement sources"""
+        return self._discovered_sources.copy()
+
+    def clear_discovered_sources(self):
+        """Clear all auto-discovered sources"""
+        self._discovered_sources.clear()
+        logger.info("✅ Cleared all discovered sources")
 
     def get_logs(self, limit: int = 100, offset: int = 0) -> List[dict]:
         """Get recent logs"""
@@ -398,53 +490,137 @@ class PipelineManager:
 
         all_articles = []
 
-        # Get source list
+        # Get source list - filter extended sources if disabled
         source_configs = AdvancedNewsScraper.WORLD_NEWS_SOURCES
-        source_domains = sources if sources else list(source_configs.keys())
+        if sources:
+            source_domains = sources
+        else:
+            # Use filtered sources based on ENABLE_EXTENDED_SOURCES config
+            all_sources = list(source_configs.keys())
+            if getattr(settings, 'ENABLE_EXTENDED_SOURCES', False):
+                source_domains = all_sources
+                self.add_log("info", f"Extended sources ENABLED: {len(all_sources)} total")
+            else:
+                extended = AdvancedNewsScraper.EXTENDED_SOURCE_DOMAINS
+                source_domains = [s for s in all_sources if s not in extended]
+                self.add_log("info", f"Extended sources DISABLED: {len(source_domains)} core sources (skipping {len(extended)} extended)")
         total_sources = len(source_domains)
 
         await self.update_progress(20, "scraping")
         self.add_log("info", f"Scraping {total_sources} sources...")
 
         # Scrape each source with timeout
+        skipped_blacklisted = 0
+        successful_sources = 0  # Phase 1: Low-Tech alert tracking
+        failed_sources = 0      # Phase 1: Low-Tech alert tracking
         async with pipeline.advanced_scraper as scraper:
             for i, domain in enumerate(source_domains):
                 if self.check_cancelled():
                     raise asyncio.CancelledError()
 
                 source_name = source_configs.get(domain, {}).get("name", domain)
+
+                # Skip blacklisted sources
+                if self._is_blacklisted(domain):
+                    skipped_blacklisted += 1
+                    await self.update_source_status(domain, "skipped", 0, "Blacklisted")
+                    self.add_log("warning", f"⏭️ {source_name}: SKIPPED (blacklisted)", source=domain)
+                    progress = 20 + int((i + 1) / total_sources * 30)
+                    await self.update_progress(progress)
+                    continue
+
                 await self.update_source_status(domain, "scraping")
                 self.add_log("info", f"Scraping {source_name}...", source=domain)
 
                 try:
-                    # Scrape with timeout
+                    # Scrape with aggressive timeout - pass timeout to scraper too
                     articles = await asyncio.wait_for(
-                        scraper.scrape_source(domain, max_articles=max_articles_per_source),
-                        timeout=self.SOURCE_TIMEOUT
+                        scraper.scrape_source(domain, max_articles=max_articles_per_source, timeout=self.SOURCE_TIMEOUT),
+                        timeout=self.SOURCE_TIMEOUT + 3  # Extra 3s grace period for cleanup
                     )
 
                     if articles:
                         all_articles.extend(articles)
                         await self.update_source_status(domain, "success", len(articles))
                         self.add_log("success", f"{source_name}: {len(articles)} articles", source=domain)
+                        # Reset empty count on success
+                        self._empty_source_counts[domain] = 0
+                        successful_sources += 1  # Phase 1: Low-Tech alert
                     else:
                         await self.update_source_status(domain, "empty", 0)
                         self.add_log("warning", f"{source_name}: no articles found", source=domain)
+                        failed_sources += 1  # Phase 1: Low-Tech alert (empty = partial failure)
+                        # Track consecutive empty results
+                        self._empty_source_counts[domain] = self._empty_source_counts.get(domain, 0) + 1
+                        empty_count = self._empty_source_counts[domain]
+                        if empty_count >= self.MAX_CONSECUTIVE_EMPTY:
+                            self.add_log("warning", f"🔄 {source_name}: {empty_count} consecutive empty runs, searching replacement...")
+                            # Try to discover replacement for consistently empty source
+                            asyncio.create_task(self._try_discover_replacement(
+                                domain, f"Consecutive empty results ({empty_count})",
+                                source_configs.get(domain)
+                            ))
 
                 except asyncio.TimeoutError:
                     await self.update_source_status(domain, "timeout", 0, f"Timeout after {self.SOURCE_TIMEOUT}s")
-                    self.add_log("warning", f"{source_name}: timeout after {self.SOURCE_TIMEOUT}s", source=domain)
+                    self.add_log("error", f"⏱️ {source_name}: TIMEOUT after {self.SOURCE_TIMEOUT}s - BLACKLISTED", source=domain)
+                    self._blacklist_source(domain, f"Timeout after {self.SOURCE_TIMEOUT}s")
+                    failed_sources += 1  # Phase 1: Low-Tech alert
+                    # Try to discover replacement (non-blocking, in background)
+                    asyncio.create_task(self._try_discover_replacement(
+                        domain, f"Timeout after {self.SOURCE_TIMEOUT}s",
+                        source_configs.get(domain)
+                    ))
+
+                except SourceBlockedError as e:
+                    # Source is actively blocking requests (403/406/etc)
+                    await self.update_source_status(domain, "blocked", 0, f"{e.error_code}: {e.error_count}/{e.total_urls} requests failed")
+                    self.add_log("error", f"⛔ {source_name}: BLOCKED ({e.error_code}) - {e.error_count}/{e.total_urls} failed - BLACKLISTED", source=domain)
+                    self._blacklist_source(domain, f"HTTP blocked: {e.error_code}")
+                    failed_sources += 1  # Phase 1: Low-Tech alert
+                    # Try to discover replacement (non-blocking)
+                    asyncio.create_task(self._try_discover_replacement(
+                        domain, f"HTTP blocked ({e.error_code})",
+                        source_configs.get(domain)
+                    ))
 
                 except Exception as e:
                     await self.update_source_status(domain, "error", 0, str(e))
                     self.add_log("error", f"{source_name}: {str(e)}", source=domain)
+                    failed_sources += 1  # Phase 1: Low-Tech alert
+                    # Blacklist on repeated failures
+                    if "getaddrinfo failed" in str(e) or "Connection refused" in str(e):
+                        self._blacklist_source(domain, str(e)[:100])
+                        # Try to discover replacement (non-blocking)
+                        asyncio.create_task(self._try_discover_replacement(
+                            domain, str(e)[:100],
+                            source_configs.get(domain)
+                        ))
 
                 # Update progress
                 progress = 20 + int((i + 1) / total_sources * 30)  # 20-50%
                 await self.update_progress(progress)
 
+        if skipped_blacklisted > 0:
+            self.add_log("info", f"⏭️ Skipped {skipped_blacklisted} blacklisted sources")
+
         results["raw_articles"] = len(all_articles)
         self.add_log("success", f"Scraping complete: {len(all_articles)} articles collected")
+
+        # Phase 1: Low-Tech Alert - Check success rate
+        attempted_sources = successful_sources + failed_sources
+        if attempted_sources > 0:
+            success_rate = successful_sources / attempted_sources
+            results["success_rate"] = round(success_rate * 100, 1)
+            self.add_log("info", f"📊 Success rate: {results['success_rate']}% ({successful_sources}/{attempted_sources} sources)")
+
+            if success_rate < 0.50:
+                # Critical alert: pipeline is underperforming
+                alert_msg = f"🚨 ALERTE: Pipeline success rate critique: {results['success_rate']}% ({successful_sources}/{attempted_sources} sources réussies)"
+                self.add_log("error", alert_msg)
+                logger.critical(alert_msg)
+                # TODO: Envoyer alerte Discord/Slack/Email (à implémenter)
+                # await self._send_low_tech_alert(alert_msg)
 
         if len(all_articles) == 0:
             self.add_log("warning", "No articles collected, stopping pipeline")

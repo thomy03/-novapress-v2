@@ -143,5 +143,54 @@ export const adminService = {
     return apiClient.get(
       `${API_CONFIG.ENDPOINTS.ADMIN}logs?limit=${limit}&offset=${offset}`
     );
+  },
+
+  /**
+   * Reset pipeline lock (requires admin key)
+   * Use this if the pipeline is stuck and won't start
+   */
+  async resetPipelineLock(adminKey: string): Promise<{
+    local_status_before: string;
+    local_status_after: string;
+    redis_lock_existed: boolean;
+    redis_lock_value?: string;
+    actions: string[];
+    message: string;
+  }> {
+    return apiClient.post(
+      `${API_CONFIG.ENDPOINTS.ADMIN}pipeline/reset-lock`,
+      {},
+      {
+        headers: {
+          'x-admin-key': adminKey
+        }
+      }
+    );
+  },
+
+  /**
+   * Debug pipeline state (no auth required)
+   * Returns detailed info about local and Redis state
+   */
+  async debugPipeline(): Promise<{
+    local_state: {
+      status: string;
+      is_running: boolean;
+      progress: number;
+      current_step: string | null;
+      cancel_requested: boolean;
+    };
+    redis: {
+      available: boolean;
+      lock_exists?: boolean;
+      lock_value?: string;
+      lock_ttl?: number;
+      error?: string;
+    };
+    can_start: boolean;
+  }> {
+    return apiClient.get(
+      `${API_CONFIG.ENDPOINTS.ADMIN}pipeline/debug`
+    );
   }
 };

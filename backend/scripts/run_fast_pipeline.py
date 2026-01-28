@@ -110,12 +110,10 @@ async def run_fast_pipeline():
             "reporterre.net",
 
             # === INTERNATIONAL (Asie) ===
-            "scmp.com",              # Hong Kong / Chine
-            "japantimes.co.jp",      # Japon
-            "koreaherald.com",       # Corée du Sud
+            # NOTE: scmp.com, japantimes.co.jp, koreaherald.com removed (blocked by robots.txt)
 
             # === INTERNATIONAL (Autres) ===
-            "rt.com",                # Russie
+            # NOTE: rt.com removed (blocked by EU sanctions - DNS fails)
             "dw.com",                # Allemagne (anglais)
             "rfi.fr",                # France International
             "france24.com",          # France International

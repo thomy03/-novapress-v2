@@ -1,7 +1,8 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { apiClient, API_CONFIG } from '../lib/api/client';
+import { apiClient } from '../lib/api/client';
+import { API_CONFIG } from '../lib/api/config';
 
 // Types
 interface Synthesis {

@@ -55,7 +55,7 @@ export interface TimelinePreviewResponse {
   has_contradictions: boolean;
 }
 
-// Phase display configuration
+// Phase display configuration (Newspaper style - black/grey)
 export const PHASE_CONFIG: Record<NarrativePhase, {
   label: string;
   labelFr: string;
@@ -66,37 +66,37 @@ export const PHASE_CONFIG: Record<NarrativePhase, {
   emerging: {
     label: 'Emerging',
     labelFr: 'Émergent',
-    color: '#10B981',
-    bgColor: '#D1FAE5',
-    icon: '🌱'
+    color: '#374151',
+    bgColor: '#F3F4F6',
+    icon: '●'
   },
   developing: {
     label: 'Developing',
-    labelFr: 'En développement',
-    color: '#F59E0B',
-    bgColor: '#FEF3C7',
-    icon: '📈'
+    labelFr: 'En cours',
+    color: '#000000',
+    bgColor: '#E5E5E5',
+    icon: '●●'
   },
   peak: {
     label: 'Peak',
-    labelFr: 'Pic d\'attention',
-    color: '#EF4444',
+    labelFr: 'Pic',
+    color: '#DC2626',
     bgColor: '#FEE2E2',
-    icon: '🔥'
+    icon: '●●●'
   },
   declining: {
     label: 'Declining',
     labelFr: 'En déclin',
     color: '#6B7280',
     bgColor: '#F3F4F6',
-    icon: '📉'
+    icon: '○'
   },
   resolved: {
     label: 'Resolved',
     labelFr: 'Résolu',
-    color: '#3B82F6',
-    bgColor: '#DBEAFE',
-    icon: '✅'
+    color: '#6B7280',
+    bgColor: '#F3F4F6',
+    icon: '✓'
   }
 };
 

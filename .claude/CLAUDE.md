@@ -40,8 +40,8 @@ Le scraper supporte **53 sources de news mondiales** + **5 sources alternatives*
 | **Bluesky** | Social décentralisé | Actif |
 | ~~YouTube~~ | ~~Vidéos~~ | Désactivé (légal) |
 
-### Sources bloquées (robots.txt)
-La Tribune, Futura Sciences, Le Soir, SCMP, Japan Times, Korea Herald, RFI, France24, Jeune Afrique, Clarín
+### Sources bloquées (robots.txt ou sanctions)
+La Tribune, Futura Sciences, Le Soir, SCMP, Japan Times, Korea Herald, RFI, France24, Jeune Afrique, Clarín, **RT (sanctions EU - DNS bloqué)**
 
 ---
 

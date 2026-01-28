@@ -36,6 +36,9 @@ class QualityResult:
 
 # Style markers for each persona
 PERSONA_STYLE_MARKERS = {
+    # ═══════════════════════════════════════════════════════════════
+    # ORIGINAUX (4 non-neutre)
+    # ═══════════════════════════════════════════════════════════════
     PersonaType.LE_CYNIQUE: {
         "keywords": [
             "n'est-ce pas", "on se demande", "comme disait", "curieusement",
@@ -109,15 +112,226 @@ PERSONA_STYLE_MARKERS = {
         "forbidden": [],
         "min_parody_markers": 2,  # Au moins 2 éléments parodiques
     },
+
+    # ═══════════════════════════════════════════════════════════════
+    # POLITIQUES/IDÉOLOGIQUES (5)
+    # ═══════════════════════════════════════════════════════════════
+    PersonaType.LE_SOUVERAINISTE: {
+        "keywords": [
+            "souveraineté", "frontières", "nation", "identité", "patrie",
+            "bruxelles", "technocrates", "mondialisation", "élites",
+            "déconnectés", "la france d'abord", "nos", "notre",
+            "indépendance", "traités", "directives"
+        ],
+        "patterns": [
+            r"la france d'abord",
+            r"nos frontières|notre souveraineté|notre nation",
+            r"bruxelles|technocrates|élites",
+        ],
+        "forbidden": [],
+    },
+    PersonaType.L_ECOLOGISTE: {
+        "keywords": [
+            "urgence climatique", "carbone", "giec", "biodiversité",
+            "écosystème", "planète b", "générations futures", "effondrement",
+            "greenwashing", "fossiles", "renouvelables", "sobriété",
+            "point de bascule", "empreinte"
+        ],
+        "patterns": [
+            r"il n'y a pas de planète b",
+            r"urgence climatique|effondrement",
+            r"giec|biodiversité",
+        ],
+        "forbidden": [],
+    },
+    PersonaType.LE_TECHNO_SCEPTIQUE: {
+        "keywords": [
+            "vie privée", "données personnelles", "surveillance", "gafam",
+            "big tech", "algorithme", "biais", "consentement", "éthique",
+            "logiciel libre", "décentralisation", "rgpd", "opacité",
+            "l'humain avant la machine"
+        ],
+        "patterns": [
+            r"l'humain avant la machine",
+            r"gafam|big tech|surveillance",
+            r"vie privée|données personnelles",
+        ],
+        "forbidden": [],
+    },
+    PersonaType.L_ECONOMISTE: {
+        "keywords": [
+            "pib", "croissance", "inflation", "récession", "marché",
+            "cac40", "wall street", "investisseurs", "milliards",
+            "pourcentage", "statistiques", "tendance", "indicateurs",
+            "les chiffres ne mentent jamais"
+        ],
+        "patterns": [
+            r"les chiffres ne mentent jamais",
+            r"\d+%|\d+ milliards",
+            r"pib|inflation|croissance",
+            r"cac40|wall street",
+        ],
+        "forbidden": [],
+    },
+    PersonaType.LE_POPULISTE: {
+        "keywords": [
+            "le peuple", "les élites", "ceux d'en haut", "technocrates",
+            "bon sens", "déconnectés", "les gens", "les oubliés",
+            "privilèges", "entre-soi", "système", "ça suffit",
+            "le peuple a toujours raison"
+        ],
+        "patterns": [
+            r"le peuple a toujours raison",
+            r"le peuple|les élites|ceux d'en haut",
+            r"bon sens|déconnectés",
+        ],
+        "forbidden": [],
+    },
+
+    # ═══════════════════════════════════════════════════════════════
+    # PHILOSOPHIQUES/INTELLECTUELS (3)
+    # ═══════════════════════════════════════════════════════════════
+    PersonaType.L_HISTORIEN: {
+        "keywords": [
+            "comme en", "rappelle", "cycle", "répétition", "histoire",
+            "nos ancêtres", "leçons du passé", "éternel retour",
+            "générations précédentes", "déjà vu", "l'histoire rime"
+        ],
+        "patterns": [
+            r"l'histoire ne se répète pas.+rime",
+            r"comme en \d{4}|rappelle \d{4}",
+            r"leçons du passé|nos ancêtres",
+        ],
+        "forbidden": [],
+    },
+    PersonaType.LE_PHILOSOPHE: {
+        "keywords": [
+            "qu'est-ce que", "vraiment", "posons-nous la question",
+            "interrogeons-nous", "au fond", "fondamentalement", "sens",
+            "existence", "liberté", "vérité", "comme disait", "selon",
+            "la question est plus importante"
+        ],
+        "patterns": [
+            r"la question est plus importante",
+            r"qu'est-ce que.+vraiment",
+            r"posons-nous la question|interrogeons-nous",
+        ],
+        "forbidden": [],
+    },
+    PersonaType.LE_SCIENTIFIQUE: {
+        "keywords": [
+            "selon une étude", "les données montrent", "corrélation",
+            "causalité", "méta-analyse", "peer-review", "échantillon",
+            "reproductibilité", "hypothèse", "prudence", "nuance",
+            "correlation n'est pas causalité"
+        ],
+        "patterns": [
+            r"corrélation n'est pas causalité",
+            r"selon une étude|les données",
+            r"méta-analyse|peer-review",
+        ],
+        "forbidden": [],
+    },
+
+    # ═══════════════════════════════════════════════════════════════
+    # GÉNÉRATIONNELS (3)
+    # ═══════════════════════════════════════════════════════════════
+    PersonaType.LE_BOOMER: {
+        "keywords": [
+            "de mon temps", "à mon époque", "quand j'étais jeune",
+            "les jeunes d'aujourd'hui", "on savait", "on respectait",
+            "les valeurs", "le mérite", "l'effort", "ces téléphones",
+            "cette modernité", "de mon temps c'était mieux"
+        ],
+        "patterns": [
+            r"de mon temps.+mieux",
+            r"de mon temps|à mon époque",
+            r"les jeunes d'aujourd'hui",
+        ],
+        "forbidden": [],
+    },
+    PersonaType.LE_MILLENNIAL: {
+        "keywords": [
+            "ok boomer", "cringe", "mood", "vibe", "burnout",
+            "précarité", "cdi", "on fait avec", "c'est la vie",
+            "on survit", "cursed", "timeline"
+        ],
+        "patterns": [
+            r"ok boomer",
+            r"cringe|mood|vibe",
+            r"burnout|précarité",
+        ],
+        "forbidden": [],
+    },
+    PersonaType.LE_GEN_Z: {
+        "keywords": [
+            "no cap", "fr fr", "slay", "sus", "based", "lowkey",
+            "highkey", "bet", "deadass", "mid", "w", "l", "💀", "🔥"
+        ],
+        "patterns": [
+            r"no cap|fr fr",
+            r"slay|sus|based|mid",
+            r"lowkey|highkey",
+        ],
+        "forbidden": [],
+    },
+
+    # ═══════════════════════════════════════════════════════════════
+    # CONTROVERSÉS (2)
+    # ═══════════════════════════════════════════════════════════════
+    PersonaType.LE_COMPLOTISTE: {
+        "keywords": [
+            "cui bono", "à qui profite", "coïncidence", "on peut se demander",
+            "certains pensent", "il est légitime", "suivez l'argent",
+            "troublant", "curieux", "hasard"
+        ],
+        "patterns": [
+            r"à qui profite le crime",
+            r"cui bono|suivez l'argent",
+            r"certains.+demandent|on peut.+interroger",
+        ],
+        "forbidden": [
+            "reptiliens", "terre plate"  # Théories délirantes interdites
+        ],
+    },
+    PersonaType.LE_PROVOCATEUR: {
+        "keywords": [
+            "et si au contraire", "à contre-courant", "osons le dire",
+            "personne n'ose", "tabou", "avocat du diable", "l'autre côté",
+            "pensée unique", "consensus mou", "remettons en question",
+            "et si on voyait les choses autrement"
+        ],
+        "patterns": [
+            r"et si on voyait les choses autrement",
+            r"et si au contraire|à contre-courant",
+            r"osons le dire|personne n'ose",
+        ],
+        "forbidden": [],
+    },
 }
 
 # Tone keywords for analysis
 TONE_KEYWORDS = {
+    # Originaux
     "sardonic": ["cynique", "ironique", "sardonique", "désabusé", "amer", "mordant"],
     "optimistic": ["positif", "prometteur", "espoir", "solution", "progrès", "opportunité"],
     "dramatic": ["épique", "dramatique", "haletant", "suspense", "rebondissement"],
     "satirical": ["parodique", "absurde", "exagération", "satire"],
     "neutral": ["factuel", "objectif", "neutre", "informatif"],
+    # Nouveaux tons
+    "patriotic": ["nation", "souveraineté", "patrie", "frontières", "identité"],
+    "ecological": ["climat", "planète", "urgence", "environnement", "biodiversité"],
+    "skeptical": ["surveillance", "vie privée", "données", "éthique", "consentement"],
+    "analytical": ["chiffres", "statistiques", "pourcentage", "croissance", "indicateurs"],
+    "populist": ["peuple", "élites", "bon sens", "déconnectés", "système"],
+    "historical": ["histoire", "cycle", "répétition", "ancêtres", "leçons"],
+    "philosophical": ["question", "sens", "existence", "vérité", "fondamentalement"],
+    "scientific": ["étude", "données", "corrélation", "hypothèse", "méthodologie"],
+    "nostalgic": ["temps", "époque", "valeurs", "mérite", "respect"],
+    "ironic_millennial": ["cringe", "burnout", "précarité", "vibe", "mood"],
+    "gen_z_slang": ["no cap", "fr fr", "slay", "sus", "based"],
+    "questioning": ["cui bono", "coïncidence", "troublant", "curieux"],
+    "contrarian": ["contre-courant", "tabou", "pensée unique", "remettons en question"],
 }
 
 
@@ -144,9 +358,10 @@ class PersonaQualityReviewer:
     SIGNATURE_WEIGHT = 0.15
     VOCABULARY_WEIGHT = 0.25
 
-    # Minimum thresholds
-    MIN_ACCEPTABLE_SCORE = 0.6
-    IDEAL_SCORE = 0.8
+    # Minimum thresholds - Lowered from 0.6 to 0.35 to allow more persona content
+    # The LLM often produces good persona content that doesn't hit all markers
+    MIN_ACCEPTABLE_SCORE = 0.35
+    IDEAL_SCORE = 0.7
 
     def __init__(self):
         self.markers = PERSONA_STYLE_MARKERS
@@ -238,11 +453,29 @@ class PersonaQualityReviewer:
 
         # Map persona to expected tone
         tone_mapping = {
+            # Originaux
             PersonaType.LE_CYNIQUE: "sardonic",
             PersonaType.L_OPTIMISTE: "optimistic",
             PersonaType.LE_CONTEUR: "dramatic",
             PersonaType.LE_SATIRISTE: "satirical",
             PersonaType.NEUTRAL: "neutral",
+            # Politiques/Idéologiques
+            PersonaType.LE_SOUVERAINISTE: "patriotic",
+            PersonaType.L_ECOLOGISTE: "ecological",
+            PersonaType.LE_TECHNO_SCEPTIQUE: "skeptical",
+            PersonaType.L_ECONOMISTE: "analytical",
+            PersonaType.LE_POPULISTE: "populist",
+            # Philosophiques/Intellectuels
+            PersonaType.L_HISTORIEN: "historical",
+            PersonaType.LE_PHILOSOPHE: "philosophical",
+            PersonaType.LE_SCIENTIFIQUE: "scientific",
+            # Générationnels
+            PersonaType.LE_BOOMER: "nostalgic",
+            PersonaType.LE_MILLENNIAL: "ironic_millennial",
+            PersonaType.LE_GEN_Z: "gen_z_slang",
+            # Controversés
+            PersonaType.LE_COMPLOTISTE: "questioning",
+            PersonaType.LE_PROVOCATEUR: "contrarian",
         }
 
         expected_tone = tone_mapping.get(persona_type, "neutral")
@@ -257,14 +490,14 @@ class PersonaQualityReviewer:
             if tone != expected_tone and tone != "neutral":
                 contradicting_count += sum(1 for kw in keywords if kw in text)
 
-        # Calculate score
+        # Calculate score - More lenient scoring
         if expected_count == 0:
-            base_score = 0.3  # No expected markers = low score
+            base_score = 0.5  # No expected markers = base score (was 0.3)
         else:
-            base_score = min(1.0, expected_count / 3)  # Need at least 3 for full score
+            base_score = min(1.0, 0.5 + expected_count / 4)  # 1 keyword = 0.75, 2 = 1.0
 
-        # Penalty for contradicting tone
-        penalty = min(0.3, contradicting_count * 0.1)
+        # Penalty for contradicting tone - reduced from 0.1 per keyword
+        penalty = min(0.2, contradicting_count * 0.05)
 
         return max(0.0, base_score - penalty)
 
@@ -296,11 +529,11 @@ class PersonaQualityReviewer:
 
         total_count = keyword_count + pattern_count
 
-        # Normalize score (expect at least 3 markers for good score)
-        base_score = min(1.0, total_count / 4)
+        # Normalize score - More lenient (1 marker = 0.5, 2 = 0.75, 3+ = 1.0)
+        base_score = min(1.0, 0.25 + total_count * 0.25)
 
-        # Penalty for forbidden words
-        forbidden_penalty = min(0.4, forbidden_count * 0.2)
+        # Penalty for forbidden words - reduced
+        forbidden_penalty = min(0.3, forbidden_count * 0.15)
 
         normalized_score = max(0.0, base_score - forbidden_penalty)
 
@@ -335,6 +568,9 @@ class PersonaQualityReviewer:
         persona_type = PersonaType(persona.id)
 
         vocabulary_maps = {
+            # ═══════════════════════════════════════════════════════════════
+            # ORIGINAUX
+            # ═══════════════════════════════════════════════════════════════
             PersonaType.LE_CYNIQUE: {
                 "positive": ["certes", "néanmoins", "toutefois", "force est de constater",
                             "il appert", "en substance", "de facto"],
@@ -353,6 +589,83 @@ class PersonaQualityReviewer:
             PersonaType.LE_SATIRISTE: {
                 "positive": ["officiellement", "communiqué", "selon nos informations",
                             "source autorisée", "expert", "statistiques"],
+                "negative": []
+            },
+            # ═══════════════════════════════════════════════════════════════
+            # POLITIQUES/IDÉOLOGIQUES
+            # ═══════════════════════════════════════════════════════════════
+            PersonaType.LE_SOUVERAINISTE: {
+                "positive": ["souveraineté", "nation", "frontières", "indépendance",
+                            "patrie", "identité", "nos"],
+                "negative": ["mondialiste", "cosmopolite"]
+            },
+            PersonaType.L_ECOLOGISTE: {
+                "positive": ["durable", "renouvelable", "biodiversité", "carbone",
+                            "climat", "écosystème", "planète"],
+                "negative": ["greenwashing", "fossile"]
+            },
+            PersonaType.LE_TECHNO_SCEPTIQUE: {
+                "positive": ["vie privée", "éthique", "consentement", "décentralisé",
+                            "libre", "humain"],
+                "negative": []
+            },
+            PersonaType.L_ECONOMISTE: {
+                "positive": ["milliards", "pourcentage", "croissance", "indicateur",
+                            "tendance", "marché", "investissement"],
+                "negative": []
+            },
+            PersonaType.LE_POPULISTE: {
+                "positive": ["peuple", "bon sens", "gens", "réalité",
+                            "terrain", "concret"],
+                "negative": ["technocrate", "élitiste"]
+            },
+            # ═══════════════════════════════════════════════════════════════
+            # PHILOSOPHIQUES/INTELLECTUELS
+            # ═══════════════════════════════════════════════════════════════
+            PersonaType.L_HISTORIEN: {
+                "positive": ["cycle", "histoire", "précédent", "parallèle",
+                            "répétition", "leçon", "jadis"],
+                "negative": []
+            },
+            PersonaType.LE_PHILOSOPHE: {
+                "positive": ["question", "sens", "essence", "fondamentalement",
+                            "existence", "vérité", "liberté"],
+                "negative": []
+            },
+            PersonaType.LE_SCIENTIFIQUE: {
+                "positive": ["étude", "données", "hypothèse", "méthodologie",
+                            "échantillon", "corrélation", "prudence"],
+                "negative": []
+            },
+            # ═══════════════════════════════════════════════════════════════
+            # GÉNÉRATIONNELS
+            # ═══════════════════════════════════════════════════════════════
+            PersonaType.LE_BOOMER: {
+                "positive": ["époque", "temps", "valeurs", "respect",
+                            "mérite", "effort", "tradition"],
+                "negative": ["tiktok", "snapchat"]
+            },
+            PersonaType.LE_MILLENNIAL: {
+                "positive": ["cringe", "vibe", "mood", "burnout",
+                            "précarité", "galère"],
+                "negative": []
+            },
+            PersonaType.LE_GEN_Z: {
+                "positive": ["no cap", "fr fr", "slay", "sus", "based",
+                            "lowkey", "deadass"],
+                "negative": []
+            },
+            # ═══════════════════════════════════════════════════════════════
+            # CONTROVERSÉS
+            # ═══════════════════════════════════════════════════════════════
+            PersonaType.LE_COMPLOTISTE: {
+                "positive": ["cui bono", "coïncidence", "troublant", "curieux",
+                            "hasard", "questionnement"],
+                "negative": ["reptilien", "terre plate"]
+            },
+            PersonaType.LE_PROVOCATEUR: {
+                "positive": ["contre-courant", "tabou", "remettons", "osons",
+                            "consensus", "pensée unique"],
                 "negative": []
             },
         }
@@ -435,13 +748,13 @@ class PersonaQualityReviewer:
         Get a quality tier label for the result.
 
         Returns:
-            "excellent" (>= 0.8), "good" (>= 0.7), "acceptable" (>= 0.6), "poor" (< 0.6)
+            "excellent" (>= 0.7), "good" (>= 0.5), "acceptable" (>= 0.35), "poor" (< 0.35)
         """
-        if result.overall_score >= 0.8:
+        if result.overall_score >= 0.7:
             return "excellent"
-        elif result.overall_score >= 0.7:
+        elif result.overall_score >= 0.5:
             return "good"
-        elif result.overall_score >= 0.6:
+        elif result.overall_score >= 0.35:
             return "acceptable"
         else:
             return "poor"

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useReducer, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useReducer, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Article, Tag } from '../types/Article';
 import { 
@@ -18,7 +18,7 @@ import { Article as ApiArticle } from '../types/api';
 
 interface ArticlesState {
   articles: Article[];
-  filteredArticles: Article[];
+  // REF-006: filteredArticles removed from state - now computed via useMemo
   popularTags: Tag[];
   selectedTags: string[];
   selectedCategory: string;
@@ -31,7 +31,7 @@ interface ArticlesState {
 
 type ArticlesAction =
   | { type: 'SET_ARTICLES'; payload: Article[] }
-  | { type: 'SET_FILTERED_ARTICLES'; payload: Article[] }
+  // REF-006: SET_FILTERED_ARTICLES removed - filteredArticles now computed via useMemo
   | { type: 'SET_POPULAR_TAGS'; payload: Tag[] }
   | { type: 'SET_SELECTED_TAGS'; payload: string[] }
   | { type: 'ADD_TAG'; payload: string }
@@ -46,7 +46,7 @@ type ArticlesAction =
 
 const initialState: ArticlesState = {
   articles: [],
-  filteredArticles: [],
+  // REF-006: filteredArticles removed from initial state
   popularTags: [],
   selectedTags: [],
   selectedCategory: 'ACCUEIL',
@@ -61,10 +61,9 @@ function articlesReducer(state: ArticlesState, action: ArticlesAction): Articles
   switch (action.type) {
     case 'SET_ARTICLES':
       return { ...state, articles: action.payload };
-    
-    case 'SET_FILTERED_ARTICLES':
-      return { ...state, filteredArticles: action.payload };
-    
+
+    // REF-006: SET_FILTERED_ARTICLES case removed - computed via useMemo now
+
     case 'SET_POPULAR_TAGS':
       return { ...state, popularTags: action.payload };
     
@@ -126,8 +125,13 @@ function articlesReducer(state: ArticlesState, action: ArticlesAction): Articles
   }
 }
 
+// REF-006: Extended state type to include computed filteredArticles
+interface ArticlesStateWithFiltered extends ArticlesState {
+  filteredArticles: Article[];
+}
+
 interface ArticlesContextType {
-  state: ArticlesState;
+  state: ArticlesStateWithFiltered;
   addTag: (tagId: string) => void;
   removeTag: (tagId: string) => void;
   toggleTag: (tagId: string) => void;
@@ -221,54 +225,71 @@ export function ArticlesProvider({ children }: { children: React.ReactNode }) {
     loadArticles();
   }, []);
 
-  // Filter articles when criteria change
+  // REF-006: API search results stored separately (async operation)
+  const [apiSearchResults, setApiSearchResults] = useState<Article[] | null>(null);
+
+  // REF-006: useEffect ONLY for async API search calls
   useEffect(() => {
-    const filterArticles = async () => {
-      // If API is available and there's a search query, use semantic search
-      if (state.isApiAvailable && debouncedSearchQuery && debouncedSearchQuery.length >= 2) {
+    // Only trigger API search if conditions are met
+    if (state.isApiAvailable && debouncedSearchQuery && debouncedSearchQuery.length >= 2) {
+      const controller = new AbortController();
+
+      const performSearch = async () => {
         dispatch({ type: 'SET_LOADING', payload: true });
         try {
           const response = await articlesService.searchArticles(debouncedSearchQuery, { limit: 20 });
-          const convertedArticles = response.data.map(convertApiArticle);
-          dispatch({ type: 'SET_FILTERED_ARTICLES', payload: convertedArticles });
-          console.log(`🔍 Semantic search: ${convertedArticles.length} results for "${debouncedSearchQuery}"`);
+          if (!controller.signal.aborted) {
+            const convertedArticles = response.data.map(convertApiArticle);
+            setApiSearchResults(convertedArticles);
+            console.log(`🔍 Semantic search: ${convertedArticles.length} results for "${debouncedSearchQuery}"`);
+          }
         } catch (error) {
-          console.error('Search API failed, using local filter:', error);
-          // Fallback to local search
-          const filtered = searchArticles(state.articles, debouncedSearchQuery);
-          dispatch({ type: 'SET_FILTERED_ARTICLES', payload: filtered });
+          if (!controller.signal.aborted) {
+            console.error('Search API failed:', error);
+            setApiSearchResults(null); // Fallback to local filtering
+          }
         } finally {
-          dispatch({ type: 'SET_LOADING', payload: false });
+          if (!controller.signal.aborted) {
+            dispatch({ type: 'SET_LOADING', payload: false });
+          }
         }
-        return;
+      };
+
+      performSearch();
+      return () => controller.abort();
+    } else {
+      // Clear API results when not searching via API
+      setApiSearchResults(null);
+    }
+  }, [debouncedSearchQuery, state.isApiAvailable]);
+
+  // REF-006: Local filtering computed via useMemo (no dispatch needed)
+  const localFilteredArticles = useMemo(() => {
+    let filtered = [...state.articles];
+
+    // Filter by category
+    if (state.selectedCategory !== 'ACCUEIL') {
+      const category = mockCategories.find(c => c.name === state.selectedCategory);
+      if (category) {
+        filtered = filterArticlesByCategory(filtered, category.id);
       }
+    }
 
-      // Local filtering (for mock data or category/tag filters)
-      let filtered = [...state.articles];
+    // Filter by tags
+    if (state.selectedTags.length > 0) {
+      filtered = filterArticlesByTags(filtered, state.selectedTags);
+    }
 
-      // Filter by category
-      if (state.selectedCategory !== 'ACCUEIL') {
-        const category = mockCategories.find(c => c.name === state.selectedCategory);
-        if (category) {
-          filtered = filterArticlesByCategory(filtered, category.id);
-        }
-      }
+    // Filter by search query (local fallback when API not available)
+    if (debouncedSearchQuery && !state.isApiAvailable) {
+      filtered = searchArticles(filtered, debouncedSearchQuery);
+    }
 
-      // Filter by tags
-      if (state.selectedTags.length > 0) {
-        filtered = filterArticlesByTags(filtered, state.selectedTags);
-      }
-
-      // Filter by search query (local fallback)
-      if (debouncedSearchQuery && !state.isApiAvailable) {
-        filtered = searchArticles(filtered, debouncedSearchQuery);
-      }
-
-      dispatch({ type: 'SET_FILTERED_ARTICLES', payload: filtered });
-    };
-
-    filterArticles();
+    return filtered;
   }, [state.articles, state.selectedCategory, state.selectedTags, debouncedSearchQuery, state.isApiAvailable]);
+
+  // REF-006: Final filtered articles - API results take precedence if available
+  const filteredArticles = apiSearchResults ?? localFilteredArticles;
 
   const addTag = useCallback((tagId: string) => {
     dispatch({ type: 'ADD_TAG', payload: tagId });
@@ -313,8 +334,14 @@ export function ArticlesProvider({ children }: { children: React.ReactNode }) {
     router.push(`/article/${article.id}`);
   }, [router]);
 
+  // REF-006: Merge computed filteredArticles into state for consumers
+  const stateWithFiltered: ArticlesStateWithFiltered = {
+    ...state,
+    filteredArticles
+  };
+
   const value = {
-    state,
+    state: stateWithFiltered,
     addTag,
     removeTag,
     toggleTag,

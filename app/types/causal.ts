@@ -7,11 +7,11 @@
 // Relation Types
 // ==========================================
 
-export type RelationType = 'causes' | 'triggers' | 'enables' | 'prevents';
+export type RelationType = 'causes' | 'triggers' | 'enables' | 'prevents' | 'relates_to';
 
 export type NarrativeFlow = 'linear' | 'branching' | 'circular';
 
-export type NodeType = 'event' | 'entity' | 'decision';
+export type NodeType = 'event' | 'entity' | 'decision' | 'keyword';
 
 // ==========================================
 // Core Types
@@ -96,6 +96,110 @@ export interface CausalStatsResponse {
 }
 
 // ==========================================
+// Phase 7: Predictions Types
+// ==========================================
+
+export type PredictionType = 'economic' | 'political' | 'social' | 'geopolitical' | 'tech' | 'general';
+
+export type PredictionTimeframe = 'court_terme' | 'moyen_terme' | 'long_terme';
+
+export interface Prediction {
+  prediction: string;
+  probability: number;
+  type: PredictionType;
+  timeframe: PredictionTimeframe;
+  rationale: string;
+}
+
+export interface PredictionsResponse {
+  synthesis_id: string;
+  title: string;
+  predictions: Prediction[];
+  count: number;
+  types: PredictionType[];
+  has_predictions: boolean;
+}
+
+// Prediction type configuration (Newspaper style - subtle tones)
+export const PREDICTION_TYPE_CONFIG: Record<PredictionType, {
+  label: string;
+  labelFr: string;
+  color: string;
+  bgColor: string;
+  icon: string;
+}> = {
+  economic: {
+    label: 'Economic',
+    labelFr: 'Économie',
+    color: '#374151',
+    bgColor: '#F3F4F6',
+    icon: '📈'
+  },
+  political: {
+    label: 'Political',
+    labelFr: 'Politique',
+    color: '#374151',
+    bgColor: '#F3F4F6',
+    icon: '🏛️'
+  },
+  social: {
+    label: 'Social',
+    labelFr: 'Social',
+    color: '#374151',
+    bgColor: '#F3F4F6',
+    icon: '👥'
+  },
+  geopolitical: {
+    label: 'Geopolitical',
+    labelFr: 'Géopolitique',
+    color: '#374151',
+    bgColor: '#F3F4F6',
+    icon: '🌍'
+  },
+  tech: {
+    label: 'Technology',
+    labelFr: 'Tech',
+    color: '#374151',
+    bgColor: '#F3F4F6',
+    icon: '💻'
+  },
+  general: {
+    label: 'General',
+    labelFr: 'Général',
+    color: '#6B7280',
+    bgColor: '#F3F4F6',
+    icon: '📋'
+  }
+};
+
+// Timeframe configuration (Newspaper style - black/grey)
+export const TIMEFRAME_CONFIG: Record<PredictionTimeframe, {
+  label: string;
+  labelFr: string;
+  color: string;
+  description: string;
+}> = {
+  court_terme: {
+    label: 'Short-term',
+    labelFr: 'Court terme',
+    color: '#000000',
+    description: 'Dans les prochaines semaines'
+  },
+  moyen_terme: {
+    label: 'Medium-term',
+    labelFr: 'Moyen terme',
+    color: '#374151',
+    description: 'Dans les prochains mois'
+  },
+  long_terme: {
+    label: 'Long-term',
+    labelFr: 'Long terme',
+    color: '#6B7280',
+    description: 'Dans les prochaines années'
+  }
+};
+
+// ==========================================
 // Historical Causal Graph Types (Multi-Layer DAG)
 // ==========================================
 
@@ -171,6 +275,7 @@ export interface PositionedEdge {
 // UI Configuration
 // ==========================================
 
+// Relation configuration (Newspaper style - black/grey with semantic hints)
 export const RELATION_CONFIG: Record<RelationType | InterLayerConnectionType, {
   label: string;
   labelFr: string;
@@ -183,24 +288,24 @@ export const RELATION_CONFIG: Record<RelationType | InterLayerConnectionType, {
   causes: {
     label: 'Causes',
     labelFr: 'Cause',
-    color: '#DC2626',
-    bgColor: '#FEE2E2',
+    color: '#000000',
+    bgColor: '#F3F4F6',
     icon: '→',
     description: 'Direct causal relationship'
   },
   triggers: {
     label: 'Triggers',
     labelFr: 'Déclenche',
-    color: '#F59E0B',
-    bgColor: '#FEF3C7',
+    color: '#374151',
+    bgColor: '#F3F4F6',
     icon: '⚡',
     description: 'Event that initiates another'
   },
   enables: {
     label: 'Enables',
     labelFr: 'Permet',
-    color: '#10B981',
-    bgColor: '#D1FAE5',
+    color: '#374151',
+    bgColor: '#F3F4F6',
     icon: '✓',
     description: 'Makes something possible'
   },
@@ -215,14 +320,24 @@ export const RELATION_CONFIG: Record<RelationType | InterLayerConnectionType, {
   leads_to: {
     label: 'Leads to',
     labelFr: 'Mène à',
-    color: '#3B82F6',
-    bgColor: '#DBEAFE',
+    color: '#6B7280',
+    bgColor: '#F3F4F6',
     icon: '⤵',
     description: 'Inter-synthesis connection (effect becomes cause)',
+    isDashed: true
+  },
+  relates_to: {
+    label: 'Relates to',
+    labelFr: 'Lié à',
+    color: '#9CA3AF',
+    bgColor: '#F9FAFB',
+    icon: '↔',
+    description: 'Keyword connection to causal node',
     isDashed: true
   }
 };
 
+// Narrative flow configuration (Newspaper style - black/grey)
 export const NARRATIVE_FLOW_CONFIG: Record<NarrativeFlow, {
   label: string;
   labelFr: string;
@@ -233,21 +348,21 @@ export const NARRATIVE_FLOW_CONFIG: Record<NarrativeFlow, {
   linear: {
     label: 'Linear',
     labelFr: 'Linéaire',
-    color: '#2563EB',
+    color: '#000000',
     icon: '→',
     description: 'Events follow a straight cause-effect chain'
   },
   branching: {
     label: 'Branching',
     labelFr: 'Ramifié',
-    color: '#8B5CF6',
+    color: '#374151',
     icon: '⑂',
     description: 'Multiple effects from single causes'
   },
   circular: {
     label: 'Circular',
     labelFr: 'Circulaire',
-    color: '#EC4899',
+    color: '#6B7280',
     icon: '↻',
     description: 'Effects feed back into causes'
   }
@@ -257,17 +372,18 @@ export const NARRATIVE_FLOW_CONFIG: Record<NarrativeFlow, {
 // Helper Functions
 // ==========================================
 
+// Confidence level helper (Newspaper style - black/grey)
 export function getConfidenceLevel(confidence: number): {
   label: string;
   labelFr: string;
   color: string;
 } {
   if (confidence >= 0.8) {
-    return { label: 'High', labelFr: 'Élevé', color: '#10B981' };
+    return { label: 'High', labelFr: 'Élevé', color: '#000000' };
   } else if (confidence >= 0.5) {
-    return { label: 'Medium', labelFr: 'Moyen', color: '#F59E0B' };
+    return { label: 'Medium', labelFr: 'Moyen', color: '#374151' };
   } else {
-    return { label: 'Low', labelFr: 'Faible', color: '#EF4444' };
+    return { label: 'Low', labelFr: 'Faible', color: '#9CA3AF' };
   }
 }
 

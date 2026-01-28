@@ -2,6 +2,7 @@
 Advanced News Scraper - NovaPress AI v2
 Scraping intelligent de sites d'actualité mondiaux
 Respect des règles: robots.txt, rate limiting, paywalls
++ Retry 3x avec backoff exponentiel + Playwright fallback (Phase 1)
 """
 from typing import List, Dict, Any, Optional, Set
 import asyncio
@@ -19,6 +20,24 @@ import re
 from app.core.config import settings
 from app.ml.embeddings import get_embedding_service
 
+# Playwright (optional fallback for JS-rendered sites)
+try:
+    from playwright.async_api import async_playwright
+    PLAYWRIGHT_AVAILABLE = True
+except ImportError:
+    PLAYWRIGHT_AVAILABLE = False
+    logger.info("Playwright not available - install with: pip install playwright && playwright install chromium")
+
+
+class SourceBlockedError(Exception):
+    """Raised when a source appears to be blocking all requests (HTTP 403/406/etc)"""
+    def __init__(self, domain: str, error_count: int, total_urls: int, error_code: str = "HTTP_BLOCKED"):
+        self.domain = domain
+        self.error_count = error_count
+        self.total_urls = total_urls
+        self.error_code = error_code
+        super().__init__(f"Source {domain} blocked: {error_count}/{total_urls} requests failed with {error_code}")
+
 
 class AdvancedNewsScraper:
     """
@@ -32,8 +51,12 @@ class AdvancedNewsScraper:
     """
 
     # Default timeout per source (seconds)
-    DEFAULT_SOURCE_TIMEOUT = 30.0  # Timeout for entire source scraping
-    DEFAULT_ARTICLE_TIMEOUT = 15.0  # Timeout per individual article
+    DEFAULT_SOURCE_TIMEOUT = 15.0  # Timeout for entire source scraping
+    DEFAULT_ARTICLE_TIMEOUT = 15.0  # Timeout per individual article (augmenté de 8s)
+
+    # Retry configuration (Phase 1 - Plan Backend)
+    MAX_RETRIES = 3
+    RETRY_BACKOFF_BASE = 2.0  # Backoff exponentiel: 2s, 4s, 8s
 
     # Sources mondiales de qualité
     WORLD_NEWS_SOURCES = {
@@ -467,95 +490,21 @@ class AdvancedNewsScraper:
         },
 
         # === INTERNATIONAL ADDITIONAL ===
-        "rt.com": {
-            "name": "RT (Russia Today)",
-            "url": "https://www.rt.com",
-            "selectors": {
-                "article_links": "a.link",
-                "title": "h1",
-                "content": "div.article__text p"
-            },
-            "rate_limit": 2.0
-        },
-        "scmp.com": {
-            "name": "South China Morning Post",
-            "url": "https://www.scmp.com",
-            "selectors": {
-                "article_links": "a[href*='/article/']",
-                "title": "h1",
-                "content": "div.article-body p"
-            },
-            "rate_limit": 2.0
-        },
-        "japantimes.co.jp": {
-            "name": "The Japan Times",
-            "url": "https://www.japantimes.co.jp",
-            "selectors": {
-                "article_links": "article a",
-                "title": "h1",
-                "content": "div.article-body p"
-            },
-            "rate_limit": 1.5
-        },
-        "koreaherald.com": {
-            "name": "The Korea Herald",
-            "url": "https://www.koreaherald.com",
-            "selectors": {
-                "article_links": "div.main_sec a",
-                "title": "h1",
-                "content": "div.view_con p"
-            },
-            "rate_limit": 1.5
-        },
-        # ABC News Australia - REMOVED (blocks/timeouts)
-        "cbc.ca": {
-            "name": "CBC News Canada",
-            "url": "https://www.cbc.ca/news",
-            "selectors": {
-                "article_links": "a[href*='/news/']",
-                "title": "h1",
-                "content": "div.story p"
-            },
-            "rate_limit": 1.5
-        },
-        "dw.com": {
-            "name": "Deutsche Welle",
-            "url": "https://www.dw.com/en",
-            "selectors": {
-                "article_links": "a[href*='/a-']",
-                "title": "h1",
-                "content": "div.longText p"
-            },
-            "rate_limit": 1.5
-        },
-        # RFI - REMOVED (robots.txt blocks scraping)
-        # France 24 - REMOVED (robots.txt blocks scraping)
-
-        # === AFRICA ===
-        # Jeune Afrique - REMOVED (robots.txt blocks scraping)
-        "lematin.ma": {
-            "name": "Le Matin (Maroc)",
-            "url": "https://lematin.ma",
-            "selectors": {
-                "article_links": "article a",
-                "title": "h1",
-                "content": "div.article-body p"
-            },
-            "rate_limit": 1.5
-        },
-
-        # === LATIN AMERICA ===
-        # Clarín - REMOVED (robots.txt blocks scraping)
-        "eluniversal.com.mx": {
-            "name": "El Universal (Mexico)",
-            "url": "https://www.eluniversal.com.mx",
-            "selectors": {
-                "article_links": "article a",
-                "title": "h1",
-                "content": "div.field-body p"
-            },
-            "rate_limit": 1.5
-        },
+        # NOTE: Sources below are DISABLED due to access issues:
+        # - rt.com: Blocked by EU sanctions (DNS resolution fails in France/EU)
+        # - scmp.com: Blocked by robots.txt
+        # - japantimes.co.jp: Blocked by robots.txt
+        # - koreaherald.com: Blocked by robots.txt
+        # === SOURCES REMOVED (blocking/timeout issues) ===
+        # - ABC News Australia: blocks/timeouts
+        # - cbc.ca: blocks on scraping
+        # - dw.com: slow/unreliable
+        # - RFI: robots.txt blocks
+        # - France 24: robots.txt blocks
+        # - lematin.ma: slow/unreliable
+        # - eluniversal.com.mx: slow/unreliable
+        # - Jeune Afrique: robots.txt blocks
+        # - Clarín: robots.txt blocks
 
         # ═══════════════════════════════════════════════════════════════
         # === FRANCE - EXTENDED (Dec 2025) ===
@@ -1134,6 +1083,33 @@ class AdvancedNewsScraper:
         }
     }
 
+    # Extended sources - disabled by default for faster/reliable scraping
+    # These sources are only used when ENABLE_EXTENDED_SOURCES=True in config
+    # NOTE: Key French sources (20minutes, tf1info, lexpress, lavoixdunord) moved to CORE
+    #       to improve French news coverage for France-targeted app
+    EXTENDED_SOURCE_DOMAINS = {
+        # FRANCE - EXTENDED (less important/niche)
+        "courrierinternational.com", "doctissimo.fr", "lesnumeriques.com",
+        "gala.fr", "actu.fr", "clubic.com", "pleinevie.fr", "rmcsport.bfmtv.com",
+        "parismatch.com", "sudouest.fr",  # Removed from extended: lexpress, tf1info, 20minutes, lavoixdunord
+        "charentelibre.fr", "marianne.net", "telerama.fr",
+        "forbes.fr",
+        # USA - EXTENDED
+        "usatoday.com", "latimes.com", "foxnews.com", "msnbc.com",
+        "abcnews.go.com", "cbsnews.com", "nbcnews.com", "politico.com",
+        "axios.com", "thehill.com", "huffpost.com", "breitbart.com",
+        "technologyreview.com", "scientificamerican.com",
+        # UK - EXTENDED
+        "thetimes.co.uk", "telegraph.co.uk", "independent.co.uk",
+        "economist.com", "news.sky.com", "dailymail.co.uk", "thesun.co.uk",
+        "mirror.co.uk", "spectator.co.uk", "newstatesman.com",
+        # EUROPE - EXTENDED
+        "politico.eu", "euronews.com", "euractiv.com", "euobserver.com",
+        "handelsblatt.com", "ansa.it", "dutchnews.nl", "nltimes.nl",
+        "brusselstimes.com", "swissinfo.ch", "notesfrompoland.com",
+        "kyivindependent.com", "lrt.lt", "err.ee"
+    }
+
     def __init__(self):
         self.client = httpx.AsyncClient(
             headers={"User-Agent": settings.USER_AGENT},
@@ -1144,6 +1120,22 @@ class AdvancedNewsScraper:
         self.scraped_urls: Set[str] = set()
         self.article_hashes: Set[str] = set()
         self.last_request_time: Dict[str, datetime] = {}
+
+    def get_active_sources(self) -> List[str]:
+        """
+        Get list of active sources based on config.
+        If ENABLE_EXTENDED_SOURCES=False, filters out extended sources for faster scraping.
+        """
+        all_sources = list(self.WORLD_NEWS_SOURCES.keys())
+
+        if getattr(settings, 'ENABLE_EXTENDED_SOURCES', False):
+            logger.info(f"📰 Extended sources ENABLED: {len(all_sources)} total sources")
+            return all_sources
+
+        # Filter out extended sources
+        active_sources = [s for s in all_sources if s not in self.EXTENDED_SOURCE_DOMAINS]
+        logger.info(f"📰 Extended sources DISABLED: {len(active_sources)} core sources (skipping {len(self.EXTENDED_SOURCE_DOMAINS)} extended)")
+        return active_sources
 
     async def __aenter__(self):
         return self
@@ -1337,14 +1329,9 @@ class AdvancedNewsScraper:
         await self._respect_rate_limit(domain)
 
         try:
-            # Télécharger et parser avec Newspaper3k - timeout global de 15s
-            try:
-                article = await asyncio.wait_for(
-                    asyncio.to_thread(self._extract_with_newspaper, url),
-                    timeout=15.0
-                )
-            except asyncio.TimeoutError:
-                logger.warning(f"⏱️ Timeout scraping: {url[:60]}")
+            # Télécharger et parser avec retry 3x et backoff exponentiel (Phase 1)
+            article = await self._scrape_with_retry(url)
+            if article is None:
                 return None
 
             # Accepter le contenu partiel (paywall) si titre + meta_description disponibles
@@ -1402,7 +1389,17 @@ class AdvancedNewsScraper:
             return article_data
 
         except Exception as e:
+            error_str = str(e)
             logger.error(f"Failed to scrape {url}: {e}")
+            # Return error marker instead of None to track HTTP errors
+            if "403" in error_str or "Forbidden" in error_str:
+                return {"_error": "HTTP_403", "url": url}
+            elif "406" in error_str or "Not Acceptable" in error_str:
+                return {"_error": "HTTP_406", "url": url}
+            elif "401" in error_str or "Unauthorized" in error_str:
+                return {"_error": "HTTP_401", "url": url}
+            elif "429" in error_str or "Too Many Requests" in error_str:
+                return {"_error": "HTTP_429", "url": url}
             return None
 
     def _extract_with_newspaper(self, url: str) -> NewsArticle:
@@ -1410,7 +1407,7 @@ class AdvancedNewsScraper:
         # Configure proper headers with realistic User-Agent
         config = Config()
         config.browser_user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
-        config.request_timeout = 10  # Réduit de 30s à 10s pour performance
+        config.request_timeout = 10  # Augmenté à 10s (était 5s) - Phase 1 Plan Backend
         config.number_threads = 1
         config.memoize_articles = False
         config.fetch_images = False
@@ -1419,6 +1416,94 @@ class AdvancedNewsScraper:
         article.download()
         article.parse()
         return article
+
+    async def _scrape_with_retry(self, url: str) -> Optional[NewsArticle]:
+        """
+        Wrapper avec retry 3x et backoff exponentiel (2s, 4s, 8s)
+        Phase 1 - Plan Backend: Fix erreurs transientes
+        """
+        last_error = None
+
+        for attempt in range(self.MAX_RETRIES):
+            try:
+                article = await asyncio.wait_for(
+                    asyncio.to_thread(self._extract_with_newspaper, url),
+                    timeout=self.DEFAULT_ARTICLE_TIMEOUT
+                )
+                return article
+
+            except asyncio.TimeoutError as e:
+                last_error = e
+                if attempt < self.MAX_RETRIES - 1:
+                    wait_time = self.RETRY_BACKOFF_BASE ** (attempt + 1)  # 2s, 4s, 8s
+                    logger.warning(f"⏱️ Timeout attempt {attempt + 1}/{self.MAX_RETRIES}, retry in {wait_time}s: {url[:50]}")
+                    await asyncio.sleep(wait_time)
+                else:
+                    logger.warning(f"⏱️ Timeout after {self.MAX_RETRIES} attempts: {url[:60]}")
+
+            except Exception as e:
+                last_error = e
+                error_str = str(e)
+                # Ne pas retry pour les erreurs HTTP définitives
+                if any(code in error_str for code in ["403", "401", "406", "451"]):
+                    logger.warning(f"🚫 HTTP error (no retry): {error_str[:50]} - {url[:50]}")
+                    raise  # Propager l'erreur sans retry
+
+                if attempt < self.MAX_RETRIES - 1:
+                    wait_time = self.RETRY_BACKOFF_BASE ** (attempt + 1)
+                    logger.warning(f"❌ Scrape error attempt {attempt + 1}/{self.MAX_RETRIES}, retry in {wait_time}s: {error_str[:30]}")
+                    await asyncio.sleep(wait_time)
+                else:
+                    logger.error(f"❌ Failed after {self.MAX_RETRIES} attempts: {url[:60]}")
+
+        # Fallback: Try Playwright for JS-rendered sites
+        if PLAYWRIGHT_AVAILABLE:
+            logger.info(f"🎭 Trying Playwright fallback: {url[:50]}")
+            return await self._scrape_with_playwright(url)
+
+        return None
+
+    async def _scrape_with_playwright(self, url: str) -> Optional[NewsArticle]:
+        """
+        Fallback scraping avec Playwright pour les sites JS-rendered.
+        Phase 1 - Plan Backend: Scraping hybride
+        """
+        if not PLAYWRIGHT_AVAILABLE:
+            return None
+
+        try:
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=True)
+                context = await browser.new_context(
+                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/121.0.0.0 Safari/537.36'
+                )
+                page = await context.new_page()
+
+                # Navigate avec timeout
+                await page.goto(url, wait_until='networkidle', timeout=15000)
+
+                # Attendre que le contenu principal soit chargé
+                await page.wait_for_timeout(2000)
+
+                # Extraire le HTML
+                html_content = await page.content()
+                await browser.close()
+
+                # Parser avec Newspaper3k depuis le HTML
+                article = NewsArticle(url)
+                article.set_html(html_content)
+                article.parse()
+
+                if article.text and len(article.text) > 100:
+                    logger.success(f"🎭 Playwright success: {article.title[:50] if article.title else url[:50]}")
+                    return article
+                else:
+                    logger.warning(f"🎭 Playwright: content too short for {url[:50]}")
+                    return None
+
+        except Exception as e:
+            logger.warning(f"🎭 Playwright failed: {e}")
+            return None
 
     async def scrape_source(
         self,
@@ -1480,16 +1565,35 @@ class AdvancedNewsScraper:
             tasks = [scrape_with_semaphore(url) for url in urls]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            # Filter valid results
+            # Track HTTP errors and filter valid results
+            http_errors = {"HTTP_403": 0, "HTTP_406": 0, "HTTP_401": 0, "HTTP_429": 0}
             for result in results:
-                if isinstance(result, dict) and result:
-                    articles.append(result)
+                if isinstance(result, dict):
+                    if "_error" in result:
+                        # This is an error marker, not an article
+                        error_type = result["_error"]
+                        if error_type in http_errors:
+                            http_errors[error_type] += 1
+                    elif result:  # Valid article
+                        articles.append(result)
+
+            # Check if source is blocking (>80% of URLs failed with HTTP errors)
+            total_http_errors = sum(http_errors.values())
+            total_urls = len(urls)
+            if total_urls >= 5 and total_http_errors >= total_urls * 0.8:
+                # Most requests failed with HTTP errors - source is blocking
+                dominant_error = max(http_errors, key=http_errors.get)
+                logger.warning(f"⛔ Source {source_domain} appears to be blocking: {total_http_errors}/{total_urls} HTTP errors")
+                raise SourceBlockedError(source_domain, total_http_errors, total_urls, dominant_error)
 
             return articles
 
         # Wrap entire operation with source timeout
         try:
             return await asyncio.wait_for(_scrape_source_internal(), timeout=source_timeout)
+        except SourceBlockedError:
+            # Re-raise to let pipeline_manager handle blacklisting
+            raise
         except asyncio.TimeoutError:
             logger.warning(f"Source {source_domain} timed out after {source_timeout}s")
             return []
@@ -1504,7 +1608,7 @@ class AdvancedNewsScraper:
         Gestion intelligente de la concurrence
         """
         if sources is None:
-            sources = list(self.WORLD_NEWS_SOURCES.keys())
+            sources = self.get_active_sources()  # Use filtered list based on config
 
         all_articles = []
 

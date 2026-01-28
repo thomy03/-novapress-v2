@@ -60,7 +60,7 @@ export default function CausalPreview({ synthesisId, onError }: CausalPreviewPro
     return null; // Don't show if no causal data
   }
 
-  const flowConfig = NARRATIVE_FLOW_CONFIG[data.narrative_flow];
+  const flowConfig = NARRATIVE_FLOW_CONFIG[data.narrative_flow] || NARRATIVE_FLOW_CONFIG.linear;
 
   return (
     <div style={styles.container}>

@@ -56,8 +56,11 @@ class TemporalNarrativeEngine:
         self.embedding_service = embedding_service
         self.qdrant_service = qdrant_service
 
-        # Similarity threshold for story continuity
-        self.continuity_threshold = 0.75
+        # Similarity threshold for story continuity (lowered from 0.75 to 0.60)
+        self.continuity_threshold = 0.60
+
+        # Minimum entity overlap for fallback matching (50%)
+        self.entity_overlap_threshold = 0.50
 
         # Time window for historical context (days)
         self.history_window_days = 7
@@ -119,6 +122,126 @@ class TemporalNarrativeEngine:
 
         except Exception as e:
             logger.error(f"Failed to search related syntheses: {e}")
+            return []
+
+    def find_related_by_entities(
+        self,
+        current_entities: List[str],
+        limit: int = 5
+    ) -> List[Dict[str, Any]]:
+        """
+        Fallback: Find related syntheses by entity overlap.
+        Used when semantic search doesn't find enough related content.
+
+        Args:
+            current_entities: List of entity names from current cluster
+            limit: Max number of related syntheses to return
+
+        Returns:
+            List of related synthesis dictionaries
+        """
+        if not self.qdrant_service or not current_entities:
+            return []
+
+        try:
+            # Get recent syntheses to check entity overlap
+            recent_syntheses = self.qdrant_service.get_live_syntheses(hours=168, limit=100)  # 7 days
+
+            related = []
+            for synthesis in recent_syntheses:
+                # Get entities stored in synthesis
+                stored_entities = synthesis.get("key_entities", [])
+                if isinstance(stored_entities, str):
+                    stored_entities = [e.strip() for e in stored_entities.split(",") if e.strip()]
+
+                # Also extract entities from title/summary
+                text_entities = set()
+                full_text = f"{synthesis.get('title', '')} {synthesis.get('summary', '')}".lower()
+                for entity in current_entities:
+                    if entity.lower() in full_text:
+                        text_entities.add(entity)
+
+                # Combine stored and text-extracted entities
+                all_stored = set(e.lower() for e in stored_entities) | text_entities
+
+                # Calculate overlap
+                current_set = set(e.lower() for e in current_entities)
+                if not current_set:
+                    continue
+
+                overlap = len(current_set & all_stored) / len(current_set)
+
+                if overlap >= self.entity_overlap_threshold:
+                    synthesis["entity_overlap"] = overlap
+                    synthesis["matching_entities"] = list(current_set & all_stored)
+                    related.append(synthesis)
+
+            # Sort by overlap score
+            related.sort(key=lambda x: x.get("entity_overlap", 0), reverse=True)
+
+            logger.info(f"Entity fallback found {len(related[:limit])} related syntheses (threshold: {self.entity_overlap_threshold})")
+            return related[:limit]
+
+        except Exception as e:
+            logger.error(f"Entity fallback search failed: {e}")
+            return []
+
+    def find_related_by_keywords(
+        self,
+        cluster_articles: List[Dict[str, Any]],
+        limit: int = 5
+    ) -> List[Dict[str, Any]]:
+        """
+        Fallback: Find related syntheses by title keywords.
+
+        Args:
+            cluster_articles: Articles in current cluster
+            limit: Max number of related syntheses to return
+
+        Returns:
+            List of related synthesis dictionaries
+        """
+        if not self.qdrant_service:
+            return []
+
+        try:
+            # Extract keywords from cluster titles
+            titles = [a.get("raw_title", "") for a in cluster_articles]
+            combined_title = " ".join(titles).lower()
+
+            # Simple keyword extraction (nouns and proper nouns typically)
+            # Skip common words
+            stopwords = {"le", "la", "les", "de", "du", "des", "un", "une", "et", "en", "a", "au", "aux",
+                        "pour", "par", "sur", "dans", "avec", "ce", "cette", "ces", "son", "sa", "ses",
+                        "the", "a", "an", "of", "to", "in", "for", "on", "with", "is", "are", "was", "were"}
+
+            words = combined_title.split()
+            keywords = [w for w in words if len(w) > 3 and w not in stopwords]
+
+            if not keywords:
+                return []
+
+            # Get recent syntheses and check keyword matches
+            recent_syntheses = self.qdrant_service.get_live_syntheses(hours=168, limit=100)
+
+            related = []
+            for synthesis in recent_syntheses:
+                synthesis_text = f"{synthesis.get('title', '')} {synthesis.get('summary', '')}".lower()
+
+                # Count keyword matches
+                matches = sum(1 for kw in keywords if kw in synthesis_text)
+                if matches >= 2:  # At least 2 keyword matches
+                    synthesis["keyword_matches"] = matches
+                    related.append(synthesis)
+
+            # Sort by match count
+            related.sort(key=lambda x: x.get("keyword_matches", 0), reverse=True)
+
+            logger.info(f"Keyword fallback found {len(related[:limit])} related syntheses")
+            return related[:limit]
+
+        except Exception as e:
+            logger.error(f"Keyword fallback search failed: {e}")
             return []
 
     def build_timeline(
@@ -316,11 +439,31 @@ class TemporalNarrativeEngine:
         Returns:
             HistoricalContext object with all historical data
         """
-        # Find related syntheses
+        # Find related syntheses via semantic search
         related = self.find_related_syntheses(cluster_articles)
 
+        # Fallback 1: Entity-based search if semantic search found few results
+        entities = current_entities or []
+        if len(related) < 2 and entities:
+            logger.info(f"Semantic search found {len(related)} results, trying entity fallback...")
+            entity_related = self.find_related_by_entities(entities, limit=5)
+            # Merge, avoiding duplicates
+            existing_ids = {str(r.get('id', '')) for r in related}
+            for er in entity_related:
+                if str(er.get('id', '')) not in existing_ids:
+                    related.append(er)
+
+        # Fallback 2: Keyword-based search if still not enough
+        if len(related) < 2:
+            logger.info(f"Still only {len(related)} results, trying keyword fallback...")
+            keyword_related = self.find_related_by_keywords(cluster_articles, limit=5)
+            existing_ids = {str(r.get('id', '')) for r in related}
+            for kr in keyword_related:
+                if str(kr.get('id', '')) not in existing_ids:
+                    related.append(kr)
+
         if not related:
-            # No history - return empty context
+            # No history found even with fallbacks
             return HistoricalContext(
                 related_syntheses=[],
                 timeline_events=[],

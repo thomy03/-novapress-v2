@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { causalService } from '@/app/lib/api/services/causal';
 import HistoricalCausalGraph from '@/app/components/causal/HistoricalCausalGraph';
@@ -14,6 +14,9 @@ import {
 export default function CausalPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const focusNodeId = searchParams.get('focus');
+
   const [data, setData] = useState<CausalGraphResponse | null>(null);
   const [stats, setStats] = useState<CausalStatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -74,7 +77,7 @@ export default function CausalPage() {
     );
   }
 
-  const flowConfig = NARRATIVE_FLOW_CONFIG[data.narrative_flow];
+  const flowConfig = NARRATIVE_FLOW_CONFIG[data.narrative_flow] || NARRATIVE_FLOW_CONFIG.linear;
 
   return (
     <div style={styles.pageContainer}>
@@ -133,6 +136,7 @@ export default function CausalPage() {
         <div style={styles.graphWrapper}>
           <HistoricalCausalGraph
             synthesisId={params?.id as string}
+            focusNodeId={focusNodeId}
           />
         </div>
 

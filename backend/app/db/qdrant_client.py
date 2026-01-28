@@ -3,7 +3,7 @@ Qdrant Vector Database Client
 For storing and searching article embeddings
 """
 from typing import List, Dict, Any, Optional
-from qdrant_client import QdrantClient
+from qdrant_client import QdrantClient, models
 from qdrant_client.models import (
     VectorParams,
     Distance,
@@ -27,6 +27,9 @@ class QdrantService:
         self.client: Optional[QdrantClient] = None
         self.collection_name = settings.QDRANT_COLLECTION
         self.syntheses_collection = "novapress_syntheses"
+        # Intelligence Hub collections
+        self.entities_collection = "novapress_entities"
+        self.topics_collection = "novapress_topics"
 
     async def initialize(self):
         """Initialize Qdrant client and create collections"""
@@ -68,6 +71,34 @@ class QdrantService:
                 logger.success(f"✅ Collection '{self.syntheses_collection}' created")
             else:
                 logger.info(f"Collection '{self.syntheses_collection}' already exists")
+
+            # Intelligence Hub: Entities collection
+            if self.entities_collection not in collection_names:
+                logger.info(f"Creating collection: {self.entities_collection}")
+                self.client.create_collection(
+                    collection_name=self.entities_collection,
+                    vectors_config=VectorParams(
+                        size=settings.EMBEDDING_DIMENSION,
+                        distance=Distance.COSINE
+                    )
+                )
+                logger.success(f"✅ Collection '{self.entities_collection}' created")
+            else:
+                logger.info(f"Collection '{self.entities_collection}' already exists")
+
+            # Intelligence Hub: Topics collection
+            if self.topics_collection not in collection_names:
+                logger.info(f"Creating collection: {self.topics_collection}")
+                self.client.create_collection(
+                    collection_name=self.topics_collection,
+                    vectors_config=VectorParams(
+                        size=settings.EMBEDDING_DIMENSION,
+                        distance=Distance.COSINE
+                    )
+                )
+                logger.success(f"✅ Collection '{self.topics_collection}' created")
+            else:
+                logger.info(f"Collection '{self.topics_collection}' already exists")
 
             logger.success("✅ Qdrant connected")
 
@@ -148,7 +179,10 @@ class QdrantService:
                     "language": safe_str(article.get("language"), "unknown", 10),
                     "authors": authors[:200],
                     "keywords": keywords[:200],
-                    "image_url": safe_str(article.get("image_url"), "", 400)
+                    "image_url": safe_str(article.get("image_url"), "", 400),
+                    # Phase 6: Article exclusivity tracking
+                    "used_in_synthesis_id": safe_str(article.get("used_in_synthesis_id"), "", 50),
+                    "used_at": float(article.get("used_at", 0)) if article.get("used_at") else 0.0
                 }
             ))
 
@@ -157,7 +191,10 @@ class QdrantService:
                 collection_name=self.collection_name,
                 points=points
             )
-            logger.success(f"✅ Upserted {len(points)} articles to Qdrant")
+            # Log sample URLs being stored for debugging
+            sample_urls = [p.payload.get("url", "N/A")[:60] for p in points[:3]]
+            logger.success(f"✅ Upserted {len(points)} articles to Qdrant (collection: {self.collection_name})")
+            logger.debug(f"   Sample stored URLs: {sample_urls}")
             return True
         except Exception as e:
             logger.error(f"Failed to upsert articles: {e}")
@@ -196,18 +233,20 @@ class QdrantService:
             )
 
         try:
-            results = self.client.search(
+            # Use query_points (qdrant-client >= 1.12.0)
+            results = self.client.query_points(
                 collection_name=self.collection_name,
-                query_vector=query_embedding,
+                query=query_embedding,
                 limit=limit,
-                query_filter=query_filter
+                query_filter=query_filter,
+                with_payload=True
             )
 
             articles = []
-            for result in results:
-                article = result.payload
-                article["similarity_score"] = result.score
-                article["id"] = result.id
+            for point in results.points:
+                article = point.payload
+                article["similarity_score"] = point.score
+                article["id"] = point.id
                 articles.append(article)
 
             return articles
@@ -235,6 +274,40 @@ class QdrantService:
             logger.error(f"Failed to retrieve article {article_id}: {e}")
             return None
 
+    def get_articles_by_ids(self, article_ids: List[str]) -> List[Dict[str, Any]]:
+        """
+        Batch retrieve multiple articles by IDs in a single Qdrant call.
+
+        This is much more efficient than calling get_article_by_id() in a loop.
+        N articles = 1 Qdrant call instead of N calls.
+
+        Args:
+            article_ids: List of article UUIDs to retrieve
+
+        Returns:
+            List of article payloads (may be shorter than input if some IDs not found)
+        """
+        if not self.client:
+            raise RuntimeError("Qdrant not initialized")
+
+        if not article_ids:
+            return []
+
+        try:
+            result = self.client.retrieve(
+                collection_name=self.collection_name,
+                ids=article_ids
+            )
+
+            # Extract payloads from results
+            articles = [point.payload for point in result if point and point.payload]
+            logger.debug(f"Batch retrieved {len(articles)}/{len(article_ids)} articles")
+            return articles
+
+        except Exception as e:
+            logger.error(f"Failed to batch retrieve articles: {e}")
+            return []
+
     def delete_article(self, article_id: str) -> bool:
         """Delete article by ID"""
         if not self.client:
@@ -251,21 +324,42 @@ class QdrantService:
             logger.error(f"Failed to delete article: {e}")
             return False
 
-    def get_collection_stats(self) -> Dict[str, Any]:
-        """Get collection statistics"""
+    def get_collection_stats(self, collection_name: Optional[str] = None) -> Dict[str, Any]:
+        """Get collection statistics
+
+        Args:
+            collection_name: Optional collection name. Defaults to articles collection.
+                            Use 'syntheses' for syntheses collection.
+        """
         if not self.client:
             raise RuntimeError("Qdrant not initialized")
 
+        # Determine which collection to query
+        if collection_name == "syntheses" or collection_name == self.syntheses_collection:
+            target_collection = self.syntheses_collection
+        elif collection_name is None or collection_name == "articles":
+            target_collection = self.collection_name
+        else:
+            target_collection = collection_name
+
         try:
-            info = self.client.get_collection(self.collection_name)
+            info = self.client.get_collection(target_collection)
+            # Handle different qdrant-client versions (vectors_count location changed)
+            vectors_count = getattr(info, 'vectors_count', None)
+            if vectors_count is None:
+                # Fallback: try to get from config or use points_count
+                vectors_count = getattr(info, 'points_count', 0)
+            points_count = getattr(info, 'points_count', 0)
+            status = getattr(info, 'status', 'unknown')
             return {
-                "vectors_count": info.vectors_count,
-                "points_count": info.points_count,
-                "status": info.status
+                "collection": target_collection,
+                "vectors_count": vectors_count,
+                "points_count": points_count,
+                "status": str(status) if status else "unknown"
             }
         except Exception as e:
-            logger.error(f"Failed to get stats: {e}")
-            return {}
+            logger.error(f"Failed to get stats for {target_collection}: {e}")
+            return {"collection": target_collection, "error": str(e)}
 
     def get_latest_articles(
         self,
@@ -377,6 +471,341 @@ class QdrantService:
             logger.error(f"Failed to get recent articles: {e}")
             return []
 
+    # =========================================================================
+    # PHASE 6: ARTICLE EXCLUSIVITY TRACKING
+    # =========================================================================
+
+    def update_article_synthesis_link(
+        self,
+        article_url: str,
+        synthesis_id: str
+    ) -> bool:
+        """
+        Mark an article as used by a synthesis.
+
+        Once an article is used in Synthesis A:
+        - It CAN be reused to UPDATE Synthesis A
+        - It CANNOT be used to create a NEW Synthesis B
+
+        Args:
+            article_url: The URL of the article to mark
+            synthesis_id: The ID of the synthesis that used this article
+
+        Returns:
+            Success status
+        """
+        if not self.client or not article_url:
+            return False
+
+        try:
+            from datetime import datetime, timedelta
+            from urllib.parse import urlparse, unquote
+
+            # Normalize URL for matching (multiple formats)
+            normalized_url = article_url.lower().rstrip('/')
+            decoded_url = unquote(article_url)  # Decode %XX
+
+            # Extract URL path for partial matching
+            parsed = urlparse(article_url)
+            url_path = parsed.path.rstrip('/').lower()
+            url_domain = parsed.netloc.lower()
+
+            # NOTE: These are DEBUG because articles are not stored (copyright compliance)
+            logger.debug(f"🔍 Searching for article URL: {article_url[:80]}...")
+            logger.debug(f"   Collection: {self.collection_name}")
+
+            result = None
+
+            # Strategy 1: Exact URL match via filter
+            url_filter = Filter(
+                must=[
+                    FieldCondition(
+                        key="url",
+                        match=MatchValue(value=article_url)
+                    )
+                ]
+            )
+            result, _ = self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=url_filter,
+                limit=5,
+                with_payload=True,
+                with_vectors=False
+            )
+            if result:
+                logger.debug(f"✅ Found by exact URL match")
+
+            # Strategy 2: Normalized URL match
+            if not result:
+                url_filter = Filter(
+                    must=[
+                        FieldCondition(
+                            key="url",
+                            match=MatchValue(value=normalized_url)
+                        )
+                    ]
+                )
+                result, _ = self.client.scroll(
+                    collection_name=self.collection_name,
+                    scroll_filter=url_filter,
+                    limit=5,
+                    with_payload=True,
+                    with_vectors=False
+                )
+                if result:
+                    logger.debug(f"✅ Found by normalized URL match")
+
+            # Strategy 3: Scroll ALL articles and match by URL path + domain
+            # Note: published_at is stored as ISO string, not timestamp, so we can't filter by time
+            if not result:
+                # Scroll without time filter since published_at is ISO string
+                all_recent, _ = self.client.scroll(
+                    collection_name=self.collection_name,
+                    limit=3000,  # Increased limit to cover recent articles
+                    with_payload=True,
+                    with_vectors=False
+                )
+
+                logger.debug(f"📊 Strategy 3: Scrolled {len(all_recent)} articles in collection")
+
+                # Log first 3 URLs in collection for comparison (debug)
+                if all_recent:
+                    sample_urls = [p.payload.get("url", "N/A")[:60] for p in all_recent[:3]]
+                    logger.debug(f"📋 Sample URLs in Qdrant: {sample_urls}")
+                    logger.debug(f"🔎 Searching for: {article_url[:60]}...")
+
+                for point in all_recent:
+                    stored_url = point.payload.get("url", "")
+                    if not stored_url:
+                        continue
+
+                    stored_normalized = stored_url.lower().rstrip('/')
+                    stored_parsed = urlparse(stored_url)
+                    stored_path = stored_parsed.path.rstrip('/').lower()
+                    stored_domain = stored_parsed.netloc.lower()
+
+                    # Match by: exact, normalized, decoded, path+domain, or partial
+                    if (stored_url == article_url or
+                        stored_normalized == normalized_url or
+                        stored_url == decoded_url or
+                        (stored_path == url_path and stored_domain == url_domain) or
+                        article_url in stored_url or
+                        stored_url in article_url):
+                        result = [point]
+                        logger.info(f"✅ Found by scroll matching: {stored_url[:60]}...")
+                        break
+
+            if result:
+                point = result[0]
+                self.client.set_payload(
+                    collection_name=self.collection_name,
+                    payload={
+                        "used_in_synthesis_id": synthesis_id,
+                        "used_at": datetime.now().timestamp()
+                    },
+                    points=[point.id]
+                )
+                logger.info(f"📌 Article marked as used: {article_url[:60]}...")
+                return True
+
+            # NOTE: This is expected when articles are not stored (copyright compliance mode)
+            # Changed from WARNING to DEBUG to avoid log spam
+            logger.debug(f"Article not found in Qdrant (expected - articles not stored): {article_url[:80]}...")
+            return False
+
+        except Exception as e:
+            logger.error(f"Failed to update article synthesis link: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    def get_articles_excluding_used(
+        self,
+        hours: int = 24,
+        limit: int = 100,
+        allowed_synthesis_ids: List[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get recent articles that are NOT already used in other syntheses.
+
+        This enforces the exclusivity rule:
+        - Articles with no used_in_synthesis_id are available
+        - Articles with used_in_synthesis_id matching allowed_synthesis_ids are available (for updates)
+        - Articles used in OTHER syntheses are excluded
+
+        Args:
+            hours: Number of hours to look back
+            limit: Maximum number of articles
+            allowed_synthesis_ids: List of synthesis IDs that can reuse their own articles
+
+        Returns:
+            List of available articles (not used elsewhere)
+        """
+        if not self.client:
+            raise RuntimeError("Qdrant not initialized")
+
+        allowed_ids = set(allowed_synthesis_ids) if allowed_synthesis_ids else set()
+
+        try:
+            from datetime import datetime, timedelta
+
+            # Calculate cutoff time
+            cutoff_time = (datetime.now() - timedelta(hours=hours)).timestamp()
+
+            # Filter by published_at
+            query_filter = Filter(
+                must=[
+                    FieldCondition(
+                        key="published_at",
+                        range=Range(gte=cutoff_time)
+                    )
+                ]
+            )
+
+            # Scroll to get articles
+            result, _ = self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=query_filter,
+                limit=limit * 2,  # Fetch more to account for filtering
+                with_payload=True,
+                with_vectors=False
+            )
+
+            available_articles = []
+            excluded_count = 0
+
+            for point in result:
+                article = point.payload
+                article["id"] = point.id
+
+                # Check if article is already used
+                used_in = article.get("used_in_synthesis_id", "")
+
+                if not used_in:
+                    # Not used - available
+                    available_articles.append(article)
+                elif used_in in allowed_ids:
+                    # Used by an allowed synthesis (update case) - available
+                    available_articles.append(article)
+                else:
+                    # Used by another synthesis - excluded
+                    excluded_count += 1
+
+                if len(available_articles) >= limit:
+                    break
+
+            if excluded_count > 0:
+                logger.info(f"📊 Article exclusivity: {len(available_articles)} available, {excluded_count} excluded (used elsewhere)")
+            else:
+                logger.info(f"Fetched {len(available_articles)} available articles (last {hours}h)")
+
+            return available_articles
+
+        except Exception as e:
+            logger.error(f"Failed to get articles excluding used: {e}")
+            return []
+
+    def get_articles_with_vectors_excluding_used(
+        self,
+        hours: int = 24,
+        limit: int = 100,
+        allowed_synthesis_ids: List[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get recent articles WITH vectors, excluding those already used elsewhere.
+
+        This is used during clustering to ensure only available articles are clustered.
+
+        Args:
+            hours: Number of hours to look back
+            limit: Maximum number of articles
+            allowed_synthesis_ids: List of synthesis IDs that can reuse their own articles
+
+        Returns:
+            List of available articles with 'payload' and 'vector' keys
+        """
+        if not self.client:
+            raise RuntimeError("Qdrant not initialized")
+
+        allowed_ids = set(allowed_synthesis_ids) if allowed_synthesis_ids else set()
+
+        try:
+            from datetime import datetime, timedelta
+
+            cutoff_time = (datetime.now() - timedelta(hours=hours)).timestamp()
+
+            query_filter = Filter(
+                must=[
+                    FieldCondition(
+                        key="published_at",
+                        range=Range(gte=cutoff_time)
+                    )
+                ]
+            )
+
+            result, _ = self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=query_filter,
+                limit=limit * 2,
+                with_payload=True,
+                with_vectors=True  # Include vectors for clustering
+            )
+
+            available_articles = []
+            excluded_count = 0
+
+            for point in result:
+                payload = point.payload
+                used_in = payload.get("used_in_synthesis_id", "")
+
+                if not used_in or used_in in allowed_ids:
+                    available_articles.append({
+                        "id": point.id,
+                        "payload": payload,
+                        "vector": point.vector,
+                        "type": "article"
+                    })
+                else:
+                    excluded_count += 1
+
+                if len(available_articles) >= limit:
+                    break
+
+            if excluded_count > 0:
+                logger.info(f"📊 Clustering: {len(available_articles)} articles available, {excluded_count} excluded")
+
+            return available_articles
+
+        except Exception as e:
+            logger.error(f"Failed to get articles with vectors: {e}")
+            return []
+
+    def mark_articles_as_used(
+        self,
+        article_urls: List[str],
+        synthesis_id: str
+    ) -> int:
+        """
+        Mark multiple articles as used by a synthesis (batch operation).
+
+        Args:
+            article_urls: List of article URLs to mark
+            synthesis_id: The synthesis ID that used these articles
+
+        Returns:
+            Number of articles successfully marked
+        """
+        if not self.client or not article_urls:
+            return 0
+
+        marked_count = 0
+        for url in article_urls:
+            if self.update_article_synthesis_link(url, synthesis_id):
+                marked_count += 1
+
+        logger.info(f"📌 Marked {marked_count}/{len(article_urls)} articles as used by synthesis {synthesis_id[:8]}...")
+        return marked_count
+
     def upsert_synthesis(
         self,
         synthesis: Dict[str, Any],
@@ -446,6 +875,46 @@ class QdrantService:
 
         # Convert causal_chain from LLM output to causal_graph format
         causal_chain = synthesis.get("causal_chain", [])
+
+        # FALLBACK: Extract from text if LLM didn't generate causal_chain
+        if (not causal_chain or len(causal_chain) < 2) and not causal_graph.get("edges"):
+            try:
+                from app.ml.causal_extraction import get_causal_extractor
+                extractor = get_causal_extractor()
+
+                # Get text content for extraction
+                synthesis_text = f"{synthesis.get('body', '')} {synthesis.get('analysis', '')}"
+                key_points = synthesis.get("keyPoints", [])
+                title = synthesis.get("title", "")
+                entities = synthesis.get("key_entities", [])
+                if isinstance(entities, str):
+                    entities = [e.strip() for e in entities.split(",") if e.strip()]
+
+                # Extract causal relations from text
+                extracted_graph = extractor.extract_from_synthesis(
+                    synthesis_text=synthesis_text,
+                    entities=entities[:10],
+                    fact_density=0.6,
+                    llm_causal_output={"causal_chain": causal_chain} if causal_chain else None,
+                    key_points=key_points,
+                    title=title
+                )
+
+                # Convert to causal_chain format for processing below
+                if extracted_graph.edges:
+                    logger.info(f"📊 Causal fallback: extracted {len(extracted_graph.edges)} relations from text")
+                    causal_chain = [
+                        {
+                            "cause": e.cause_text,
+                            "effect": e.effect_text,
+                            "type": e.relation_type,
+                            "sources": e.source_articles
+                        }
+                        for e in extracted_graph.edges
+                    ]
+            except Exception as e:
+                logger.warning(f"Causal extraction fallback failed: {e}")
+
         if causal_chain and not causal_graph.get("edges"):
             # Build causal_graph from causal_chain
             nodes = []
@@ -512,11 +981,11 @@ class QdrantService:
             for pred in predictions:
                 if isinstance(pred, dict):
                     formatted_predictions.append({
-                        "prediction": pred.get("prediction", "")[:200],
+                        "prediction": pred.get("prediction", "")[:1000],
                         "probability": float(pred.get("probability", 0.5)),
                         "type": pred.get("type", "general"),
                         "timeframe": pred.get("timeframe", "moyen_terme"),
-                        "rationale": pred.get("rationale", "")[:200]
+                        "rationale": pred.get("rationale", "")[:1000]
                     })
 
             causal_graph = {
@@ -533,10 +1002,10 @@ class QdrantService:
             vector=embedding.tolist() if hasattr(embedding, 'tolist') else embedding,
             payload={
                 "title": str(synthesis.get("title", ""))[:300],
-                "summary": str(synthesis.get("summary", ""))[:10000],
-                "introduction": str(synthesis.get("introduction", ""))[:1000],
-                "body": str(synthesis.get("body", ""))[:8000],
-                "analysis": str(synthesis.get("analysis", ""))[:1000],
+                "summary": str(synthesis.get("summary", ""))[:15000],
+                "introduction": str(synthesis.get("introduction", ""))[:3000],
+                "body": str(synthesis.get("body", ""))[:20000],
+                "analysis": str(synthesis.get("analysis", ""))[:5000],
                 "key_points": key_points_str[:2000],
                 "sources": sources_str[:500],
                 "source_articles": synthesis.get("source_articles", []),
@@ -571,7 +1040,11 @@ class QdrantService:
                 "update_count": int(synthesis.get("update_count", 0)),  # How many times this story was updated
                 "first_seen": float(synthesis.get("first_seen", datetime.now().timestamp())),  # When story first appeared
                 "parent_synthesis_id": str(synthesis.get("parent_synthesis_id", "")) if synthesis.get("parent_synthesis_id") else "",  # Previous synthesis in story chain
-                "story_id": str(synthesis.get("story_id", "")) if synthesis.get("story_id") else ""  # Unique story identifier
+                "story_id": str(synthesis.get("story_id", "")) if synthesis.get("story_id") else "",  # Unique story identifier
+                # Phase 2.5: Kill Switch & Cost Tracker
+                "is_published": bool(synthesis.get("is_published", True)),  # Kill Switch - dépublier instantanément
+                "moderation_flag": str(synthesis.get("moderation_flag", "safe"))[:20],  # "safe", "warning", "blocked"
+                "generation_cost_usd": float(synthesis.get("generation_cost_usd", 0.0))  # Coût LLM de génération
             }
         )
 
@@ -614,58 +1087,71 @@ class QdrantService:
 
         return success
 
-    def get_latest_syntheses(self, limit: int = 10) -> List[Dict[str, Any]]:
+    def get_latest_syntheses(self, limit: int = 10, offset: int = 0) -> List[Dict[str, Any]]:
         """
-        Get the latest syntheses
+        Get the latest syntheses using pagination to ensure we get the most recent
 
         Args:
             limit: Maximum number of syntheses to return
+            offset: Number of syntheses to skip (for pagination)
 
         Returns:
-            List of syntheses ordered by creation time
+            List of syntheses ordered by creation time (most recent first)
         """
         if not self.client:
             raise RuntimeError("Qdrant not initialized")
 
         try:
-            # Fetch more than limit to ensure we get the latest after sorting
-            # Scroll returns results in arbitrary order, so we need to fetch all
-            # and sort by created_at before limiting
-            result, _ = self.client.scroll(
-                collection_name=self.syntheses_collection,
-                limit=100,  # Fetch up to 100 to ensure we get latest
-                with_payload=True,
-                with_vectors=False
-            )
+            # Use pagination to fetch ALL syntheses, then sort and limit
+            # This ensures we always get the most recent ones
+            all_syntheses = []
+            scroll_offset = None
+            batch_size = 100
 
-            syntheses = []
-            for point in result:
-                synthesis = point.payload
-                synthesis["id"] = point.id
+            while True:
+                result, next_offset = self.client.scroll(
+                    collection_name=self.syntheses_collection,
+                    limit=batch_size,
+                    offset=scroll_offset,
+                    with_payload=True,
+                    with_vectors=False
+                )
 
-                # Parse key_points back to list
-                key_points_str = synthesis.get("key_points", "")
-                if key_points_str:
-                    synthesis["keyPoints"] = [k.strip() for k in key_points_str.split("|") if k.strip()]
-                else:
-                    synthesis["keyPoints"] = []
+                if not result:
+                    break
 
-                # Parse sources back to list
-                sources_str = synthesis.get("sources", "")
-                if sources_str:
-                    synthesis["sourcesList"] = [s.strip() for s in sources_str.split(",") if s.strip()]
-                else:
-                    synthesis["sourcesList"] = []
+                for point in result:
+                    synthesis = dict(point.payload)
+                    synthesis["id"] = point.id
 
-                syntheses.append(synthesis)
+                    # Parse key_points back to list
+                    key_points_str = synthesis.get("key_points", "")
+                    if key_points_str:
+                        synthesis["keyPoints"] = [k.strip() for k in key_points_str.split("|") if k.strip()]
+                    else:
+                        synthesis["keyPoints"] = []
 
-            # Sort by created_at descending
-            syntheses.sort(key=lambda x: x.get("created_at", 0), reverse=True)
+                    # Parse sources back to list
+                    sources_str = synthesis.get("sources", "")
+                    if sources_str:
+                        synthesis["sourcesList"] = [s.strip() for s in sources_str.split(",") if s.strip()]
+                    else:
+                        synthesis["sourcesList"] = []
 
-            # Apply limit after sorting
-            syntheses = syntheses[:limit]
+                    all_syntheses.append(synthesis)
 
-            logger.info(f"Fetched {len(syntheses)} syntheses (limited to {limit})")
+                # Check if we have more pages
+                if next_offset is None or len(result) < batch_size:
+                    break
+                scroll_offset = next_offset
+
+            # Sort by created_at descending (most recent first)
+            all_syntheses.sort(key=lambda x: x.get("created_at", 0), reverse=True)
+
+            # Apply offset and limit after sorting (for API pagination)
+            syntheses = all_syntheses[offset:offset + limit]
+
+            logger.info(f"Fetched {len(syntheses)} syntheses (offset={offset}, limit={limit}) from {len(all_syntheses)} total")
             return syntheses
 
         except Exception as e:
@@ -710,6 +1196,160 @@ class QdrantService:
 
         except Exception as e:
             logger.error(f"Failed to retrieve synthesis {synthesis_id}: {e}")
+            return None
+
+    def find_duplicate_synthesis(
+        self,
+        article_urls: List[str],
+        hours_lookback: int = 24,
+        overlap_threshold: float = 0.7
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Find an existing synthesis that uses the same (or very similar) articles.
+
+        Deduplication strategy:
+        1. Get recent syntheses from the last N hours
+        2. Compare article URLs with new cluster's URLs
+        3. If overlap > threshold (70%), consider it a duplicate
+
+        Args:
+            article_urls: List of URLs from the new cluster's articles
+            hours_lookback: Only check syntheses from the last N hours (default: 24)
+            overlap_threshold: Minimum overlap ratio to consider duplicate (default: 0.7 = 70%)
+
+        Returns:
+            Existing synthesis dict if duplicate found, None otherwise
+        """
+        if not self.client or not article_urls:
+            return None
+
+        from datetime import datetime, timedelta
+
+        try:
+            # Get syntheses from the last N hours
+            cutoff_time = (datetime.now() - timedelta(hours=hours_lookback)).timestamp()
+
+            result, _ = self.client.scroll(
+                collection_name=self.syntheses_collection,
+                scroll_filter=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="created_at",
+                            range=models.Range(gte=cutoff_time)
+                        ),
+                        # Only check base syntheses, not persona versions
+                        models.FieldCondition(
+                            key="is_persona_version",
+                            match=models.MatchValue(value=False)
+                        )
+                    ]
+                ),
+                limit=200,
+                with_payload=True,
+                with_vectors=False
+            )
+
+            if not result:
+                return None
+
+            # Normalize URLs for comparison (remove trailing slashes, lowercase)
+            new_urls = set(url.lower().rstrip('/') for url in article_urls if url)
+
+            for point in result:
+                synthesis = point.payload
+
+                # Get article URLs from source_articles
+                source_articles = synthesis.get("source_articles", [])
+                if isinstance(source_articles, list):
+                    existing_urls = set()
+                    for sa in source_articles:
+                        if isinstance(sa, dict) and sa.get("url"):
+                            existing_urls.add(sa["url"].lower().rstrip('/'))
+                        elif isinstance(sa, str):
+                            existing_urls.add(sa.lower().rstrip('/'))
+                else:
+                    continue
+
+                if not existing_urls:
+                    continue
+
+                # Calculate overlap ratio
+                overlap = len(new_urls & existing_urls)
+                total = len(new_urls | existing_urls)
+                overlap_ratio = overlap / total if total > 0 else 0
+
+                if overlap_ratio >= overlap_threshold:
+                    synthesis["id"] = point.id
+                    logger.info(f"🔄 Duplicate synthesis found: {synthesis.get('title', '')[:50]}... "
+                              f"(overlap: {overlap_ratio:.0%}, {overlap}/{total} URLs)")
+                    return synthesis
+
+            return None
+
+        except Exception as e:
+            logger.error(f"Error finding duplicate synthesis: {e}")
+            return None
+
+    def find_similar_synthesis_by_embedding(
+        self,
+        embedding: List[float],
+        hours_lookback: int = 24,
+        similarity_threshold: float = 0.92
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Find an existing synthesis with very similar content using embedding similarity.
+
+        This is a secondary check after URL-based deduplication.
+        Used to catch cases where different URLs point to the same story.
+
+        Args:
+            embedding: Embedding vector of the new cluster
+            hours_lookback: Only check syntheses from the last N hours
+            similarity_threshold: Minimum similarity to consider duplicate (default: 0.92 = 92%)
+
+        Returns:
+            Existing synthesis if very similar one found, None otherwise
+        """
+        if not self.client or not embedding:
+            return None
+
+        from datetime import datetime, timedelta
+
+        try:
+            cutoff_time = (datetime.now() - timedelta(hours=hours_lookback)).timestamp()
+
+            # Use query_points (qdrant-client >= 1.12.0)
+            results = self.client.query_points(
+                collection_name=self.syntheses_collection,
+                query=embedding if isinstance(embedding, list) else embedding.tolist(),
+                query_filter=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="created_at",
+                            range=models.Range(gte=cutoff_time)
+                        ),
+                        models.FieldCondition(
+                            key="is_persona_version",
+                            match=models.MatchValue(value=False)
+                        )
+                    ]
+                ),
+                limit=5,
+                with_payload=True
+            )
+
+            for point in results.points:
+                if point.score >= similarity_threshold:
+                    synthesis = point.payload
+                    synthesis["id"] = point.id
+                    logger.info(f"🔄 Similar synthesis found by embedding: {synthesis.get('title', '')[:50]}... "
+                              f"(similarity: {point.score:.0%})")
+                    return synthesis
+
+            return None
+
+        except Exception as e:
+            logger.error(f"Error finding similar synthesis by embedding: {e}")
             return None
 
     def get_recent_syntheses(self, limit: int = 100) -> List[Dict[str, Any]]:
@@ -999,14 +1639,16 @@ class QdrantService:
     def get_live_syntheses(
         self,
         hours: int = 24,
-        limit: int = 50
+        limit: int = 50,
+        offset: int = 0
     ) -> List[Dict[str, Any]]:
         """
-        Get syntheses from the last X hours (for EN DIRECT page).
+        Get syntheses from the last X hours (for EN DIRECT page) with pagination.
 
         Args:
             hours: Number of hours to look back (default 24)
             limit: Maximum number of syntheses to return
+            offset: Number of syntheses to skip (for pagination)
 
         Returns:
             List of syntheses created within the time window
@@ -1029,10 +1671,14 @@ class QdrantService:
                 ]
             )
 
+            # Fetch more to handle pagination (we need all to sort, then slice)
+            # For efficiency with large datasets, fetch a reasonable batch
+            fetch_limit = max(limit + offset + 10, 200)  # Ensure we get enough
+
             result, _ = self.client.scroll(
                 collection_name=self.syntheses_collection,
                 scroll_filter=query_filter,
-                limit=limit,
+                limit=fetch_limit,
                 with_payload=True,
                 with_vectors=False
             )
@@ -1054,8 +1700,11 @@ class QdrantService:
             # Sort by created_at descending (most recent first)
             syntheses.sort(key=lambda x: x.get("created_at", 0), reverse=True)
 
-            logger.info(f"Fetched {len(syntheses)} live syntheses (last {hours}h)")
-            return syntheses
+            # Apply pagination offset and limit
+            paginated = syntheses[offset:offset + limit]
+
+            logger.info(f"Fetched {len(paginated)} live syntheses (last {hours}h, offset={offset}, limit={limit})")
+            return paginated
 
         except Exception as e:
             logger.error(f"Failed to get live syntheses: {e}")
@@ -1167,6 +1816,827 @@ class QdrantService:
         except Exception as e:
             logger.error(f"Failed to get base synthesis for {synthesis_id}: {e}")
             return None
+
+    # =========================================================================
+    # INTELLIGENCE HUB: ENTITIES
+    # =========================================================================
+
+    def upsert_entity(
+        self,
+        entity: Dict[str, Any],
+        embedding: List[float]
+    ) -> bool:
+        """
+        Insert or update an entity in the Intelligence Hub.
+
+        Args:
+            entity: Entity dictionary with canonical_name, entity_type, aliases, etc.
+            embedding: Embedding vector for semantic search
+
+        Returns:
+            Success status
+        """
+        if not self.client:
+            raise RuntimeError("Qdrant not initialized")
+
+        from datetime import datetime
+        import json
+
+        point_id = entity.get("id") or str(uuid.uuid4())
+
+        # Convert lists to JSON strings for storage
+        aliases = entity.get("aliases", [])
+        aliases_str = json.dumps(aliases) if isinstance(aliases, list) else "[]"
+
+        synthesis_ids = entity.get("synthesis_ids", [])
+        synthesis_ids_str = json.dumps(synthesis_ids) if isinstance(synthesis_ids, list) else "[]"
+
+        related_entities = entity.get("related_entities", [])
+        related_entities_str = json.dumps(related_entities) if isinstance(related_entities, list) else "[]"
+
+        topics = entity.get("topics", [])
+        topics_str = json.dumps(topics) if isinstance(topics, list) else "[]"
+
+        point = PointStruct(
+            id=point_id,
+            vector=embedding.tolist() if hasattr(embedding, 'tolist') else embedding,
+            payload={
+                "canonical_name": str(entity.get("canonical_name", ""))[:200],
+                "aliases": aliases_str[:2000],
+                "entity_type": str(entity.get("entity_type", "UNKNOWN"))[:20],
+                "description": str(entity.get("description", ""))[:1000],
+                "first_seen": float(entity.get("first_seen", datetime.now().timestamp())),
+                "last_seen": float(entity.get("last_seen", datetime.now().timestamp())),
+                "mention_count": int(entity.get("mention_count", 1)),
+                "synthesis_ids": synthesis_ids_str[:5000],
+                "as_cause_count": int(entity.get("as_cause_count", 0)),
+                "as_effect_count": int(entity.get("as_effect_count", 0)),
+                "related_entities": related_entities_str[:2000],
+                "topics": topics_str[:1000],
+                "created_at": datetime.now().timestamp()
+            }
+        )
+
+        try:
+            self.client.upsert(
+                collection_name=self.entities_collection,
+                points=[point]
+            )
+            logger.debug(f"✅ Upserted entity '{entity.get('canonical_name', '')}'")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to upsert entity: {e}")
+            return False
+
+    def get_entity_by_id(self, entity_id: str) -> Optional[Dict[str, Any]]:
+        """Get entity by ID"""
+        if not self.client:
+            raise RuntimeError("Qdrant not initialized")
+
+        try:
+            import json
+
+            result = self.client.retrieve(
+                collection_name=self.entities_collection,
+                ids=[entity_id]
+            )
+
+            if result:
+                entity = result[0].payload
+                entity["id"] = entity_id
+
+                # Parse JSON fields back to lists
+                for field in ["aliases", "synthesis_ids", "related_entities", "topics"]:
+                    field_str = entity.get(field, "[]")
+                    if isinstance(field_str, str):
+                        try:
+                            entity[field] = json.loads(field_str)
+                        except json.JSONDecodeError:
+                            entity[field] = []
+
+                return entity
+            return None
+
+        except Exception as e:
+            logger.error(f"Failed to retrieve entity {entity_id}: {e}")
+            return None
+
+    def search_entities_by_name(
+        self,
+        name: str,
+        entity_type: Optional[str] = None,
+        limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """
+        Search entities by name (partial match).
+
+        Args:
+            name: Name or alias to search for
+            entity_type: Optional filter by entity type
+            limit: Maximum results
+
+        Returns:
+            List of matching entities
+        """
+        if not self.client:
+            raise RuntimeError("Qdrant not initialized")
+
+        try:
+            import json
+
+            # Build filter conditions
+            conditions = []
+            if entity_type:
+                conditions.append(
+                    FieldCondition(
+                        key="entity_type",
+                        match=MatchValue(value=entity_type.upper())
+                    )
+                )
+
+            query_filter = Filter(must=conditions) if conditions else None
+
+            # Scroll through entities and filter by name
+            result, _ = self.client.scroll(
+                collection_name=self.entities_collection,
+                scroll_filter=query_filter,
+                limit=500,  # Fetch more, filter by name
+                with_payload=True,
+                with_vectors=False
+            )
+
+            name_lower = name.lower()
+            entities = []
+
+            for point in result:
+                entity = point.payload
+                entity["id"] = point.id
+
+                # Check if name matches canonical_name or any alias
+                canonical = entity.get("canonical_name", "").lower()
+                aliases_str = entity.get("aliases", "[]")
+                try:
+                    aliases = json.loads(aliases_str) if isinstance(aliases_str, str) else []
+                except json.JSONDecodeError:
+                    aliases = []
+
+                aliases_lower = [a.lower() for a in aliases if a]
+
+                if name_lower in canonical or any(name_lower in a for a in aliases_lower):
+                    # Parse JSON fields
+                    for field in ["aliases", "synthesis_ids", "related_entities", "topics"]:
+                        field_str = entity.get(field, "[]")
+                        if isinstance(field_str, str):
+                            try:
+                                entity[field] = json.loads(field_str)
+                            except json.JSONDecodeError:
+                                entity[field] = []
+
+                    entities.append(entity)
+
+                    if len(entities) >= limit:
+                        break
+
+            # Sort by mention_count (most mentioned first)
+            entities.sort(key=lambda x: x.get("mention_count", 0), reverse=True)
+
+            return entities
+
+        except Exception as e:
+            logger.error(f"Failed to search entities: {e}")
+            return []
+
+    def search_entities_by_embedding(
+        self,
+        query_embedding: List[float],
+        entity_type: Optional[str] = None,
+        limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """
+        Search entities by semantic similarity.
+
+        Args:
+            query_embedding: Query embedding vector
+            entity_type: Optional filter by entity type
+            limit: Maximum results
+
+        Returns:
+            List of similar entities with scores
+        """
+        if not self.client:
+            raise RuntimeError("Qdrant not initialized")
+
+        try:
+            import json
+
+            # Build filter
+            query_filter = None
+            if entity_type:
+                query_filter = Filter(
+                    must=[
+                        FieldCondition(
+                            key="entity_type",
+                            match=MatchValue(value=entity_type.upper())
+                        )
+                    ]
+                )
+
+            results = self.client.query_points(
+                collection_name=self.entities_collection,
+                query=query_embedding,
+                limit=limit,
+                query_filter=query_filter,
+                with_payload=True
+            )
+
+            entities = []
+            for point in results.points:
+                entity = point.payload
+                entity["id"] = point.id
+                entity["similarity_score"] = point.score
+
+                # Parse JSON fields
+                for field in ["aliases", "synthesis_ids", "related_entities", "topics"]:
+                    field_str = entity.get(field, "[]")
+                    if isinstance(field_str, str):
+                        try:
+                            entity[field] = json.loads(field_str)
+                        except json.JSONDecodeError:
+                            entity[field] = []
+
+                entities.append(entity)
+
+            return entities
+
+        except Exception as e:
+            logger.error(f"Failed to search entities by embedding: {e}")
+            return []
+
+    def get_top_entities(
+        self,
+        entity_type: Optional[str] = None,
+        limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """
+        Get top entities by mention count.
+
+        Args:
+            entity_type: Optional filter by entity type
+            limit: Maximum results
+
+        Returns:
+            List of entities sorted by mention_count
+        """
+        if not self.client:
+            raise RuntimeError("Qdrant not initialized")
+
+        try:
+            import json
+
+            # Build filter
+            query_filter = None
+            if entity_type:
+                query_filter = Filter(
+                    must=[
+                        FieldCondition(
+                            key="entity_type",
+                            match=MatchValue(value=entity_type.upper())
+                        )
+                    ]
+                )
+
+            result, _ = self.client.scroll(
+                collection_name=self.entities_collection,
+                scroll_filter=query_filter,
+                limit=500,  # Fetch more, sort and limit
+                with_payload=True,
+                with_vectors=False
+            )
+
+            entities = []
+            for point in result:
+                entity = point.payload
+                entity["id"] = point.id
+
+                # Parse JSON fields
+                for field in ["aliases", "synthesis_ids", "related_entities", "topics"]:
+                    field_str = entity.get(field, "[]")
+                    if isinstance(field_str, str):
+                        try:
+                            entity[field] = json.loads(field_str)
+                        except json.JSONDecodeError:
+                            entity[field] = []
+
+                entities.append(entity)
+
+            # Sort by mention_count
+            entities.sort(key=lambda x: x.get("mention_count", 0), reverse=True)
+
+            return entities[:limit]
+
+        except Exception as e:
+            logger.error(f"Failed to get top entities: {e}")
+            return []
+
+    def update_entity_mentions(
+        self,
+        entity_id: str,
+        synthesis_id: str,
+        as_cause: bool = False,
+        as_effect: bool = False
+    ) -> bool:
+        """
+        Update entity mention stats when referenced in a synthesis.
+
+        Args:
+            entity_id: The entity ID
+            synthesis_id: The synthesis ID that mentions this entity
+            as_cause: Whether entity appears as cause in causal relation
+            as_effect: Whether entity appears as effect in causal relation
+
+        Returns:
+            Success status
+        """
+        if not self.client:
+            raise RuntimeError("Qdrant not initialized")
+
+        try:
+            import json
+            from datetime import datetime
+
+            # Get current entity
+            entity = self.get_entity_by_id(entity_id)
+            if not entity:
+                return False
+
+            # Update fields
+            synthesis_ids = entity.get("synthesis_ids", [])
+            if synthesis_id not in synthesis_ids:
+                synthesis_ids.append(synthesis_id)
+
+            entity["synthesis_ids"] = synthesis_ids
+            entity["mention_count"] = len(synthesis_ids)
+            entity["last_seen"] = datetime.now().timestamp()
+
+            if as_cause:
+                entity["as_cause_count"] = entity.get("as_cause_count", 0) + 1
+            if as_effect:
+                entity["as_effect_count"] = entity.get("as_effect_count", 0) + 1
+
+            # Re-upsert (we need the embedding, fetch it)
+            result = self.client.retrieve(
+                collection_name=self.entities_collection,
+                ids=[entity_id],
+                with_vectors=True
+            )
+
+            if result and result[0].vector:
+                return self.upsert_entity(entity, result[0].vector)
+
+            return False
+
+        except Exception as e:
+            logger.error(f"Failed to update entity mentions: {e}")
+            return False
+
+    # =========================================================================
+    # INTELLIGENCE HUB: TOPICS
+    # =========================================================================
+
+    def upsert_topic(
+        self,
+        topic: Dict[str, Any],
+        embedding: List[float]
+    ) -> bool:
+        """
+        Insert or update a topic in the Intelligence Hub.
+
+        Args:
+            topic: Topic dictionary with name, description, synthesis_ids, etc.
+            embedding: Embedding vector for semantic search
+
+        Returns:
+            Success status
+        """
+        if not self.client:
+            raise RuntimeError("Qdrant not initialized")
+
+        from datetime import datetime
+        import json
+
+        point_id = topic.get("id") or str(uuid.uuid4())
+
+        # Convert lists to JSON strings
+        keywords = topic.get("keywords", [])
+        keywords_str = json.dumps(keywords) if isinstance(keywords, list) else "[]"
+
+        synthesis_ids = topic.get("synthesis_ids", [])
+        synthesis_ids_str = json.dumps(synthesis_ids) if isinstance(synthesis_ids, list) else "[]"
+
+        entity_ids = topic.get("entity_ids", [])
+        entity_ids_str = json.dumps(entity_ids) if isinstance(entity_ids, list) else "[]"
+
+        # Store merged causal graph as JSON
+        merged_causal_graph = topic.get("merged_causal_graph", {})
+        causal_graph_str = json.dumps(merged_causal_graph) if isinstance(merged_causal_graph, dict) else "{}"
+
+        point = PointStruct(
+            id=point_id,
+            vector=embedding.tolist() if hasattr(embedding, 'tolist') else embedding,
+            payload={
+                "name": str(topic.get("name", ""))[:200],
+                "description": str(topic.get("description", ""))[:2000],
+                "keywords": keywords_str[:1000],
+                "category": str(topic.get("category", "MONDE"))[:50],
+                "first_seen": float(topic.get("first_seen", datetime.now().timestamp())),
+                "last_updated": float(topic.get("last_updated", datetime.now().timestamp())),
+                "synthesis_ids": synthesis_ids_str[:10000],
+                "entity_ids": entity_ids_str[:5000],
+                "narrative_arc": str(topic.get("narrative_arc", "emerging"))[:20],
+                "merged_causal_graph": causal_graph_str[:20000],
+                "mention_count": int(topic.get("mention_count", 1)),
+                "is_active": bool(topic.get("is_active", True)),
+                "created_at": datetime.now().timestamp()
+            }
+        )
+
+        try:
+            self.client.upsert(
+                collection_name=self.topics_collection,
+                points=[point]
+            )
+            logger.debug(f"✅ Upserted topic '{topic.get('name', '')}'")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to upsert topic: {e}")
+            return False
+
+    def get_topic_by_id(self, topic_id: str) -> Optional[Dict[str, Any]]:
+        """Get topic by ID"""
+        if not self.client:
+            raise RuntimeError("Qdrant not initialized")
+
+        try:
+            import json
+
+            result = self.client.retrieve(
+                collection_name=self.topics_collection,
+                ids=[topic_id]
+            )
+
+            if result:
+                topic = result[0].payload
+                topic["id"] = topic_id
+
+                # Parse JSON fields back to lists/dicts
+                for field in ["keywords", "synthesis_ids", "entity_ids"]:
+                    field_str = topic.get(field, "[]")
+                    if isinstance(field_str, str):
+                        try:
+                            topic[field] = json.loads(field_str)
+                        except json.JSONDecodeError:
+                            topic[field] = []
+
+                # Parse causal graph
+                causal_str = topic.get("merged_causal_graph", "{}")
+                if isinstance(causal_str, str):
+                    try:
+                        topic["merged_causal_graph"] = json.loads(causal_str)
+                    except json.JSONDecodeError:
+                        topic["merged_causal_graph"] = {"nodes": [], "edges": []}
+
+                return topic
+            return None
+
+        except Exception as e:
+            logger.error(f"Failed to retrieve topic {topic_id}: {e}")
+            return None
+
+    def get_topics(
+        self,
+        active_only: bool = True,
+        category: Optional[str] = None,
+        limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """
+        Get topics with optional filtering.
+
+        Args:
+            active_only: Only return active topics
+            category: Optional category filter
+            limit: Maximum results
+
+        Returns:
+            List of topics sorted by last_updated
+        """
+        if not self.client:
+            raise RuntimeError("Qdrant not initialized")
+
+        try:
+            import json
+
+            # Build filter conditions
+            conditions = []
+            if active_only:
+                conditions.append(
+                    FieldCondition(
+                        key="is_active",
+                        match=MatchValue(value=True)
+                    )
+                )
+            if category:
+                conditions.append(
+                    FieldCondition(
+                        key="category",
+                        match=MatchValue(value=category.upper())
+                    )
+                )
+
+            query_filter = Filter(must=conditions) if conditions else None
+
+            result, _ = self.client.scroll(
+                collection_name=self.topics_collection,
+                scroll_filter=query_filter,
+                limit=500,  # Fetch more, sort and limit
+                with_payload=True,
+                with_vectors=False
+            )
+
+            topics = []
+            for point in result:
+                topic = point.payload
+                topic["id"] = point.id
+
+                # Parse JSON fields
+                for field in ["keywords", "synthesis_ids", "entity_ids"]:
+                    field_str = topic.get(field, "[]")
+                    if isinstance(field_str, str):
+                        try:
+                            topic[field] = json.loads(field_str)
+                        except json.JSONDecodeError:
+                            topic[field] = []
+
+                topics.append(topic)
+
+            # Sort by last_updated descending
+            topics.sort(key=lambda x: x.get("last_updated", 0), reverse=True)
+
+            return topics[:limit]
+
+        except Exception as e:
+            logger.error(f"Failed to get topics: {e}")
+            return []
+
+    def search_topics_by_embedding(
+        self,
+        query_embedding: List[float],
+        active_only: bool = True,
+        limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """
+        Search topics by semantic similarity.
+
+        Args:
+            query_embedding: Query embedding vector
+            active_only: Only return active topics
+            limit: Maximum results
+
+        Returns:
+            List of similar topics with scores
+        """
+        if not self.client:
+            raise RuntimeError("Qdrant not initialized")
+
+        try:
+            import json
+
+            # Build filter
+            query_filter = None
+            if active_only:
+                query_filter = Filter(
+                    must=[
+                        FieldCondition(
+                            key="is_active",
+                            match=MatchValue(value=True)
+                        )
+                    ]
+                )
+
+            results = self.client.query_points(
+                collection_name=self.topics_collection,
+                query=query_embedding,
+                limit=limit,
+                query_filter=query_filter,
+                with_payload=True
+            )
+
+            topics = []
+            for point in results.points:
+                topic = point.payload
+                topic["id"] = point.id
+                topic["similarity_score"] = point.score
+
+                # Parse JSON fields
+                for field in ["keywords", "synthesis_ids", "entity_ids"]:
+                    field_str = topic.get(field, "[]")
+                    if isinstance(field_str, str):
+                        try:
+                            topic[field] = json.loads(field_str)
+                        except json.JSONDecodeError:
+                            topic[field] = []
+
+                topics.append(topic)
+
+            return topics
+
+        except Exception as e:
+            logger.error(f"Failed to search topics by embedding: {e}")
+            return []
+
+    def add_synthesis_to_topic(
+        self,
+        topic_id: str,
+        synthesis_id: str
+    ) -> bool:
+        """
+        Add a synthesis to an existing topic.
+
+        Args:
+            topic_id: The topic ID
+            synthesis_id: The synthesis ID to add
+
+        Returns:
+            Success status
+        """
+        if not self.client:
+            raise RuntimeError("Qdrant not initialized")
+
+        try:
+            import json
+            from datetime import datetime
+
+            # Get current topic
+            topic = self.get_topic_by_id(topic_id)
+            if not topic:
+                return False
+
+            # Update fields
+            synthesis_ids = topic.get("synthesis_ids", [])
+            if synthesis_id not in synthesis_ids:
+                synthesis_ids.append(synthesis_id)
+
+            topic["synthesis_ids"] = synthesis_ids
+            topic["mention_count"] = len(synthesis_ids)
+            topic["last_updated"] = datetime.now().timestamp()
+
+            # Re-upsert (we need the embedding, fetch it)
+            result = self.client.retrieve(
+                collection_name=self.topics_collection,
+                ids=[topic_id],
+                with_vectors=True
+            )
+
+            if result and result[0].vector:
+                return self.upsert_topic(topic, result[0].vector)
+
+            return False
+
+        except Exception as e:
+            logger.error(f"Failed to add synthesis to topic: {e}")
+            return False
+
+    def update_topic_causal_graph(
+        self,
+        topic_id: str,
+        causal_graph: Dict[str, Any]
+    ) -> bool:
+        """
+        Update the merged causal graph for a topic.
+
+        Args:
+            topic_id: The topic ID
+            causal_graph: The aggregated causal graph
+
+        Returns:
+            Success status
+        """
+        if not self.client:
+            raise RuntimeError("Qdrant not initialized")
+
+        try:
+            from datetime import datetime
+
+            # Get current topic
+            topic = self.get_topic_by_id(topic_id)
+            if not topic:
+                return False
+
+            topic["merged_causal_graph"] = causal_graph
+            topic["last_updated"] = datetime.now().timestamp()
+
+            # Re-upsert
+            result = self.client.retrieve(
+                collection_name=self.topics_collection,
+                ids=[topic_id],
+                with_vectors=True
+            )
+
+            if result and result[0].vector:
+                return self.upsert_topic(topic, result[0].vector)
+
+            return False
+
+        except Exception as e:
+            logger.error(f"Failed to update topic causal graph: {e}")
+            return False
+
+    def get_topics_with_embeddings(
+        self,
+        active_only: bool = True,
+        category: Optional[str] = None,
+        limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """
+        Get topics WITH their embedding vectors for similarity calculation.
+        Used by the Cortex Thématique visualization.
+
+        Args:
+            active_only: Only return active topics
+            category: Optional category filter
+            limit: Maximum results
+
+        Returns:
+            List of topics with 'embedding' field containing the vector
+        """
+        if not self.client:
+            raise RuntimeError("Qdrant not initialized")
+
+        try:
+            import json
+
+            # Build filter conditions
+            conditions = []
+            if active_only:
+                conditions.append(
+                    FieldCondition(
+                        key="is_active",
+                        match=MatchValue(value=True)
+                    )
+                )
+            if category:
+                conditions.append(
+                    FieldCondition(
+                        key="category",
+                        match=MatchValue(value=category.upper())
+                    )
+                )
+
+            query_filter = Filter(must=conditions) if conditions else None
+
+            # Scroll with vectors=True to get embeddings
+            result, _ = self.client.scroll(
+                collection_name=self.topics_collection,
+                scroll_filter=query_filter,
+                limit=500,  # Fetch more, sort and limit
+                with_payload=True,
+                with_vectors=True  # Include embedding vectors
+            )
+
+            topics = []
+            for point in result:
+                topic = point.payload
+                topic["id"] = point.id
+
+                # Include the embedding vector
+                topic["embedding"] = point.vector if point.vector else []
+
+                # Parse JSON fields
+                for field in ["keywords", "synthesis_ids", "entity_ids"]:
+                    field_str = topic.get(field, "[]")
+                    if isinstance(field_str, str):
+                        try:
+                            topic[field] = json.loads(field_str)
+                        except json.JSONDecodeError:
+                            topic[field] = []
+
+                # Calculate hot_score based on synthesis count and recency
+                synthesis_count = len(topic.get("synthesis_ids", []))
+                last_updated = topic.get("last_updated", 0)
+                from datetime import datetime
+                recency_score = max(0, 1 - (datetime.now().timestamp() - last_updated) / (7 * 24 * 3600))  # Decay over 7 days
+                topic["hot_score"] = min(1.0, (synthesis_count * 0.3 + recency_score * 0.7))
+
+                topics.append(topic)
+
+            # Sort by synthesis count (more connected = more important)
+            topics.sort(key=lambda x: len(x.get("synthesis_ids", [])), reverse=True)
+
+            logger.info(f"📊 Cortex: Retrieved {len(topics[:limit])} topics with embeddings")
+            return topics[:limit]
+
+        except Exception as e:
+            logger.error(f"Failed to get topics with embeddings: {e}")
+            return []
 
 
 # Global instance

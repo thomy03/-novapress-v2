@@ -18,6 +18,7 @@ const EDGE_DASH_PATTERNS: Record<RelationType, string> = {
   triggers: '8,4',       // Dashed
   enables: '4,2',        // Short dashes
   prevents: '12,4,4,4',  // Double dash
+  relates_to: '2,2',     // Dotted line
 };
 
 // Cascade colors for propagation effect

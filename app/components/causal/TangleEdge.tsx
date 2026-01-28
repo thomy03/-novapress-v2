@@ -5,7 +5,7 @@ import { EdgeProps, getBezierPath, EdgeLabelRenderer } from 'reactflow';
 import { RELATION_CONFIG } from '@/app/types/causal';
 
 export interface TangleEdgeData {
-  relationType?: 'causes' | 'triggers' | 'enables' | 'prevents';
+  relationType?: 'causes' | 'triggers' | 'enables' | 'prevents' | 'relates_to';
   confidence?: number;
   sourceArticlesCount?: number;
   isHighlighted?: boolean;
@@ -13,11 +13,12 @@ export interface TangleEdgeData {
 }
 
 // Color scheme matching your reference images
-const EDGE_COLORS = {
+const EDGE_COLORS: Record<string, string> = {
   causes: '#1E40AF',      // Blue (like the first image)
   triggers: '#DC2626',    // Red (like the first image)
   enables: '#059669',     // Green
   prevents: '#7C3AED',    // Purple
+  relates_to: '#6B7280',  // Gray (neutral relation)
 };
 
 function TangleEdgeComponent({

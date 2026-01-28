@@ -83,6 +83,7 @@ class ApiClient {
           ...options,
           headers,
           signal: AbortSignal.timeout(API_CONFIG.TIMEOUT),
+          cache: 'no-store', // Prevent browser caching to always get fresh data
         });
 
         if (response.status === 401 && this.refreshToken && attempts === 0) {
@@ -121,19 +122,35 @@ class ApiClient {
 
   async get<T>(
     endpoint: string,
-    options?: {
-      params?: Record<string, any>;
-      headers?: Record<string, string>;
-    }
+    options?: Record<string, any>
   ): Promise<T> {
     // Build URL properly - normalize to prevent double slashes
     let url = `${API_CONFIG.BASE_URL}${endpoint}`;
     // Remove any double slashes (except in protocol)
     url = url.replace(/([^:]\/)\/+/g, '$1');
 
-    if (options?.params) {
+    // Support both old API (params directly) and new API ({ params, headers })
+    let params: Record<string, any> | undefined;
+    let headers: Record<string, string> | undefined;
+
+    if (options) {
+      // Check if using new API style: { params?: {...}, headers?: {...} }
+      const hasParamsKey = 'params' in options;
+      const hasHeadersKey = 'headers' in options;
+
+      if (hasParamsKey || hasHeadersKey) {
+        // New API: { params: {...}, headers: {...} }
+        params = options.params;
+        headers = options.headers;
+      } else {
+        // Old API: params passed directly as the options object
+        params = options;
+      }
+    }
+
+    if (params) {
       const searchParams = new URLSearchParams();
-      Object.entries(options.params).forEach(([key, value]) => {
+      Object.entries(params).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
           searchParams.append(key, value.toString());
         }
@@ -146,7 +163,7 @@ class ApiClient {
 
     return this.request<T>(url, {
       method: 'GET',
-      headers: options?.headers,
+      headers,
     });
   }
 

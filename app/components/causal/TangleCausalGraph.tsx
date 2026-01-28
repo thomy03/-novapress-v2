@@ -158,30 +158,89 @@ function TangleCausalGraphInner({
   const containerRef = useRef<HTMLDivElement>(null);
   const { fitView } = useReactFlow();
 
+  // Build nodes from edges if nodes array is empty or insufficient
+  // This fixes the issue where backend returns edges without matching nodes
+  const effectiveNodes = useMemo(() => {
+    // If we have enough nodes that match the edges, use them
+    if (causalNodes.length > 0) {
+      // Check if nodes actually match the edges
+      let matchCount = 0;
+      causalEdges.forEach(edge => {
+        if (causalNodes.some(n => n.label === edge.cause_text || n.label.includes(edge.cause_text.substring(0, 30)))) matchCount++;
+        if (causalNodes.some(n => n.label === edge.effect_text || n.label.includes(edge.effect_text.substring(0, 30)))) matchCount++;
+      });
+      // If at least 50% match, use existing nodes
+      if (matchCount >= causalEdges.length) {
+        return causalNodes;
+      }
+    }
+
+    // Generate nodes from edges
+    const nodeMap = new Map<string, CausalNode>();
+    let nodeId = 0;
+
+    causalEdges.forEach(edge => {
+      // Add cause as node
+      const causeLabel = edge.cause_text.substring(0, 80);
+      if (!nodeMap.has(causeLabel)) {
+        nodeMap.set(causeLabel, {
+          id: `node_${nodeId++}`,
+          label: causeLabel,
+          node_type: 'event',
+          fact_density: edge.confidence || 0.5,
+        });
+      }
+
+      // Add effect as node
+      const effectLabel = edge.effect_text.substring(0, 80);
+      if (!nodeMap.has(effectLabel)) {
+        nodeMap.set(effectLabel, {
+          id: `node_${nodeId++}`,
+          label: effectLabel,
+          node_type: 'event',
+          fact_density: edge.confidence || 0.5,
+        });
+      }
+    });
+
+    const generatedNodes = Array.from(nodeMap.values());
+    console.log(`[TangleCausalGraph] Generated ${generatedNodes.length} nodes from ${causalEdges.length} edges`);
+    return generatedNodes.length > 0 ? generatedNodes : causalNodes;
+  }, [causalNodes, causalEdges]);
+
   // Calculate node connections count
   const connectionCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     causalEdges.forEach(edge => {
-      const sourceNode = causalNodes.find(n => n.label === edge.cause_text);
-      const targetNode = causalNodes.find(n => n.label === edge.effect_text);
+      // Match by label or partial match
+      const sourceNode = effectiveNodes.find(n =>
+        n.label === edge.cause_text ||
+        edge.cause_text.startsWith(n.label) ||
+        n.label.startsWith(edge.cause_text.substring(0, 30))
+      );
+      const targetNode = effectiveNodes.find(n =>
+        n.label === edge.effect_text ||
+        edge.effect_text.startsWith(n.label) ||
+        n.label.startsWith(edge.effect_text.substring(0, 30))
+      );
       if (sourceNode) counts[sourceNode.id] = (counts[sourceNode.id] || 0) + 1;
       if (targetNode) counts[targetNode.id] = (counts[targetNode.id] || 0) + 1;
     });
     return counts;
-  }, [causalNodes, causalEdges]);
+  }, [effectiveNodes, causalEdges]);
 
-  // Calculate layout
+  // Calculate layout using effectiveNodes
   const positions = useMemo(() => {
     const width = isFullScreen ? 1200 : 600;
     const height = isFullScreen ? 800 : 500;
-    return forceDirectedLayout(causalNodes, causalEdges, width, height, 150);
-  }, [causalNodes, causalEdges, isFullScreen]);
+    return forceDirectedLayout(effectiveNodes, causalEdges, width, height, 150);
+  }, [effectiveNodes, causalEdges, isFullScreen]);
 
-  // Convert to React Flow nodes
+  // Convert to React Flow nodes using effectiveNodes
   const initialNodes: Node<TangleNodeData>[] = useMemo(() => {
     const maxConnections = Math.max(...Object.values(connectionCounts), 1);
 
-    return causalNodes.map((node) => ({
+    return effectiveNodes.map((node) => ({
       id: node.id,
       type: 'tangle',
       position: positions[node.id] || { x: 300, y: 300 },
@@ -194,19 +253,28 @@ function TangleCausalGraphInner({
         connectionsCount: connectionCounts[node.id] || 0,
       },
     }));
-  }, [causalNodes, positions, connectionCounts, highlightedNodeId]);
+  }, [effectiveNodes, positions, connectionCounts, highlightedNodeId]);
 
-  // Convert to React Flow edges
+  // Convert to React Flow edges using effectiveNodes
   const initialEdges: Edge<TangleEdgeData>[] = useMemo(() => {
     return causalEdges.map((edge, idx) => {
-      const sourceNode = causalNodes.find(n => n.label === edge.cause_text);
-      const targetNode = causalNodes.find(n => n.label === edge.effect_text);
+      // Find nodes with flexible matching (exact or partial)
+      const sourceNode = effectiveNodes.find(n =>
+        n.label === edge.cause_text ||
+        edge.cause_text.startsWith(n.label) ||
+        n.label.startsWith(edge.cause_text.substring(0, 30))
+      );
+      const targetNode = effectiveNodes.find(n =>
+        n.label === edge.effect_text ||
+        edge.effect_text.startsWith(n.label) ||
+        n.label.startsWith(edge.effect_text.substring(0, 30))
+      );
       const edgeId = `edge-${idx}`;
 
       return {
         id: edgeId,
-        source: sourceNode?.id || `node-${idx}`,
-        target: targetNode?.id || `node-${idx + 1}`,
+        source: sourceNode?.id || `node_${idx * 2}`,
+        target: targetNode?.id || `node_${idx * 2 + 1}`,
         type: 'tangle',
         data: {
           relationType: edge.relation_type,
@@ -223,7 +291,7 @@ function TangleCausalGraphInner({
         },
       };
     });
-  }, [causalNodes, causalEdges, highlightedEdges]);
+  }, [effectiveNodes, causalEdges, highlightedEdges]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -242,15 +310,23 @@ function TangleCausalGraphInner({
       // Find connected edges
       const connectedEdgeIds = new Set<string>();
       causalEdges.forEach((edge, idx) => {
-        const sourceNode = causalNodes.find(n => n.label === edge.cause_text);
-        const targetNode = causalNodes.find(n => n.label === edge.effect_text);
+        const sourceNode = effectiveNodes.find(n =>
+          n.label === edge.cause_text ||
+          edge.cause_text.startsWith(n.label) ||
+          n.label.startsWith(edge.cause_text.substring(0, 30))
+        );
+        const targetNode = effectiveNodes.find(n =>
+          n.label === edge.effect_text ||
+          edge.effect_text.startsWith(n.label) ||
+          n.label.startsWith(edge.effect_text.substring(0, 30))
+        );
         if (sourceNode?.id === node.id || targetNode?.id === node.id) {
           connectedEdgeIds.add(`edge-${idx}`);
         }
       });
       setHighlightedEdges(connectedEdgeIds);
     },
-    [causalNodes, causalEdges]
+    [effectiveNodes, causalEdges]
   );
 
   const handleNodeMouseLeave = useCallback(() => {
@@ -261,12 +337,12 @@ function TangleCausalGraphInner({
   // Handle node click
   const handleNodeClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {
-      const causalNode = causalNodes.find((n) => n.id === node.id);
+      const causalNode = effectiveNodes.find((n) => n.id === node.id);
       if (causalNode && onNodeClick) {
         onNodeClick(node.id, causalNode);
       }
     },
-    [causalNodes, onNodeClick]
+    [effectiveNodes, onNodeClick]
   );
 
   // Handle edge click
@@ -282,7 +358,8 @@ function TangleCausalGraphInner({
     [causalEdges, onEdgeClick]
   );
 
-  if (causalNodes.length === 0) {
+  // Show empty state only if no edges (effectiveNodes is built from edges)
+  if (effectiveNodes.length === 0 && causalEdges.length === 0) {
     return (
       <div style={styles.emptyState}>
         <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1">
@@ -329,7 +406,7 @@ function TangleCausalGraphInner({
       <div style={styles.statsBar}>
         <span style={styles.statItem}>
           <span style={{ ...styles.dot, backgroundColor: '#1E40AF' }} />
-          <strong>{causalNodes.length}</strong> entites
+          <strong>{effectiveNodes.length}</strong> entites
         </span>
         <span style={styles.statDivider}>|</span>
         <span style={styles.statItem}>
