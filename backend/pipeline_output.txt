@@ -1,0 +1,229 @@
+[32m2025-11-29 00:04:42.262[0m | [1mINFO    [0m | [36mapp.ml.embeddings[0m:[36minitialize[0m:[36m25[0m - [1mLoading BGE-M3 model: BAAI/bge-m3[0m
+[32m2025-11-29 00:04:47.337[0m | [32m[1mSUCCESS [0m | [36mapp.ml.embeddings[0m:[36minitialize[0m:[36m30[0m - [32m[1m\u2705 BGE-M3 loaded on cpu[0m
+[32m2025-11-29 00:04:47.337[0m | [1mINFO    [0m | [36mapp.ml.knowledge_graph[0m:[36minitialize[0m:[36m25[0m - [1mLoading spaCy model: fr_core_news_lg[0m
+[32m2025-11-29 00:04:52.649[0m | [32m[1mSUCCESS [0m | [36mapp.ml.knowledge_graph[0m:[36minitialize[0m:[36m27[0m - [32m[1m\u2705 spaCy model loaded[0m
+[32m2025-11-29 00:04:52.649[0m | [1mINFO    [0m | [36mapp.db.qdrant_client[0m:[36minitialize[0m:[36m34[0m - [1mConnecting to Qdrant at http://localhost:6333[0m
+[32m2025-11-29 00:04:53.609[0m | [1mINFO    [0m | [36mapp.db.qdrant_client[0m:[36minitialize[0m:[36m56[0m - [1mCollection 'novapress_articles' already exists[0m
+[32m2025-11-29 00:04:53.609[0m | [1mINFO    [0m | [36mapp.db.qdrant_client[0m:[36minitialize[0m:[36m70[0m - [1mCollection 'novapress_syntheses' already exists[0m
+[32m2025-11-29 00:04:53.609[0m | [32m[1mSUCCESS [0m | [36mapp.db.qdrant_client[0m:[36minitialize[0m:[36m72[0m - [32m[1m\u2705 Qdrant connected[0m
+[32m2025-11-29 00:04:53.638[0m | [1mINFO    [0m | [36mapp.db.qdrant_client[0m:[36mget_recent_articles[0m:[36m373[0m - [1mFetched 91 recent articles (last 48h)[0m
+[32m2025-11-29 00:04:53.638[0m | [1mINFO    [0m | [36mapp.services.pipeline[0m:[36mrun_full_pipeline[0m:[36m82[0m - [1m\U0001f680 NovaPress Pipeline V4 ULTIMATE (Mode: SCRAPE)[0m
+[32m2025-11-29 00:04:53.638[0m | [1mINFO    [0m | [36mapp.services.pipeline[0m:[36mrun_full_pipeline[0m:[36m97[0m - [1m\U0001f4e1 Step 1: Advanced Web Scraping...[0m
+[32m2025-11-29 00:04:53.638[0m | [1mINFO    [0m | [36mapp.services.pipeline[0m:[36m_collect_articles[0m:[36m220[0m - [1m\U0001f4f0 Scraping world news sources...[0m
+[32m2025-11-29 00:04:53.638[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_multiple_sources[0m:[36m912[0m - [1m\U0001f50d Discovering articles from 53 sources...[0m
+[32m2025-11-29 00:04:54.117[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 2 articles from Le Monde[0m
+[32m2025-11-29 00:04:54.724[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from Le Figaro[0m
+[32m2025-11-29 00:04:55.144[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 1 articles from Libération[0m
+[32m2025-11-29 00:04:57.406[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from Le Parisien[0m
+[32m2025-11-29 00:04:58.595[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from France Info[0m
+[32m2025-11-29 00:04:58.898[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from Les Echos[0m
+[32m2025-11-29 00:04:58.944[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m739[0m - [33m[1mScraping not allowed by robots.txt: https://www.latribune.fr[0m
+[32m2025-11-29 00:04:58.978[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m739[0m - [33m[1mScraping not allowed by robots.txt: https://www.futura-sciences.com[0m
+[32m2025-11-29 00:05:00.454[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from Frandroid[0m
+[32m2025-11-29 00:05:00.495[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m739[0m - [33m[1mScraping not allowed by robots.txt: https://www.lesoir.be[0m
+[32m2025-11-29 00:05:01.706[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 2 articles from Der Spiegel[0m
+[32m2025-11-29 00:05:02.147[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 2 articles from Bild[0m
+[32m2025-11-29 00:05:02.339[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 2 articles from El País[0m
+[32m2025-11-29 00:05:02.599[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 1 articles from El Mundo[0m
+[32m2025-11-29 00:05:03.568[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from Corriere della Sera[0m
+[32m2025-11-29 00:05:03.941[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 2 articles from La Repubblica[0m
+[32m2025-11-29 00:05:04.095[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 1 articles from BBC News[0m
+[32m2025-11-29 00:05:04.333[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 2 articles from The Guardian[0m
+[32m2025-11-29 00:05:05.276[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 2 articles from Financial Times[0m
+[32m2025-11-29 00:05:05.300[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36m_check_robots_txt[0m:[36m663[0m - [33m[1mCould not read robots.txt for edition.cnn.com: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1028)>[0m
+[32m2025-11-29 00:05:05.881[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 2 articles from CNN[0m
+[32m2025-11-29 00:05:06.765[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 2 articles from The New York Times[0m
+[32m2025-11-29 00:05:16.881[0m | [31m[1mERROR   [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m793[0m - [31m[1mFailed to discover articles from https://www.washingtonpost.com: [0m
+[32m2025-11-29 00:05:16.881[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from The Washington Post[0m
+[32m2025-11-29 00:05:17.703[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from Reuters[0m
+[32m2025-11-29 00:05:17.920[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 2 articles from TechCrunch[0m
+[32m2025-11-29 00:05:18.129[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 2 articles from The Verge[0m
+[32m2025-11-29 00:05:18.471[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 1 articles from Wired[0m
+[32m2025-11-29 00:05:21.224[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 1 articles from Bloomberg[0m
+[32m2025-11-29 00:05:21.772[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 2 articles from Al Jazeera[0m
+[32m2025-11-29 00:05:25.721[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from The Asahi Shimbun[0m
+[32m2025-11-29 00:05:26.181[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 2 articles from The Times of India[0m
+[32m2025-11-29 00:05:32.761[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from O Globo[0m
+[32m2025-11-29 00:05:33.288[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 2 articles from The Sydney Morning Herald[0m
+[32m2025-11-29 00:05:34.107[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 2 articles from Science Daily[0m
+[32m2025-11-29 00:05:34.382[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 2 articles from L'Équipe[0m
+[32m2025-11-29 00:05:34.797[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 2 articles from ESPN[0m
+[32m2025-11-29 00:05:35.094[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 2 articles from Marca[0m
+[32m2025-11-29 00:05:35.570[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from Slate FR[0m
+[32m2025-11-29 00:05:36.129[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from The Conversation[0m
+[32m2025-11-29 00:05:37.048[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from HuffPost FR[0m
+[32m2025-11-29 00:05:37.571[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from Reporterre[0m
+[32m2025-11-29 00:05:37.651[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m739[0m - [33m[1mScraping not allowed by robots.txt: https://www.scmp.com[0m
+[32m2025-11-29 00:05:37.698[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m739[0m - [33m[1mScraping not allowed by robots.txt: https://www.japantimes.co.jp[0m
+[32m2025-11-29 00:05:39.133[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m739[0m - [33m[1mScraping not allowed by robots.txt: https://www.koreaherald.com[0m
+[32m2025-11-29 00:05:39.141[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36m_check_robots_txt[0m:[36m663[0m - [33m[1mCould not read robots.txt for rt.com: <urlopen error [Errno 11001] getaddrinfo failed>[0m
+[32m2025-11-29 00:05:39.152[0m | [31m[1mERROR   [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m793[0m - [31m[1mFailed to discover articles from https://www.rt.com: [Errno 11001] getaddrinfo failed[0m
+[32m2025-11-29 00:05:39.152[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from RT (Russia Today)[0m
+[32m2025-11-29 00:05:39.605[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 1 articles from Deutsche Welle[0m
+[32m2025-11-29 00:05:39.677[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m739[0m - [33m[1mScraping not allowed by robots.txt: https://www.rfi.fr/fr/[0m
+[32m2025-11-29 00:05:39.770[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m739[0m - [33m[1mScraping not allowed by robots.txt: https://www.france24.com/fr/[0m
+[32m2025-11-29 00:05:40.375[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 2 articles from ABC News Australia[0m
+[32m2025-11-29 00:06:02.017[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36m_check_robots_txt[0m:[36m663[0m - [33m[1mCould not read robots.txt for cbc.ca: [WinError 10060] Une tentative de connexion a échoué car le parti connecté n’a pas répondu convenablement au-delà d’une certaine durée ou une connexion établie a échoué car l’hôte de connexion n’a pas répondu[0m
+[32m2025-11-29 00:06:12.124[0m | [31m[1mERROR   [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m793[0m - [31m[1mFailed to discover articles from https://www.cbc.ca/news: [0m
+[32m2025-11-29 00:06:12.124[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from CBC News Canada[0m
+[32m2025-11-29 00:06:12.274[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m739[0m - [33m[1mScraping not allowed by robots.txt: https://www.jeuneafrique.com[0m
+[32m2025-11-29 00:06:13.990[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from Le Matin (Maroc)[0m
+[32m2025-11-29 00:06:14.029[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m739[0m - [33m[1mScraping not allowed by robots.txt: https://www.clarin.com[0m
+[32m2025-11-29 00:06:14.524[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 2 articles from El Universal (Mexico)[0m
+[32m2025-11-29 00:06:14.524[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_multiple_sources[0m:[36m919[0m - [1m\U0001f4f0 Found 46 article URLs[0m
+[32m2025-11-29 00:06:14.524[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_multiple_sources[0m:[36m922[0m - [1m\u2699\ufe0f Scraping 46 articles...[0m
+[32m2025-11-29 00:06:17.007[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m842[0m - [33m[1mArticle too short or empty: https://www.elmundo.es/juegos/palabro/[0m
+[32m2025-11-29 00:06:17.301[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: French military faces political heat over debate on civilian[0m
+[32m2025-11-29 00:06:17.511[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: Wintersport: Skisprung-Star verlässt den Weltcup – Baby-Paus[0m
+[32m2025-11-29 00:06:17.524[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: Ukraine : Andriy Yermak, puissant bras droit de Zelensky, fo[0m
+[32m2025-11-29 00:06:18.371[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: French conservatives relaunch offensive on Islamism with con[0m
+[32m2025-11-29 00:06:18.371[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_with_semaphore[0m:[36m935[0m - [1m\U0001f4ca Progress: 5/46 articles scraped[0m
+[32m2025-11-29 00:06:18.406[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: Jeffrey Epstein: Wollte er Andrew und Fergie ausschalten?[0m
+[32m2025-11-29 00:06:18.698[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: Trump amenaza con empezar “muy pronto” a detener el tráfico [0m
+[32m2025-11-29 00:06:18.713[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: Ustica, vittime senza giustizia. Il reading di Lirio Abbate[0m
+[32m2025-11-29 00:06:18.731[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36m_check_robots_txt[0m:[36m663[0m - [33m[1mCould not read robots.txt for edition.cnn.com: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1028)>[0m
+[32m2025-11-29 00:06:19.802[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: Video shows Israeli forces shooting Palestinians dead moment[0m
+[32m2025-11-29 00:06:19.827[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36m_check_robots_txt[0m:[36m663[0m - [33m[1mCould not read robots.txt for cnn.com: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1028)>[0m
+[32m2025-11-29 00:06:20.172[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m842[0m - [33m[1mArticle too short or empty: https://www.spiegel.de/politik/deutschland/gruene-vollziehen-kehrtwende-bei-der-homoeopathie-a-0e6aa2bf-7d52-4a58-b2b6-314fb807f519[0m
+[32m2025-11-29 00:06:20.173[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_with_semaphore[0m:[36m935[0m - [1m\U0001f4ca Progress: 10/46 articles scraped[0m
+[32m2025-11-29 00:06:20.606[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: EL PAÍS: el periódico global[0m
+[32m2025-11-29 00:06:21.093[0m | [31m[1mERROR   [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m879[0m - [31m[1mFailed to scrape https://www.nytimes.com/2025/11/28/world/asia/hong-kong-fire-officials-warned.html: Article `download()` failed with 403 Client Error: Forbidden for url: https://www.nytimes.com/2025/11/28/world/asia/hong-kong-fire-officials-warned.html on URL https://www.nytimes.com/2025/11/28/world/asia/hong-kong-fire-officials-warned.html[0m
+[32m2025-11-29 00:06:21.235[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: Deutschland im Nations-League-Finale: Unterlegen gegen Spani[0m
+[32m2025-11-29 00:06:21.508[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: Rebel nuns who busted out of Austrian care home win reprieve[0m
+[32m2025-11-29 00:06:21.583[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m842[0m - [33m[1mArticle too short or empty: https://www.repubblica.it/economia/2025/11/28/news/manovra_oro_bankitalia_stop_tecnici_mef-425009815/[0m
+[32m2025-11-29 00:06:21.584[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_with_semaphore[0m:[36m935[0m - [1m\U0001f4ca Progress: 15/46 articles scraped[0m
+[32m2025-11-29 00:06:21.724[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: Eight more arrested over deadly Hong Kong blaze as toll rise[0m
+[32m2025-11-29 00:06:21.740[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m842[0m - [33m[1mArticle too short or empty: https://www.ft.com/content/5d90d705-a4ab-4cfb-a1d4-9976c79a2e41[0m
+[32m2025-11-29 00:06:21.888[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: Breaking News, World News, US News, Sports, Business, Innova[0m
+[32m2025-11-29 00:06:22.178[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: The race to regulate AI has sparked a federal vs state showd[0m
+[32m2025-11-29 00:06:22.387[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: Election 2025: News, results and analysis[0m
+[32m2025-11-29 00:06:22.388[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_with_semaphore[0m:[36m935[0m - [1m\U0001f4ca Progress: 20/46 articles scraped[0m
+[32m2025-11-29 00:06:22.747[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m842[0m - [33m[1mArticle too short or empty: https://www.ft.com/content/61371c71-6518-4bd2-a702-7e74ba29e9c6[0m
+[32m2025-11-29 00:06:23.065[0m | [31m[1mERROR   [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m879[0m - [31m[1mFailed to scrape https://www.bloomberg.com/news/articles/2025-11-28/ukraine-president-zelenskiy-says-his-top-aide-yermak-resigns?srnd=homepage-europe: Article `download()` failed with 403 Client Error: Forbidden for url: https://www.bloomberg.com/news/articles/2025-11-28/ukraine-president-zelenskiy-says-his-top-aide-yermak-resigns?srnd=homepage-europe on URL https://www.bloomberg.com/news/articles/2025-11-28/ukraine-president-zelenskiy-says-his-top-aide-yermak-resigns?srnd=homepage-europe[0m
+[32m2025-11-29 00:06:23.408[0m | [31m[1mERROR   [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m879[0m - [31m[1mFailed to scrape https://www.nytimes.com/2025/11/28/world/europe/zelensky-yermak-resigns-ukraine-corruption-scandal.html: Article `download()` failed with 403 Client Error: Forbidden for url: https://www.nytimes.com/2025/11/28/world/europe/zelensky-yermak-resigns-ukraine-corruption-scandal.html on URL https://www.nytimes.com/2025/11/28/world/europe/zelensky-yermak-resigns-ukraine-corruption-scandal.html[0m
+[32m2025-11-29 00:06:23.487[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m842[0m - [33m[1mArticle too short or empty: https://platform.theverge.com/wp-content/uploads/sites/2/2025/11/casio_ring_watch_us_1.jpg?quality=90&strip=all[0m
+[32m2025-11-29 00:06:23.571[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: Trump claims he will nullify executive orders Joe Biden sign[0m
+[32m2025-11-29 00:06:23.572[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_with_semaphore[0m:[36m935[0m - [1m\U0001f4ca Progress: 25/46 articles scraped[0m
+[32m2025-11-29 00:06:23.602[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: Welcome to the new and improved Verge Deals newsletter[0m
+[32m2025-11-29 00:06:24.595[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: DC shooting: US Treasury to cut federal benefits to 'illegal[0m
+[32m2025-11-29 00:06:24.877[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m842[0m - [33m[1mArticle too short or empty: https://www.smh.com.au/newsletter-signup?newsletter=breaking-news&utm_source=Homepage&utm_medium=CTABox&utm_campaign=Newsletters[0m
+[32m2025-11-29 00:06:25.165[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m842[0m - [33m[1mArticle too short or empty: https://www.lequipe.fr/Chrono[0m
+[32m2025-11-29 00:06:25.203[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: LIVE: Israel strikes Palestine, Lebanon, Syria threatening s[0m
+[32m2025-11-29 00:06:25.203[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_with_semaphore[0m:[36m935[0m - [1m\U0001f4ca Progress: 30/46 articles scraped[0m
+[32m2025-11-29 00:06:25.329[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: How OpenAI and Google see AI changing go-to-market strategie[0m
+[32m2025-11-29 00:06:25.544[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: Scientists find toxic metals hidden in popular plastic toys[0m
+[32m2025-11-29 00:06:25.874[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m842[0m - [33m[1mArticle too short or empty: https://www.smh.com.au/newsletter-signup?newsletter=live-well&utm_source=Homepage&utm_medium=CTABox&utm_campaign=Newsletters[0m
+[32m2025-11-29 00:06:25.909[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: Donald Trump claims any document signed by Joe Biden using a[0m
+[32m2025-11-29 00:06:26.581[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: 2025 NBA Cup: Schedule, format, groups, updates and more[0m
+[32m2025-11-29 00:06:26.581[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_with_semaphore[0m:[36m935[0m - [1m\U0001f4ca Progress: 35/46 articles scraped[0m
+[32m2025-11-29 00:06:27.005[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: La ruta futura de Sergio Ramos: ser campeón en México... y n[0m
+[32m2025-11-29 00:06:27.661[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m842[0m - [33m[1mArticle too short or empty: https://www.abc.net.au/news/for-you[0m
+[32m2025-11-29 00:06:27.667[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: A popular “essential” medicine may be putting unborn babies [0m
+[32m2025-11-29 00:06:27.846[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: Germany's industrial titans embrace the AI age – DW – 11[0m
+[32m2025-11-29 00:06:29.007[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: 135 Best Black Friday Deals 2025: We've Tested Every Item an[0m
+[32m2025-11-29 00:06:29.008[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_with_semaphore[0m:[36m935[0m - [1m\U0001f4ca Progress: 40/46 articles scraped[0m
+[32m2025-11-29 00:06:29.547[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: El Universal[0m
+[32m2025-11-29 00:06:29.693[0m | [34m[1mDEBUG   [0m | [36mapp.services.advanced_scraper[0m:[36m_is_duplicate[0m:[36m716[0m - [34m[1mDuplicate detected (hash): La ruta futura de Sergio Ramos: ser campeón en Méx[0m
+[32m2025-11-29 00:06:29.718[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: College Football Playoff 2025: Byes, bracket and new top 25[0m
+[32m2025-11-29 00:06:30.070[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m875[0m - [32m[1m\u2705 Scraped: Just In[0m
+[32m2025-11-29 00:06:30.097[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m842[0m - [33m[1mArticle too short or empty: https://www.lequipe.fr/[0m
+[32m2025-11-29 00:06:30.097[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_with_semaphore[0m:[36m935[0m - [1m\U0001f4ca Progress: 45/46 articles scraped[0m
+[32m2025-11-29 00:06:30.243[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_article[0m:[36m842[0m - [33m[1mArticle too short or empty: https://www.eluniversal.com.mx/sala-plus/[0m
+[32m2025-11-29 00:06:30.243[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_with_semaphore[0m:[36m935[0m - [1m\U0001f4ca Progress: 46/46 articles scraped[0m
+[32m2025-11-29 00:06:30.246[0m | [32m[1mSUCCESS [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_multiple_sources[0m:[36m946[0m - [32m[1m\u2705 Successfully scraped 30 articles[0m
+[32m2025-11-29 00:06:30.246[0m | [32m[1mSUCCESS [0m | [36mapp.services.pipeline[0m:[36m_collect_articles[0m:[36m227[0m - [32m[1m\U0001f4f0 News: 30 articles[0m
+[32m2025-11-29 00:06:30.247[0m | [1mINFO    [0m | [36mapp.services.pipeline[0m:[36m_collect_articles[0m:[36m231[0m - [1m\U0001f4f1 Scraping social & alternative sources...[0m
+[32m2025-11-29 00:06:30.426[0m | [1mINFO    [0m | [36mapp.services.social_scraper[0m:[36mscrape_reddit[0m:[36m123[0m - [1m\u2705 Reddit r/france: 1 posts[0m
+[32m2025-11-29 00:06:31.596[0m | [1mINFO    [0m | [36mapp.services.social_scraper[0m:[36mscrape_reddit[0m:[36m123[0m - [1m\u2705 Reddit r/french: 1 posts[0m
+[32m2025-11-29 00:06:32.768[0m | [1mINFO    [0m | [36mapp.services.social_scraper[0m:[36mscrape_reddit[0m:[36m123[0m - [1m\u2705 Reddit r/worldnews: 1 posts[0m
+[32m2025-11-29 00:06:33.925[0m | [1mINFO    [0m | [36mapp.services.social_scraper[0m:[36mscrape_reddit[0m:[36m123[0m - [1m\u2705 Reddit r/news: 1 posts[0m
+[32m2025-11-29 00:06:35.108[0m | [1mINFO    [0m | [36mapp.services.social_scraper[0m:[36mscrape_reddit[0m:[36m123[0m - [1m\u2705 Reddit r/europe: 1 posts[0m
+[32m2025-11-29 00:06:36.275[0m | [1mINFO    [0m | [36mapp.services.social_scraper[0m:[36mscrape_reddit[0m:[36m123[0m - [1m\u2705 Reddit r/technology: 1 posts[0m
+[32m2025-11-29 00:06:37.449[0m | [1mINFO    [0m | [36mapp.services.social_scraper[0m:[36mscrape_reddit[0m:[36m123[0m - [1m\u2705 Reddit r/programming: 1 posts[0m
+[32m2025-11-29 00:06:38.564[0m | [33m[1mWARNING [0m | [36mapp.services.social_scraper[0m:[36mscrape_reddit[0m:[36m84[0m - [33m[1mReddit r/artificialintelligence: HTTP 404[0m
+[32m2025-11-29 00:06:38.695[0m | [1mINFO    [0m | [36mapp.services.social_scraper[0m:[36mscrape_reddit[0m:[36m123[0m - [1m\u2705 Reddit r/science: 0 posts[0m
+[32m2025-11-29 00:06:39.828[0m | [1mINFO    [0m | [36mapp.services.social_scraper[0m:[36mscrape_reddit[0m:[36m123[0m - [1m\u2705 Reddit r/space: 0 posts[0m
+[32m2025-11-29 00:06:40.981[0m | [1mINFO    [0m | [36mapp.services.social_scraper[0m:[36mscrape_reddit[0m:[36m123[0m - [1m\u2705 Reddit r/environment: 1 posts[0m
+[32m2025-11-29 00:06:42.130[0m | [1mINFO    [0m | [36mapp.services.social_scraper[0m:[36mscrape_reddit[0m:[36m123[0m - [1m\u2705 Reddit r/economics: 1 posts[0m
+[32m2025-11-29 00:06:43.259[0m | [1mINFO    [0m | [36mapp.services.social_scraper[0m:[36mscrape_reddit[0m:[36m123[0m - [1m\u2705 Reddit r/finance: 0 posts[0m
+[32m2025-11-29 00:06:44.433[0m | [1mINFO    [0m | [36mapp.services.social_scraper[0m:[36mscrape_reddit[0m:[36m123[0m - [1m\u2705 Reddit r/sports: 1 posts[0m
+[32m2025-11-29 00:06:45.594[0m | [1mINFO    [0m | [36mapp.services.social_scraper[0m:[36mscrape_reddit[0m:[36m123[0m - [1m\u2705 Reddit r/soccer: 1 posts[0m
+[32m2025-11-29 00:06:46.736[0m | [1mINFO    [0m | [36mapp.services.social_scraper[0m:[36mscrape_reddit[0m:[36m123[0m - [1m\u2705 Reddit r/football: 1 posts[0m
+[32m2025-11-29 00:06:47.743[0m | [32m[1mSUCCESS [0m | [36mapp.services.social_scraper[0m:[36mscrape_reddit[0m:[36m130[0m - [32m[1m\U0001f4f1 Reddit total: 12 articles[0m
+[32m2025-11-29 00:06:47.744[0m | [32m[1mSUCCESS [0m | [36mapp.services.pipeline[0m:[36m_collect_articles[0m:[36m239[0m - [32m[1m\U0001f916 Reddit: 12 posts[0m
+[32m2025-11-29 00:06:48.235[0m | [32m[1mSUCCESS [0m | [36mapp.services.social_scraper[0m:[36mscrape_hackernews[0m:[36m195[0m - [32m[1m\U0001f536 Hacker News: 2 stories[0m
+[32m2025-11-29 00:06:48.235[0m | [32m[1mSUCCESS [0m | [36mapp.services.pipeline[0m:[36m_collect_articles[0m:[36m249[0m - [32m[1m\U0001f536 Hacker News: 2 stories[0m
+[32m2025-11-29 00:06:48.270[0m | [34m[1mDEBUG   [0m | [36mapp.services.social_scraper[0m:[36mscrape_bluesky[0m:[36m322[0m - [34m[1mBluesky search 'actualités': HTTP 403[0m
+[32m2025-11-29 00:06:48.278[0m | [34m[1mDEBUG   [0m | [36mapp.services.social_scraper[0m:[36mscrape_bluesky[0m:[36m322[0m - [34m[1mBluesky search 'news': HTTP 403[0m
+[32m2025-11-29 00:06:48.286[0m | [34m[1mDEBUG   [0m | [36mapp.services.social_scraper[0m:[36mscrape_bluesky[0m:[36m322[0m - [34m[1mBluesky search 'tech': HTTP 403[0m
+[32m2025-11-29 00:06:48.295[0m | [34m[1mDEBUG   [0m | [36mapp.services.social_scraper[0m:[36mscrape_bluesky[0m:[36m322[0m - [34m[1mBluesky search 'france': HTTP 403[0m
+[32m2025-11-29 00:06:48.304[0m | [34m[1mDEBUG   [0m | [36mapp.services.social_scraper[0m:[36mscrape_bluesky[0m:[36m322[0m - [34m[1mBluesky search 'politique': HTTP 403[0m
+[32m2025-11-29 00:06:48.304[0m | [32m[1mSUCCESS [0m | [36mapp.services.social_scraper[0m:[36mscrape_bluesky[0m:[36m369[0m - [32m[1m\U0001f98b Bluesky total: 0 posts[0m
+[32m2025-11-29 00:06:48.304[0m | [32m[1mSUCCESS [0m | [36mapp.services.pipeline[0m:[36m_collect_articles[0m:[36m259[0m - [32m[1m\U0001f98b Bluesky: 0 posts[0m
+[32m2025-11-29 00:06:48.616[0m | [1mINFO    [0m | [36mapp.services.social_scraper[0m:[36mscrape_youtube[0m:[36m287[0m - [1m\u2705 YouTube 'actualités france': 0 videos[0m
+[32m2025-11-29 00:06:49.360[0m | [1mINFO    [0m | [36mapp.services.social_scraper[0m:[36mscrape_youtube[0m:[36m287[0m - [1m\u2705 YouTube 'breaking news': 0 videos[0m
+[32m2025-11-29 00:06:50.137[0m | [1mINFO    [0m | [36mapp.services.social_scraper[0m:[36mscrape_youtube[0m:[36m287[0m - [1m\u2705 YouTube 'tech news': 0 videos[0m
+[32m2025-11-29 00:06:50.860[0m | [1mINFO    [0m | [36mapp.services.social_scraper[0m:[36mscrape_youtube[0m:[36m287[0m - [1m\u2705 YouTube 'science découverte': 0 videos[0m
+[32m2025-11-29 00:06:51.648[0m | [1mINFO    [0m | [36mapp.services.social_scraper[0m:[36mscrape_youtube[0m:[36m287[0m - [1m\u2705 YouTube 'économie finance': 0 videos[0m
+[32m2025-11-29 00:06:52.156[0m | [32m[1mSUCCESS [0m | [36mapp.services.social_scraper[0m:[36mscrape_youtube[0m:[36m294[0m - [32m[1m\U0001f4fa YouTube total: 0 videos[0m
+[32m2025-11-29 00:06:52.156[0m | [32m[1mSUCCESS [0m | [36mapp.services.pipeline[0m:[36m_collect_articles[0m:[36m269[0m - [32m[1m\U0001f4fa YouTube: 0 videos[0m
+[32m2025-11-29 00:06:52.156[0m | [1mINFO    [0m | [36mapp.services.pipeline[0m:[36m_collect_articles[0m:[36m275[0m - [1m\U0001f4da Scraping academic sources...[0m
+[32m2025-11-29 00:06:52.602[0m | [33m[1mWARNING [0m | [36mapp.services.social_scraper[0m:[36mscrape_arxiv[0m:[36m413[0m - [33m[1mArXiv cs.AI: HTTP 500[0m
+[32m2025-11-29 00:06:53.131[0m | [33m[1mWARNING [0m | [36mapp.services.social_scraper[0m:[36mscrape_arxiv[0m:[36m413[0m - [33m[1mArXiv cs.CL: HTTP 500[0m
+[32m2025-11-29 00:06:53.635[0m | [33m[1mWARNING [0m | [36mapp.services.social_scraper[0m:[36mscrape_arxiv[0m:[36m413[0m - [33m[1mArXiv cs.LG: HTTP 500[0m
+[32m2025-11-29 00:06:54.248[0m | [33m[1mWARNING [0m | [36mapp.services.social_scraper[0m:[36mscrape_arxiv[0m:[36m413[0m - [33m[1mArXiv physics: HTTP 500[0m
+[32m2025-11-29 00:06:54.692[0m | [33m[1mWARNING [0m | [36mapp.services.social_scraper[0m:[36mscrape_arxiv[0m:[36m413[0m - [33m[1mArXiv econ: HTTP 500[0m
+[32m2025-11-29 00:06:55.242[0m | [33m[1mWARNING [0m | [36mapp.services.social_scraper[0m:[36mscrape_arxiv[0m:[36m413[0m - [33m[1mArXiv q-bio: HTTP 500[0m
+[32m2025-11-29 00:06:55.242[0m | [32m[1mSUCCESS [0m | [36mapp.services.social_scraper[0m:[36mscrape_arxiv[0m:[36m461[0m - [32m[1m\U0001f4da ArXiv total: 0 papers[0m
+[32m2025-11-29 00:06:55.242[0m | [32m[1mSUCCESS [0m | [36mapp.services.pipeline[0m:[36m_collect_articles[0m:[36m283[0m - [32m[1m\U0001f4da ArXiv: 0 papers[0m
+[32m2025-11-29 00:06:55.330[0m | [33m[1mWARNING [0m | [36mapp.services.social_scraper[0m:[36mscrape_wikipedia_news[0m:[36m487[0m - [33m[1mWikipedia en: HTTP 403[0m
+[32m2025-11-29 00:06:55.419[0m | [33m[1mWARNING [0m | [36mapp.services.social_scraper[0m:[36mscrape_wikipedia_news[0m:[36m487[0m - [33m[1mWikipedia fr: HTTP 403[0m
+[32m2025-11-29 00:06:55.419[0m | [32m[1mSUCCESS [0m | [36mapp.services.social_scraper[0m:[36mscrape_wikipedia_news[0m:[36m528[0m - [32m[1m\U0001f4d6 Wikipedia total: 0 events[0m
+[32m2025-11-29 00:06:55.419[0m | [32m[1mSUCCESS [0m | [36mapp.services.pipeline[0m:[36m_collect_articles[0m:[36m291[0m - [32m[1m\U0001f4d6 Wikipedia: 0 events[0m
+[32m2025-11-29 00:06:55.419[0m | [32m[1mSUCCESS [0m | [36mapp.services.pipeline[0m:[36m_collect_articles[0m:[36m295[0m - [32m[1m\U0001f389 Total collected: 44 articles from all sources[0m
+[32m2025-11-29 00:06:55.419[0m | [1mINFO    [0m | [36mapp.services.pipeline[0m:[36mrun_full_pipeline[0m:[36m102[0m - [1m\U0001f570\ufe0f Step 1.5: Fetching recent articles for RAG...[0m
+[32m2025-11-29 00:06:55.431[0m | [1mINFO    [0m | [36mapp.db.qdrant_client[0m:[36mget_recent_articles[0m:[36m373[0m - [1mFetched 40 recent articles (last 24h)[0m
+[32m2025-11-29 00:06:55.431[0m | [1mINFO    [0m | [36mapp.services.pipeline[0m:[36mrun_full_pipeline[0m:[36m107[0m - [1m\U0001f4da Total articles for processing: 84 (44 new + 40 recent)[0m
+[32m2025-11-29 00:06:55.431[0m | [32m[1mSUCCESS [0m | [36mapp.services.pipeline[0m:[36mrun_full_pipeline[0m:[36m113[0m - [32m[1m\u2705 Processing 84 articles[0m
+[32m2025-11-29 00:06:55.431[0m | [1mINFO    [0m | [36mapp.services.pipeline[0m:[36mrun_full_pipeline[0m:[36m116[0m - [1m\U0001f9ee Step 2: Computing embeddings for deduplication...[0m
+[32m2025-11-29 00:07:33.958[0m | [32m[1mSUCCESS [0m | [36mapp.services.pipeline[0m:[36mrun_full_pipeline[0m:[36m126[0m - [32m[1m\u2705 Generated 84 embeddings (1024-dim)[0m
+[32m2025-11-29 00:07:33.958[0m | [1mINFO    [0m | [36mapp.services.pipeline[0m:[36mrun_full_pipeline[0m:[36m129[0m - [1m\U0001f50d Step 3: Intelligent deduplication...[0m
+[32m2025-11-29 00:07:33.961[0m | [1mINFO    [0m | [36mapp.services.deduplication[0m:[36mfind_duplicate_groups[0m:[36m97[0m - [1mFound 20 duplicate groups[0m
+[32m2025-11-29 00:07:33.962[0m | [1mINFO    [0m | [36mapp.services.deduplication[0m:[36mdeduplicate_articles[0m:[36m197[0m - [1mDeduplication: 84 articles \u2192 64 unique (20 removed)[0m
+[32m2025-11-29 00:07:33.962[0m | [32m[1mSUCCESS [0m | [36mapp.services.pipeline[0m:[36mrun_full_pipeline[0m:[36m139[0m - [32m[1m\u2705 64 unique articles (20 duplicates removed)[0m
+[32m2025-11-29 00:07:55.951[0m | [1mINFO    [0m | [36mapp.services.pipeline[0m:[36mrun_full_pipeline[0m:[36m147[0m - [1m\U0001f517 Step 4: Clustering with HDBSCAN...[0m
+[32m2025-11-29 00:07:55.974[0m | [1mINFO    [0m | [36mapp.ml.clustering[0m:[36mcluster_articles[0m:[36m120[0m - [1m\U0001f4ca Initial HDBSCAN: 5 clusters[0m
+[32m2025-11-29 00:07:55.976[0m | [33m[1mWARNING [0m | [36mapp.ml.clustering[0m:[36m_validate_and_filter_clusters[0m:[36m71[0m - [33m[1m\u26a0\ufe0f Cluster 0 removed (coherence=0.462 < 0.55)[0m
+[32m2025-11-29 00:07:55.976[0m | [33m[1mWARNING [0m | [36mapp.ml.clustering[0m:[36m_validate_and_filter_clusters[0m:[36m71[0m - [33m[1m\u26a0\ufe0f Cluster 1 removed (coherence=0.435 < 0.55)[0m
+[32m2025-11-29 00:07:55.978[0m | [34m[1mDEBUG   [0m | [36mapp.ml.clustering[0m:[36m_validate_and_filter_clusters[0m:[36m73[0m - [34m[1m\u2705 Cluster 2 validated (coherence=0.953)[0m
+[32m2025-11-29 00:07:55.979[0m | [33m[1mWARNING [0m | [36mapp.ml.clustering[0m:[36m_validate_and_filter_clusters[0m:[36m71[0m - [33m[1m\u26a0\ufe0f Cluster 3 removed (coherence=0.518 < 0.55)[0m
+[32m2025-11-29 00:07:55.980[0m | [33m[1mWARNING [0m | [36mapp.ml.clustering[0m:[36m_validate_and_filter_clusters[0m:[36m71[0m - [33m[1m\u26a0\ufe0f Cluster 4 removed (coherence=0.547 < 0.55)[0m
+[32m2025-11-29 00:07:55.980[0m | [1mINFO    [0m | [36mapp.ml.clustering[0m:[36m_validate_and_filter_clusters[0m:[36m76[0m - [1m\U0001f50d Filtered 4 incoherent clusters[0m
+[32m2025-11-29 00:07:55.981[0m | [1mINFO    [0m | [36mapp.ml.clustering[0m:[36mcluster_articles[0m:[36m151[0m - [1m\u2705 Clustering complete: 1 coherent clusters, 42 noise points[0m
+[32m2025-11-29 00:07:55.981[0m | [32m[1mSUCCESS [0m | [36mapp.services.pipeline[0m:[36mrun_full_pipeline[0m:[36m152[0m - [32m[1m\u2705 Found 1 thematic clusters[0m
+[32m2025-11-29 00:07:55.981[0m | [1mINFO    [0m | [36mapp.services.pipeline[0m:[36mrun_full_pipeline[0m:[36m155[0m - [1m\U0001f578\ufe0f Step 5: Building Knowledge Graph...[0m
+[32m2025-11-29 00:07:56.640[0m | [1mINFO    [0m | [36mapp.ml.knowledge_graph[0m:[36mbuild_knowledge_graph[0m:[36m152[0m - [1m\u2705 Knowledge graph: 50 nodes, 70 edges[0m
+[32m2025-11-29 00:07:56.640[0m | [32m[1mSUCCESS [0m | [36mapp.services.pipeline[0m:[36mrun_full_pipeline[0m:[36m161[0m - [32m[1m\u2705 Graph: 50 entities, 70 relations[0m
+[32m2025-11-29 00:07:56.640[0m | [1mINFO    [0m | [36mapp.services.pipeline[0m:[36mrun_full_pipeline[0m:[36m164[0m - [1m\u270d\ufe0f Step 6: Generating syntheses with Ollama...[0m
+[32m2025-11-29 00:07:56.640[0m | [1mINFO    [0m | [36mapp.services.pipeline[0m:[36m_generate_syntheses[0m:[36m331[0m - [1m\u270d\ufe0f Generating synthesis for cluster 2 (22 articles)[0m
+[32m2025-11-29 00:07:56.640[0m | [1mINFO    [0m | [36mapp.ml.llm[0m:[36minitialize[0m:[36m23[0m - [1mConnecting to OpenRouter with model openai/gpt-5.1[0m
+[32m2025-11-29 00:07:57.037[0m | [32m[1mSUCCESS [0m | [36mapp.ml.llm[0m:[36minitialize[0m:[36m28[0m - [32m[1m\u2705 OpenRouter client initialized[0m
+[32m2025-11-29 00:08:08.609[0m | [32m[1mSUCCESS [0m | [36mapp.services.pipeline[0m:[36mrun_full_pipeline[0m:[36m167[0m - [32m[1m\u2705 Generated 1 AI syntheses[0m
+[32m2025-11-29 00:08:08.609[0m | [1mINFO    [0m | [36mapp.services.pipeline[0m:[36mrun_full_pipeline[0m:[36m170[0m - [1m\U0001f4be Step 7: Storing in Qdrant...[0m
+[32m2025-11-29 00:08:08.724[0m | [32m[1mSUCCESS [0m | [36mapp.db.qdrant_client[0m:[36mupsert_articles[0m:[36m160[0m - [32m[1m\u2705 Upserted 64 articles to Qdrant[0m
+[32m2025-11-29 00:08:08.725[0m | [32m[1mSUCCESS [0m | [36mapp.services.pipeline[0m:[36mrun_full_pipeline[0m:[36m172[0m - [32m[1m\u2705 Articles stored in vector database[0m
+[32m2025-11-29 00:08:08.725[0m | [1mINFO    [0m | [36mapp.services.pipeline[0m:[36mrun_full_pipeline[0m:[36m176[0m - [1m\U0001f4be Step 7.5: Storing syntheses in Qdrant...[0m
+[32m2025-11-29 00:08:09.684[0m | [32m[1mSUCCESS [0m | [36mapp.db.qdrant_client[0m:[36mupsert_synthesis[0m:[36m445[0m - [32m[1m\u2705 Upserted synthesis 'Du terrain de sport aux salles de conseil : actual...'[0m
+[32m2025-11-29 00:08:09.684[0m | [32m[1mSUCCESS [0m | [36mapp.services.pipeline[0m:[36m_store_syntheses[0m:[36m395[0m - [32m[1m\u2705 Stored 1 syntheses[0m
+[32m2025-11-29 00:08:09.684[0m | [32m[1mSUCCESS [0m | [36mapp.services.pipeline[0m:[36mrun_full_pipeline[0m:[36m178[0m - [32m[1m\u2705 1 syntheses stored in vector database[0m
+[32m2025-11-29 00:08:09.684[0m | [32m[1mSUCCESS [0m | [36mapp.services.pipeline[0m:[36mrun_full_pipeline[0m:[36m195[0m - [32m[1m\U0001f389 Pipeline completed in 196.0s![0m
+[32m2025-11-29 00:08:09.684[0m | [1mINFO    [0m | [36mapp.services.pipeline[0m:[36mrun_full_pipeline[0m:[36m196[0m - [1m\U0001f4ca Stats: {'total_scraped': 44, 'unique_articles': 64, 'deduplication_rate': 0.45454545454545453, 'clusters_found': 1, 'syntheses_generated': 1, 'sources_used': 26, 'languages': ['de', 'fr', 'auto', 'it', 'en', 'es']}[0m
+ðŸš€ Starting FAST Pipeline Test...
+ðŸ” Testing Qdrant RAG fetch...
+âœ… Qdrant returned 91 recent articles
+
+âœ… FAST Pipeline Complete!
+ðŸ“Š Articles Scraped: 44
+ðŸ“Š Unique Articles (with RAG): 64
+ðŸ“Š Clusters Found: 1
+ðŸ“Š Syntheses Generated: 1

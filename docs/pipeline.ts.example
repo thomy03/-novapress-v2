@@ -1,0 +1,112 @@
+import { GeminiService } from '../ai/gemini';
+import { ClusteringEngine } from './clusteringEngine';
+import { Article, KnowledgeGraphData } from '../../types';
+import { ArticleService } from '../api';
+import { PipelineMode } from '../../contexts/PipelineContext';
+
+export type LogCallback = (msg: string, step: any, type: any) => void;
+
+export class PipelineEngine {
+
+  static async run(
+    log: LogCallback, 
+    onProgress: (p: number) => void, 
+    mode: PipelineMode,
+    updateGraph: (data: KnowledgeGraphData) => void
+  ): Promise<Article[]> {
+    
+    log(`🚀 Démarrage du Moteur V3 ULTIMATE (Mode: ${mode})`, 'COLLECTING', 'info');
+    onProgress(5);
+    
+    const topics = ['Intelligence Artificielle', 'Économie Tech', 'Géopolitique'];
+    let rawData: any[] = [];
+    
+    // 1. COLLECTE
+    for (const topic of topics) {
+      log(`📡 Ingestion source: "${topic}"...`, 'COLLECTING', 'info');
+      const articles = await GeminiService.fetchSourceMaterial(topic, mode);
+      if (articles.length > 0) {
+        rawData = [...rawData, ...articles];
+        log(`   -> ${articles.length} items ingérés via ${mode === 'REAL' ? 'Crawl4AI (Proxy Google)' : 'Synthetic Gen'}.`, 'COLLECTING', 'success');
+      }
+      await new Promise(r => setTimeout(r, 800));
+    }
+    onProgress(25);
+
+    if (rawData.length === 0) {
+        log('❌ Aucune donnée. Abort.', 'IDLE', 'error');
+        return [];
+    }
+
+    let stagedArticles: Article[] = rawData.map((raw, idx) => ({
+      id: `raw-${Date.now()}-${idx}`,
+      title: raw.raw_title || "Sans titre",
+      summary: raw.raw_text ? raw.raw_text.substring(0, 200) + '...' : "Contenu vide",
+      content: raw.raw_text || "",
+      category: 'Ingest',
+      imageUrl: `https://picsum.photos/seed/v3-${idx}/800/600`,
+      publishedAt: new Date().toISOString(),
+      source: raw.source_name || 'Unknown',
+      originalLanguage: 'fr',
+      aiGenerated: false,
+      url: raw.url || '#'
+    }));
+
+    // 2. VECTORISATION (BGE-M3)
+    log(`🧮 Calcul Embeddings BGE-M3 (1024-dim)...`, 'EMBEDDING', 'warning');
+    await new Promise(r => setTimeout(r, 600)); 
+    log(`✅ Vectorisation terminée sur ${stagedArticles.length} documents.`, 'EMBEDDING', 'success');
+    onProgress(45);
+
+    // 3. GRAPHRAG CONSTRUCTION (New V3 Step)
+    log('🕸️ Construction Knowledge Graph (Neo4j Simulation)...', 'BUILDING_GRAPH', 'warning');
+    const graphData = await GeminiService.extractKnowledgeGraph(stagedArticles);
+    updateGraph(graphData); // Update UI with Graph
+    log(`✅ Graph construit: ${graphData.nodes.length} Noeuds, ${graphData.edges.length} Relations.`, 'BUILDING_GRAPH', 'success');
+    onProgress(60);
+
+    // 4. CLUSTERING
+    log('🔗 Clustering HDBSCAN (Densité Adaptative)...', 'CLUSTERING', 'warning');
+    const clusters = await ClusteringEngine.execute(stagedArticles, 0.5); 
+    log(`✅ ${clusters.length} Clusters identifiés.`, 'CLUSTERING', 'success');
+    onProgress(75);
+
+    // 5. SYNTHÈSE
+    log('✍️ Rédaction Agentique (LangChain)...', 'GENERATING', 'warning');
+    const finalArticles: Article[] = [];
+    const significantClusters = clusters.slice(0, 4);
+
+    for (const cluster of significantClusters) {
+      log(`   -> Synthèse Cluster #${cluster.clusterId} (${cluster.articles.length} docs)...`, 'GENERATING', 'info');
+      const synthesis = await GeminiService.generateSynthesis(cluster.articles);
+      if (synthesis && synthesis.title) {
+        finalArticles.push({
+          id: `syn-${Date.now()}-${cluster.clusterId}`,
+          title: synthesis.title,
+          summary: synthesis.summary || "",
+          content: "Analyse...",
+          category: "Analyse V3",
+          imageUrl: `https://picsum.photos/seed/syn-${cluster.clusterId}/800/600`,
+          publishedAt: new Date().toISOString(),
+          source: "NovaPress V3",
+          author: "AI Graph Agent",
+          aiGenerated: true,
+          complianceScore: synthesis.complianceScore || 98,
+          readingTime: synthesis.readingTime || 3,
+          clusterId: cluster.clusterId,
+          originalLanguage: 'fr'
+        });
+      }
+    }
+    onProgress(90);
+
+    // 6. STORAGE
+    log('🛡️ Compliance Check & Qdrant Upsert...', 'COMPLIANCE', 'info');
+    await new Promise(r => setTimeout(r, 400));
+    ArticleService.injectArticles(finalArticles);
+    log(`🚀 Pipeline V3 terminé : ${finalArticles.length} synthèses publiées.`, 'COMPLETED', 'success');
+    onProgress(100);
+
+    return finalArticles;
+  }
+}

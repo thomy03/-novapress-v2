@@ -1,0 +1,65 @@
+[32m2025-11-29 00:17:59.672[0m | [1mINFO    [0m | [36mapp.ml.embeddings[0m:[36minitialize[0m:[36m25[0m - [1mLoading BGE-M3 model: BAAI/bge-m3[0m
+[32m2025-11-29 00:18:05.624[0m | [32m[1mSUCCESS [0m | [36mapp.ml.embeddings[0m:[36minitialize[0m:[36m30[0m - [32m[1m\u2705 BGE-M3 loaded on cpu[0m
+[32m2025-11-29 00:18:05.625[0m | [1mINFO    [0m | [36mapp.ml.knowledge_graph[0m:[36minitialize[0m:[36m25[0m - [1mLoading spaCy model: fr_core_news_lg[0m
+[32m2025-11-29 00:18:11.311[0m | [32m[1mSUCCESS [0m | [36mapp.ml.knowledge_graph[0m:[36minitialize[0m:[36m27[0m - [32m[1m\u2705 spaCy model loaded[0m
+[32m2025-11-29 00:18:11.311[0m | [1mINFO    [0m | [36mapp.db.qdrant_client[0m:[36minitialize[0m:[36m34[0m - [1mConnecting to Qdrant at http://localhost:6333[0m
+[32m2025-11-29 00:18:12.265[0m | [1mINFO    [0m | [36mapp.db.qdrant_client[0m:[36minitialize[0m:[36m56[0m - [1mCollection 'novapress_articles' already exists[0m
+[32m2025-11-29 00:18:12.265[0m | [1mINFO    [0m | [36mapp.db.qdrant_client[0m:[36minitialize[0m:[36m70[0m - [1mCollection 'novapress_syntheses' already exists[0m
+[32m2025-11-29 00:18:12.265[0m | [32m[1mSUCCESS [0m | [36mapp.db.qdrant_client[0m:[36minitialize[0m:[36m72[0m - [32m[1m\u2705 Qdrant connected[0m
+[32m2025-11-29 00:18:12.294[0m | [1mINFO    [0m | [36mapp.db.qdrant_client[0m:[36mget_recent_articles[0m:[36m373[0m - [1mFetched 100 recent articles (last 48h)[0m
+[32m2025-11-29 00:18:12.294[0m | [1mINFO    [0m | [36mapp.services.pipeline[0m:[36mrun_full_pipeline[0m:[36m82[0m - [1m\U0001f680 NovaPress Pipeline V4 ULTIMATE (Mode: SCRAPE)[0m
+[32m2025-11-29 00:18:12.294[0m | [1mINFO    [0m | [36mapp.services.pipeline[0m:[36mrun_full_pipeline[0m:[36m97[0m - [1m\U0001f4e1 Step 1: Advanced Web Scraping...[0m
+[32m2025-11-29 00:18:12.294[0m | [1mINFO    [0m | [36mapp.services.pipeline[0m:[36m_collect_articles[0m:[36m220[0m - [1m\U0001f4f0 Scraping world news sources...[0m
+[32m2025-11-29 00:18:12.294[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mscrape_multiple_sources[0m:[36m912[0m - [1m\U0001f50d Discovering articles from 53 sources...[0m
+[32m2025-11-29 00:18:13.122[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 10 articles from Le Monde[0m
+[32m2025-11-29 00:18:13.702[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from Le Figaro[0m
+[32m2025-11-29 00:18:14.076[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 5 articles from Libération[0m
+[32m2025-11-29 00:18:16.016[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from Le Parisien[0m
+[32m2025-11-29 00:18:17.703[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from France Info[0m
+[32m2025-11-29 00:18:18.038[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from Les Echos[0m
+[32m2025-11-29 00:18:18.089[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m739[0m - [33m[1mScraping not allowed by robots.txt: https://www.latribune.fr[0m
+[32m2025-11-29 00:18:18.136[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m739[0m - [33m[1mScraping not allowed by robots.txt: https://www.futura-sciences.com[0m
+[32m2025-11-29 00:18:19.577[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from Frandroid[0m
+[32m2025-11-29 00:18:19.612[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m739[0m - [33m[1mScraping not allowed by robots.txt: https://www.lesoir.be[0m
+[32m2025-11-29 00:18:20.843[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 8 articles from Der Spiegel[0m
+[32m2025-11-29 00:18:21.289[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 10 articles from Bild[0m
+[32m2025-11-29 00:18:21.476[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 10 articles from El País[0m
+[32m2025-11-29 00:18:21.754[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 5 articles from El Mundo[0m
+[32m2025-11-29 00:18:22.716[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from Corriere della Sera[0m
+[32m2025-11-29 00:18:23.088[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 6 articles from La Repubblica[0m
+[32m2025-11-29 00:18:23.245[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 9 articles from BBC News[0m
+[32m2025-11-29 00:18:23.557[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 10 articles from The Guardian[0m
+[32m2025-11-29 00:18:24.398[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 10 articles from Financial Times[0m
+[32m2025-11-29 00:18:24.421[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36m_check_robots_txt[0m:[36m663[0m - [33m[1mCould not read robots.txt for edition.cnn.com: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1028)>[0m
+[32m2025-11-29 00:18:24.681[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 8 articles from CNN[0m
+[32m2025-11-29 00:18:25.585[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 10 articles from The New York Times[0m
+[32m2025-11-29 00:18:35.744[0m | [31m[1mERROR   [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m793[0m - [31m[1mFailed to discover articles from https://www.washingtonpost.com: [0m
+[32m2025-11-29 00:18:35.744[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from The Washington Post[0m
+[32m2025-11-29 00:18:36.721[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from Reuters[0m
+[32m2025-11-29 00:18:36.930[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 7 articles from TechCrunch[0m
+[32m2025-11-29 00:18:37.436[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 9 articles from The Verge[0m
+[32m2025-11-29 00:18:37.724[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 7 articles from Wired[0m
+[32m2025-11-29 00:18:40.399[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 8 articles from Bloomberg[0m
+[32m2025-11-29 00:18:40.687[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 9 articles from Al Jazeera[0m
+[32m2025-11-29 00:18:44.686[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from The Asahi Shimbun[0m
+[32m2025-11-29 00:18:45.657[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 10 articles from The Times of India[0m
+[32m2025-11-29 00:18:49.587[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from O Globo[0m
+[32m2025-11-29 00:18:49.800[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 10 articles from The Sydney Morning Herald[0m
+[32m2025-11-29 00:18:50.599[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 10 articles from Science Daily[0m
+[32m2025-11-29 00:18:50.869[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 9 articles from L'Équipe[0m
+[32m2025-11-29 00:18:51.249[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 10 articles from ESPN[0m
+[32m2025-11-29 00:18:51.559[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 6 articles from Marca[0m
+[32m2025-11-29 00:18:52.032[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from Slate FR[0m
+[32m2025-11-29 00:18:52.576[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from The Conversation[0m
+[32m2025-11-29 00:18:53.660[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from HuffPost FR[0m
+[32m2025-11-29 00:18:54.053[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from Reporterre[0m
+[32m2025-11-29 00:18:54.148[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m739[0m - [33m[1mScraping not allowed by robots.txt: https://www.scmp.com[0m
+[32m2025-11-29 00:18:54.203[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m739[0m - [33m[1mScraping not allowed by robots.txt: https://www.japantimes.co.jp[0m
+[32m2025-11-29 00:18:55.672[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m739[0m - [33m[1mScraping not allowed by robots.txt: https://www.koreaherald.com[0m
+[32m2025-11-29 00:18:55.681[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36m_check_robots_txt[0m:[36m663[0m - [33m[1mCould not read robots.txt for rt.com: <urlopen error [Errno 11001] getaddrinfo failed>[0m
+[32m2025-11-29 00:18:55.691[0m | [31m[1mERROR   [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m793[0m - [31m[1mFailed to discover articles from https://www.rt.com: [Errno 11001] getaddrinfo failed[0m
+[32m2025-11-29 00:18:55.691[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 0 articles from RT (Russia Today)[0m
+[32m2025-11-29 00:18:56.262[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 8 articles from Deutsche Welle[0m
+[32m2025-11-29 00:18:56.334[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m739[0m - [33m[1mScraping not allowed by robots.txt: https://www.rfi.fr/fr/[0m
+[32m2025-11-29 00:18:56.425[0m | [33m[1mWARNING [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m739[0m - [33m[1mScraping not allowed by robots.txt: https://www.france24.com/fr/[0m
+[32m2025-11-29 00:18:56.995[0m | [1mINFO    [0m | [36mapp.services.advanced_scraper[0m:[36mdiscover_article_urls[0m:[36m798[0m - [1mDiscovered 9 articles from ABC News Australia[0m

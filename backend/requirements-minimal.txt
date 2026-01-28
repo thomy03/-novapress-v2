@@ -1,0 +1,28 @@
+# NovaPress AI v2 - Requirements MINIMAUX pour test pipeline
+# Python 3.8+
+
+# FastAPI Core (API REST)
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+pydantic-settings==2.6.0
+
+# Database essentials
+sqlalchemy==2.0.36
+asyncpg==0.30.0
+redis==5.2.0
+qdrant-client==1.12.1
+
+# Web Scraping (essentiels seulement)
+httpx==0.28.1
+beautifulsoup4==4.12.3
+newspaper3k==0.2.8
+feedparser==6.0.11
+
+# Utilities
+python-dotenv==1.0.1
+loguru==0.7.3
+pyyaml==6.0.2
+
+# Auth (si besoin)
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4

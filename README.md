@@ -18,12 +18,13 @@ The platform features a professional newspaper-style design inspired by leading 
 - **Images**: Dynamic content from Picsum Photos
 - **Animations**: CSS keyframes for ticker and live indicators
 
-### Backend (Planned Integration)
-- **API**: FastAPI (Python)
-- **Database**: PostgreSQL with SQLAlchemy
-- **AI/ML**: BGE-M3 embeddings, HDBSCAN clustering
+### Backend
+- **API**: FastAPI with async support
+- **Database**: SQLite (dev) / PostgreSQL (production)
+- **Vector DB**: Qdrant for semantic search
+- **AI/ML**: BGE-M3 embeddings, HDBSCAN clustering, spaCy NER
+- **LLM**: OpenRouter (DeepSeek/Mistral) for synthesis
 - **Cache**: Redis
-- **Search**: FAISS vector store
 
 ## 🎨 Design Philosophy
 

@@ -1,0 +1,181 @@
+import React, { useState } from 'react';
+import { usePipeline } from '../../contexts/PipelineContext';
+import { Header } from '../layout/Header';
+import { KnowledgeGraphView } from '../admin/KnowledgeGraphView';
+
+export const AdminDashboard: React.FC = () => {
+  const { startCollection, currentStep, logs, progress, mode, setMode, graphData } = usePipeline();
+  const isRunning = currentStep !== 'IDLE' && currentStep !== 'COMPLETED';
+  const [activeTab, setActiveTab] = useState<'LOGS' | 'GRAPH'>('LOGS');
+
+  // Auto-switch to graph when data arrives
+  React.useEffect(() => {
+    if (currentStep === 'BUILDING_GRAPH' && graphData.nodes.length > 0) {
+      setActiveTab('GRAPH');
+    }
+  }, [currentStep, graphData]);
+
+  return (
+    <div className="min-h-screen bg-slate-900 text-white font-mono">
+      <Header />
+      
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="flex flex-col md:flex-row justify-between items-end mb-8 border-b border-slate-700 pb-4">
+          <div>
+            <h1 className="text-3xl font-bold text-blue-500 mb-1">SYSTEM_ADMIN_V3</h1>
+            <p className="text-sm text-slate-400">ULTIMATE STACK :: QDRANT + GRAPHRAG :: ACTIVE</p>
+          </div>
+          <div className="flex items-center space-x-6 mt-4 md:mt-0">
+             <div className="text-right">
+                <p className="text-xs text-slate-500">ARCHITECTURE</p>
+                <p className="text-green-400 font-bold">HYBRID_CLOUD</p>
+             </div>
+             <div className="text-right">
+                <p className="text-xs text-slate-500">VECTOR DB</p>
+                <p className="text-green-400 font-bold">QDRANT_SIM</p>
+             </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          
+          {/* CONTROL PANEL */}
+          <div className="lg:col-span-1 space-y-6">
+             
+             {/* MODE SELECTION */}
+             <div className="bg-slate-800 border border-slate-700 p-6 rounded-lg">
+                <h2 className="text-sm font-bold text-slate-300 uppercase mb-4 border-b border-slate-700 pb-2">Config Injection</h2>
+                
+                <div className="flex bg-slate-900 p-1 rounded-lg mb-4">
+                  <button 
+                    onClick={() => !isRunning && setMode('SIMULATION')}
+                    className={`flex-1 py-2 text-xs font-bold rounded transition-all ${
+                      mode === 'SIMULATION' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'
+                    }`}
+                  >
+                    SYNTHETIC
+                  </button>
+                  <button 
+                    onClick={() => !isRunning && setMode('REAL')}
+                    className={`flex-1 py-2 text-xs font-bold rounded transition-all ${
+                      mode === 'REAL' ? 'bg-red-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'
+                    }`}
+                  >
+                    REAL WEB (CRAWL)
+                  </button>
+                </div>
+
+                <p className="text-[10px] text-slate-500 leading-relaxed mb-4">
+                  Architecture V3 Ultime. Le mode "Real Web" utilise Gemini Search Grounding pour émuler le scraper Crawl4AI. Les données sont ensuite processées par GraphRAG.
+                </p>
+             </div>
+
+             {/* OPERATIONS */}
+             <div className="bg-slate-800 border border-slate-700 p-6 rounded-lg">
+                <h2 className="text-sm font-bold text-slate-300 uppercase mb-4 border-b border-slate-700 pb-2">Control Unit</h2>
+                
+                <button
+                  onClick={startCollection}
+                  disabled={isRunning}
+                  className={`w-full py-4 px-6 rounded font-bold text-sm uppercase tracking-wider transition-all flex items-center justify-center space-x-2 ${
+                    isRunning 
+                    ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                    : mode === 'REAL' 
+                      ? 'bg-red-600 hover:bg-red-500 text-white shadow-[0_0_20px_rgba(220,38,38,0.3)]'
+                      : 'bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_20px_rgba(37,99,235,0.3)]'
+                  }`}
+                >
+                  {isRunning ? (
+                    <span>PROCESSING...</span>
+                  ) : (
+                    <span>INITIATE V3 RUN</span>
+                  )}
+                </button>
+
+                <div className="mt-6 space-y-3">
+                   <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-400">GRAPH DB</span>
+                      <span className={graphData.nodes.length > 0 ? "text-green-400 animate-pulse" : "text-slate-600"}>
+                        {graphData.nodes.length > 0 ? 'NEO4J ACTIVE' : 'IDLE'}
+                      </span>
+                   </div>
+                   <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-400">RAG TYPE</span>
+                      <span className="text-blue-400">GRAPH_RAG</span>
+                   </div>
+                </div>
+             </div>
+
+             {/* METRICS */}
+             <div className="bg-slate-800 border border-slate-700 p-6 rounded-lg">
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-slate-400">Pipeline Progress</span>
+                  <span className="text-blue-400">{progress}%</span>
+                </div>
+                <div className="w-full bg-slate-900 h-2 rounded-full">
+                  <div 
+                    className={`h-full rounded-full transition-all duration-300 ${mode === 'REAL' ? 'bg-red-500' : 'bg-blue-600'}`} 
+                    style={{ width: `${progress}%` }}
+                  ></div>
+                </div>
+             </div>
+          </div>
+
+          {/* VISUALIZATION / LOGS */}
+          <div className="lg:col-span-2">
+             <div className="bg-black border border-slate-700 rounded-lg h-[600px] flex flex-col overflow-hidden relative shadow-2xl">
+                
+                {/* TABS */}
+                <div className="bg-slate-800 px-4 py-0 flex items-center border-b border-slate-700">
+                   <div className="flex space-x-4">
+                      <button 
+                        onClick={() => setActiveTab('LOGS')}
+                        className={`py-3 text-xs font-bold border-b-2 transition-colors ${
+                          activeTab === 'LOGS' ? 'border-blue-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'
+                        }`}
+                      >
+                        TERMINAL OUTPUT
+                      </button>
+                      <button 
+                        onClick={() => setActiveTab('GRAPH')}
+                        className={`py-3 text-xs font-bold border-b-2 transition-colors flex items-center space-x-2 ${
+                          activeTab === 'GRAPH' ? 'border-green-500 text-white' : 'border-transparent text-slate-500 hover:text-slate-300'
+                        }`}
+                      >
+                        <span>KNOWLEDGE GRAPH</span>
+                        {graphData.nodes.length > 0 && <span className="w-2 h-2 rounded-full bg-green-500"></span>}
+                      </button>
+                   </div>
+                </div>
+                
+                {/* CONTENT */}
+                <div className="flex-grow relative">
+                   {activeTab === 'LOGS' ? (
+                      <div className="absolute inset-0 p-4 overflow-y-auto font-mono text-xs space-y-2 scrollbar-thin scrollbar-thumb-slate-700">
+                        {logs.length === 0 && <span className="text-slate-600">Waiting for V3 initiation...</span>}
+                        {logs.map((log) => (
+                          <div key={log.id} className="flex gap-3 animate-fade-in">
+                            <span className="text-slate-600 min-w-[80px]">{log.timestamp}</span>
+                            <span className={`break-all ${
+                              log.type === 'error' ? 'text-red-500' : 
+                              log.type === 'warning' ? 'text-yellow-500' : 
+                              log.type === 'success' ? 'text-green-400' : 'text-blue-300'
+                            }`}>
+                              {log.type === 'success' ? '✓' : '>'} {log.message}
+                            </span>
+                          </div>
+                        ))}
+                        {isRunning && <div className="animate-pulse text-blue-500">_</div>}
+                      </div>
+                   ) : (
+                      <KnowledgeGraphView data={graphData} />
+                   )}
+                </div>
+             </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+};

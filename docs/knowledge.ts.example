@@ -1,0 +1,196 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { KnowledgeGraphData, GraphNode, GraphEdge } from '../../types';
+
+interface KnowledgeGraphViewProps {
+  data: KnowledgeGraphData;
+}
+
+export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({ data }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [simulationData, setSimulationData] = useState<{
+    nodes: (GraphNode & { x: number; y: number; vx: number; vy: number })[];
+    edges: GraphEdge[];
+  } | null>(null);
+
+  // Initialize simulation positions
+  useEffect(() => {
+    if (data.nodes.length === 0) return;
+
+    const width = 800;
+    const height = 600;
+
+    const initNodes = data.nodes.map(node => ({
+      ...node,
+      x: Math.random() * width,
+      y: Math.random() * height,
+      vx: 0,
+      vy: 0
+    }));
+
+    setSimulationData({ nodes: initNodes, edges: data.edges });
+  }, [data]);
+
+  // Physics Simulation Loop
+  useEffect(() => {
+    if (!simulationData || !canvasRef.current) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const width = canvas.width;
+    const height = canvas.height;
+
+    let animationFrameId: number;
+
+    const nodes = simulationData.nodes;
+    const edges = simulationData.edges;
+
+    const tick = () => {
+      ctx.clearRect(0, 0, width, height);
+
+      // Physics constants
+      const repulsion = 500;
+      const springLength = 100;
+      const springStrength = 0.05;
+      const damping = 0.9;
+      const centerStrength = 0.02;
+
+      // 1. Apply Forces
+      for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
+
+        // Repulsion (Node vs Node)
+        for (let j = i + 1; j < nodes.length; j++) {
+          const other = nodes[j];
+          const dx = node.x - other.x;
+          const dy = node.y - other.y;
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+          const force = repulsion / (dist * dist);
+          
+          const fx = (dx / dist) * force;
+          const fy = (dy / dist) * force;
+
+          node.vx += fx;
+          node.vy += fy;
+          other.vx -= fx;
+          other.vy -= fy;
+        }
+
+        // Center Attraction (Gravity)
+        node.vx += (width / 2 - node.x) * centerStrength;
+        node.vy += (height / 2 - node.y) * centerStrength;
+      }
+
+      // Spring Force (Edges)
+      edges.forEach(edge => {
+        const source = nodes.find(n => n.id === edge.source);
+        const target = nodes.find(n => n.id === edge.target);
+
+        if (source && target) {
+          const dx = target.x - source.x;
+          const dy = target.y - source.y;
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+          const force = (dist - springLength) * springStrength;
+          
+          const fx = (dx / dist) * force;
+          const fy = (dy / dist) * force;
+
+          source.vx += fx;
+          source.vy += fy;
+          target.vx -= fx;
+          target.vy -= fy;
+        }
+      });
+
+      // 2. Update Positions & Draw
+      
+      // Draw Edges first (behind nodes)
+      ctx.lineWidth = 1;
+      edges.forEach(edge => {
+        const source = nodes.find(n => n.id === edge.source);
+        const target = nodes.find(n => n.id === edge.target);
+        if (source && target) {
+          ctx.beginPath();
+          ctx.moveTo(source.x, source.y);
+          ctx.lineTo(target.x, target.y);
+          ctx.strokeStyle = 'rgba(100, 116, 139, 0.4)'; // Slate-500 transparent
+          ctx.stroke();
+          
+          // Label (Optional, small)
+          const midX = (source.x + target.x) / 2;
+          const midY = (source.y + target.y) / 2;
+          ctx.fillStyle = '#94a3b8';
+          ctx.font = '8px Inter';
+          ctx.fillText(edge.label, midX, midY);
+        }
+      });
+
+      // Draw Nodes
+      nodes.forEach(node => {
+        // Velocity update
+        node.vx *= damping;
+        node.vy *= damping;
+        node.x += node.vx;
+        node.y += node.vy;
+
+        // Boundary checks
+        node.x = Math.max(20, Math.min(width - 20, node.x));
+        node.y = Math.max(20, Math.min(height - 20, node.y));
+
+        // Draw Circle
+        ctx.beginPath();
+        const radius = 4 + (node.val || 1) * 2;
+        ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
+        
+        // Color by type
+        if (node.type === 'ORG') ctx.fillStyle = '#3b82f6'; // Blue
+        else if (node.type === 'PERSON') ctx.fillStyle = '#ef4444'; // Red
+        else if (node.type === 'LOCATION') ctx.fillStyle = '#22c55e'; // Green
+        else ctx.fillStyle = '#eab308'; // Yellow
+
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Text Label
+        ctx.fillStyle = '#fff';
+        ctx.font = '10px Inter';
+        ctx.textAlign = 'center';
+        ctx.fillText(node.label, node.x, node.y + radius + 12);
+      });
+
+      animationFrameId = requestAnimationFrame(tick);
+    };
+
+    tick();
+
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [simulationData]);
+
+  if (data.nodes.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full text-slate-500 font-mono text-sm">
+        WAITING FOR GRAPH DATA...
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full h-full bg-slate-900 relative rounded-lg overflow-hidden border border-slate-700">
+      <canvas 
+        ref={canvasRef} 
+        width={800} 
+        height={600} 
+        className="w-full h-full object-contain"
+      />
+      <div className="absolute top-4 right-4 flex flex-col space-y-2 bg-slate-800/80 p-2 rounded text-xs backdrop-blur">
+         <div className="flex items-center"><div className="w-2 h-2 rounded-full bg-blue-500 mr-2"></div> Organization</div>
+         <div className="flex items-center"><div className="w-2 h-2 rounded-full bg-red-500 mr-2"></div> Person</div>
+         <div className="flex items-center"><div className="w-2 h-2 rounded-full bg-green-500 mr-2"></div> Location</div>
+         <div className="flex items-center"><div className="w-2 h-2 rounded-full bg-yellow-500 mr-2"></div> Topic</div>
+      </div>
+    </div>
+  );
+};

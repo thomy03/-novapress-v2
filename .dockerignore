@@ -1,0 +1,43 @@
+# NovaPress Frontend - Docker Ignore
+
+# Dependencies
+node_modules
+npm-debug.log*
+
+# Build outputs
+.next
+out
+build
+
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Environment files (use Docker env vars)
+.env
+.env.*
+!.env.example
+
+# Documentation
+*.md
+docs/
+
+# Tests
+__tests__
+*.test.js
+*.test.ts
+coverage
+
+# Backend (separate Dockerfile)
+backend/
+
+# Misc
+.DS_Store
+Thumbs.db
+*.log

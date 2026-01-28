@@ -1,0 +1,162 @@
+import { GoogleGenAI } from "@google/genai";
+import { Article, KnowledgeGraphData } from '../../types';
+
+// Initialize Gemini
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+export const GeminiService = {
+  
+  // UNIFIED FETCHER: Handles both Real Search and Simulation
+  async fetchSourceMaterial(topic: string, mode: 'REAL' | 'SIMULATION'): Promise<any[]> {
+    if (mode === 'REAL') {
+      return this.searchRealWebArticles(topic);
+    } else {
+      return this.generateSimulatedArticles(topic);
+    }
+  },
+
+  // 1. VRAI SCRAPING VIA GOOGLE SEARCH GROUNDING
+  async searchRealWebArticles(topic: string): Promise<any[]> {
+    try {
+      const model = 'gemini-2.5-flash';
+      const prompt = `
+        Tu es un agrégateur d'actualités. Effectue une recherche Google sur : "${topic}".
+        Trouve 5 à 8 articles de presse RÉCENTS (moins de 24h si possible) et pertinents.
+        Format de sortie : JSON Array uniquement.
+        [
+          {
+            "source_name": "Media",
+            "raw_title": "Title",
+            "raw_text": "Summary with facts",
+            "published_at": "Date",
+            "url": "URL"
+          }
+        ]
+      `;
+
+      const result = await ai.models.generateContent({
+        model,
+        contents: prompt,
+        config: { tools: [{ googleSearch: {} }] }
+      });
+
+      return this.parseJSONResponse(result.text);
+    } catch (error) {
+      console.error("Gemini Real Search Error:", error);
+      return [];
+    }
+  },
+
+  // 1b. SIMULATION
+  async generateSimulatedArticles(topic: string): Promise<any[]> {
+    try {
+      const model = 'gemini-2.5-flash';
+      const prompt = `
+        Génère 5 articles de presse FICTIFS mais RÉALISTES sur : "${topic}".
+        Format JSON Array uniquement.
+        [
+          {
+            "source_name": "Invented Media",
+            "raw_title": "Title",
+            "raw_text": "Content (50 words)",
+            "published_at": "Today",
+            "url": "#"
+          }
+        ]
+      `;
+
+      const result = await ai.models.generateContent({
+        model,
+        contents: prompt,
+      });
+
+      return this.parseJSONResponse(result.text);
+    } catch (error) {
+      console.error("Simulation Error:", error);
+      return [];
+    }
+  },
+
+  // NEW: GRAPH EXTRACTION (GraphRAG)
+  async extractKnowledgeGraph(articles: Article[]): Promise<KnowledgeGraphData> {
+    try {
+      const model = 'gemini-2.5-flash';
+      
+      // Combine basic text for context
+      const context = articles.slice(0, 10).map(a => `${a.title}. ${a.summary}`).join('\n');
+
+      const prompt = `
+        Analyse ces textes et construis un Graphe de Connaissance (Knowledge Graph).
+        Identifie les ENTITÉS principales (Personnes, Organisations, Pays, Concepts) et leurs RELATIONS.
+        
+        TEXTES:
+        ${context}
+
+        FORMAT JSON STRICT:
+        {
+          "nodes": [
+             { "id": "UniqueId", "label": "Name", "type": "ORG|PERSON|LOCATION|EVENT", "val": 5 }
+          ],
+          "edges": [
+             { "source": "SourceId", "target": "TargetId", "label": "RELATION_TYPE" }
+          ]
+        }
+        Limite à 15-20 noeuds importants et 20 relations max pour la clarté.
+        "val" dans nodes représente l'importance (1-10).
+      `;
+
+      const result = await ai.models.generateContent({
+        model,
+        contents: prompt,
+        config: { responseMimeType: 'application/json' }
+      });
+
+      const data = JSON.parse(result.text || "{}");
+      return {
+        nodes: data.nodes || [],
+        edges: data.edges || []
+      };
+
+    } catch (error) {
+      console.error("Graph Extraction Error:", error);
+      return { nodes: [], edges: [] };
+    }
+  },
+
+  parseJSONResponse(text: string | undefined): any[] {
+      if (!text) return [];
+      let cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      try {
+        const parsedData = JSON.parse(cleanText);
+        return Array.isArray(parsedData) ? parsedData : [];
+      } catch (e) {
+        return [];
+      }
+  },
+
+  // 2. RÉDACTION DE LA SYNTHÈSE
+  async generateSynthesis(clusterArticles: Article[]): Promise<Partial<Article>> {
+    try {
+      const model = 'gemini-2.5-flash';
+      const sourcesText = clusterArticles.map((a, i) => 
+        `SOURCE ${i+1} (${a.source}):\nTITRE: ${a.title}\nCONTENU: ${a.summary}`
+      ).join('\n---\n');
+
+      const prompt = `
+        Rédige une SYNTHÈSE JOURNALISTIQUE.
+        SOURCES : ${sourcesText}
+        Format JSON: { "title": "", "summary": "", "complianceScore": 90, "readingTime": 3 }
+      `;
+
+      const result = await ai.models.generateContent({
+        model,
+        contents: prompt,
+        config: { responseMimeType: 'application/json' }
+      });
+
+      return JSON.parse(result.text || "{}");
+    } catch (error) {
+      return { title: "Synthèse générée", summary: "...", complianceScore: 85 };
+    }
+  }
+};
