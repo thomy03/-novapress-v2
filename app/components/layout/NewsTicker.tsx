@@ -131,17 +131,7 @@ export function NewsTicker() {
         )}
       </div>
 
-      {/* CSS Animation */}
-      <style jsx>{`
-        @keyframes scroll {
-          0% {
-            transform: translateX(0);
-          }
-          100% {
-            transform: translateX(-50%);
-          }
-        }
-      `}</style>
+      <style dangerouslySetInnerHTML={{__html: "@keyframes scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }"}} />
     </>
   );
 }
