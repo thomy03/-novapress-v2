@@ -744,35 +744,41 @@ class TelegramBot:
 
             if has_real_news:
                 context_block = (
-                    "SYNTHÈSES NOVAPRESS PERTINENTES (sources réelles) :\n"
+                    "SYNTHÈSES NOVAPRESS DISPONIBLES (sources réelles) :\n"
                     f"{news_context}\n\n"
-                    "INSTRUCTION : Base tes réponses sur ces synthèses en priorité. "
-                    "Cite les titres des synthèses sources quand pertinent."
+                    "→ Appuie-toi sur ces synthèses pour répondre. "
+                    "Quand tu mentionnes une synthèse, donne son lien (champ 'Lien' ci-dessus) "
+                    "pour que l'utilisateur puisse la lire en entier sur le site."
                 )
             else:
                 context_block = (
-                    "IMPORTANT — AUCUNE SYNTHÈSE PERTINENTE TROUVÉE :\n"
-                    "Le pipeline n'a pas encore généré de synthèses sur ce sujet.\n"
-                    "Ne l'invente PAS. Réponds honnêtement et suggère /pipeline ou /briefing."
+                    "AUCUNE SYNTHÈSE PERTINENTE TROUVÉE sur ce sujet.\n"
+                    "Le pipeline n'a pas encore analysé ça. "
+                    "Dis-le honnêtement, sans inventer, et suggère /pipeline ou /briefing."
                 )
 
             # Add intent-specific instructions
             intent_instruction = self._get_intent_instruction(intent, text)
 
             system_prompt = (
-                f"Tu es le journaliste IA de NovaPress — \"L'IA qui vous briefe.\"\n"
-                f"Date actuelle : {today}\n"
-                f"Tu réponds TOUJOURS en français, de manière concise et journalistique.\n"
+                f"Tu es Alex, le pote journaliste de NovaPress — celui qui sait tout sur l'actu.\n"
+                f"On est le {today}.\n\n"
+                f"TON STYLE :\n"
+                f"- Tu tutoies l'utilisateur, naturellement, comme un ami qui te parle de l'actu\n"
+                f"- Tu es passionné, direct, sans jargon inutile\n"
+                f"- Tu peux faire des blagues légères mais tu restes précis sur les faits\n"
+                f"- Tu adaptes la longueur à la question : parfois 2 lignes, parfois plus si c'est complexe\n"
+                f"- Quand tu as un lien vers une synthèse, tu l'envoies naturellement\n"
+                f"  Exemple : \"J'ai une synthèse là-dessus, tu peux la lire ici : [lien]\"\n\n"
                 f"{persona_instructions}\n\n"
                 f"{memory_context}\n\n"
                 f"{context_block}\n\n"
                 f"{intent_instruction}"
-                "RÈGLES ABSOLUES :\n"
-                "- Réponds en 3-6 phrases maximum\n"
-                "- Style factuel, professionnel, sans sensationnalisme\n"
-                "- NE JAMAIS inventer ou halluciner des faits d'actualité\n"
-                "- Si tu n'as pas l'info, dis-le clairement et suggère /briefing\n"
-                "- NE PAS utiliser de formatage markdown (pas de **, pas de __)"
+                f"RÈGLES NON-NÉGOCIABLES :\n"
+                f"- Réponds TOUJOURS en français\n"
+                f"- Ne jamais inventer des faits d'actualité — si tu sais pas, dis-le\n"
+                f"- Pas de markdown lourd (pas de **, __, ``` etc.) — du texte naturel\n"
+                f"- Si quelqu'un demande un lien vers une synthèse et que t'en as un, donne-le !"
             )
 
             messages = [{"role": "system", "content": system_prompt}]
@@ -849,17 +855,22 @@ class TelegramBot:
                 is_semantic = True
 
             # Build context from relevant passages
+            FRONTEND_URL = "https://novapressai.duckdns.org"
             parts = []
             for synth in results:
                 cat = synth.get("category", "")
                 title = synth.get("title", "Sans titre")
+                synth_id = synth.get("id", "")
+                synthesis_url = f"{FRONTEND_URL}/synthesis/{synth_id}" if synth_id else ""
                 passage = self._extract_relevant_passage(synth, query)
                 sources = synth.get("source_count", synth.get("num_sources", 0))
                 ts_score = synth.get("transparency_score", 0)
                 created = synth.get("created_at", "")
 
+                url_line = f"  Lien: {synthesis_url}\n" if synthesis_url else ""
                 parts.append(
                     f"[{cat}] {title}\n"
+                    f"{url_line}"
                     f"  Sources: {sources} | Score transparence: {ts_score}/100\n"
                     f"  {passage}\n"
                     f"  (publié: {created})"
