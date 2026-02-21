@@ -2,8 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   // Enable standalone output for Docker deployment
-  // Note: Comment this line for local development, uncomment for Docker build
-  // output: 'standalone',
+  output: 'standalone',
   images: {
     remotePatterns: [
       {
