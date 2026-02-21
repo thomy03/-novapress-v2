@@ -400,7 +400,7 @@ class TelegramBot:
             "🚫 /unfollow `sujet`\n"
             "  _Arrêter de suivre un thème_\n\n"
             "─" * 20 + "\n"
-            "🌐 [NovaPress Web](http://localhost:3000)\n"
+            "🌐 [NovaPress Web](https://novapressai.duckdns.org)\n"
             "💡 NovaPress — _L'IA qui vous briefe\\._"
         )
 
