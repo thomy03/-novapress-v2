@@ -55,6 +55,14 @@ dist/
 # Backend virtual environment
 backend/venv/
 
+# Backend runtime data (databases, backups, ML model cache)
+backend/data/backups/
+backend/data/*.db
+backend/data/*.json
+backend/__pycache__/
+backend/**/__pycache__/
+backend/models/
+
 # Screenshots and temp images at root
 Capture*.png
 Gemini*.png
