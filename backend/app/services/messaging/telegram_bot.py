@@ -75,7 +75,7 @@ class TelegramBot:
         self,
         chat_id: Union[str, int],
         text: str,
-        parse_mode: str = "MarkdownV2",
+        parse_mode: Optional[str] = "MarkdownV2",
         reply_markup: Optional[Dict] = None,
     ) -> bool:
         """Send a message to a Telegram chat."""
@@ -84,11 +84,12 @@ class TelegramBot:
 
         try:
             client = await self._get_client()
-            payload = {
+            payload: Dict[str, Any] = {
                 "chat_id": chat_id,
                 "text": text,
-                "parse_mode": parse_mode,
             }
+            if parse_mode:
+                payload["parse_mode"] = parse_mode
             if reply_markup:
                 payload["reply_markup"] = json.dumps(reply_markup)
 
@@ -451,8 +452,9 @@ class TelegramBot:
             )
 
     async def _handle_reset(self, chat_id: int, args: str) -> None:
-        """Reset conversation history for this chat."""
+        """Reset conversation history for this chat (RAM + Redis)."""
         self._conversation_history.pop(str(chat_id), None)
+        await self._redis_del_history(chat_id)
         await self.send_message(
             chat_id,
             "🔄 *Conversation réinitialisée\\.*\n\n"
@@ -464,26 +466,43 @@ class TelegramBot:
         await self._send_typing(chat_id)
 
         try:
-            history_key = str(chat_id)
-            history = self._conversation_history.get(history_key, [])
+            from datetime import datetime, timezone
+            today = datetime.now(timezone.utc).strftime("%A %d %B %Y")
+
+            # Load persistent history from Redis
+            history = await self._redis_load_history(chat_id)
 
             # Get news context from Qdrant
-            news_context = await self._get_news_context()
+            news_context, has_real_news = await self._get_news_context()
+
+            if has_real_news:
+                context_block = (
+                    f"DERNIÈRES SYNTHÈSES NOVAPRESS (sources réelles, pipeline de ce jour) :\n"
+                    f"{news_context}\n\n"
+                    "INSTRUCTION : Base tes réponses sur ces synthèses en priorité."
+                )
+            else:
+                context_block = (
+                    "IMPORTANT — AUCUNE SYNTHÈSE DISPONIBLE :\n"
+                    "Le pipeline NovaPress n'a pas encore tourné aujourd'hui.\n"
+                    "Tu ne connais PAS l'actualité récente. Ne l'invente PAS.\n"
+                    "Si on te demande les news du jour, réponds honnêtement que les données "
+                    "ne sont pas encore chargées et suggère /pipeline ou /briefing."
+                )
 
             system_prompt = (
-                "Tu es le journaliste IA de NovaPress — \"L'IA qui vous briefe.\"\n"
-                "Tu réponds TOUJOURS en français, de manière concise et journalistique.\n"
-                "Tu informes sur l'actualité, analyses les événements, et réponds aux questions.\n\n"
-                f"DERNIÈRES SYNTHÈSES NOVAPRESS :\n{news_context}\n\n"
-                "RÈGLES :\n"
+                f"Tu es le journaliste IA de NovaPress — \"L'IA qui vous briefe.\"\n"
+                f"Date actuelle : {today}\n"
+                f"Tu réponds TOUJOURS en français, de manière concise et journalistique.\n\n"
+                f"{context_block}\n\n"
+                "RÈGLES ABSOLUES :\n"
                 "- Réponds en 3-5 phrases maximum\n"
-                "- Style journalistique professionnel, factuel\n"
-                "- Si une info est dans les synthèses, cite-la\n"
-                "- Si tu n'as pas l'info, dis-le clairement\n"
-                "- NE PAS utiliser de markdown Telegram (*bold*, _italic_) dans ta réponse"
+                "- Style factuel, professionnel, sans sensationnalisme\n"
+                "- NE JAMAIS inventer ou halluciner des faits d'actualité\n"
+                "- Si tu n'as pas l'info, dis-le clairement et suggère /briefing\n"
+                "- NE PAS utiliser de formatage markdown dans ta réponse (pas de **, pas de __)"
             )
 
-            # Build message list
             messages = [{"role": "system", "content": system_prompt}]
             messages.extend(history[-self.MAX_CHAT_HISTORY:])
             messages.append({"role": "user", "content": text})
@@ -491,16 +510,16 @@ class TelegramBot:
             # Call DeepSeek V3.2 via OpenRouter
             response_text = await self._call_llm(messages)
 
-            # Save to history
+            # Persist updated history to Redis
             history.append({"role": "user", "content": text})
             history.append({"role": "assistant", "content": response_text})
             if len(history) > self.MAX_CHAT_HISTORY * 2:
                 history = history[-self.MAX_CHAT_HISTORY * 2:]
-            self._conversation_history[history_key] = history
+            self._conversation_history[str(chat_id)] = history
+            await self._redis_save_history(chat_id, history)
 
-            # Send plain text response (no MarkdownV2 to avoid escaping issues)
-            escaped = self._escape_md_static(response_text)
-            await self.send_message(chat_id, escaped, parse_mode="MarkdownV2")
+            # Send as plain text to avoid MarkdownV2 escaping issues
+            await self.send_message(chat_id, response_text, parse_mode=None)
 
         except Exception as e:
             logger.error(f"Chat LLM error: {e}")
@@ -510,36 +529,85 @@ class TelegramBot:
                 "Essayez /briefing pour les dernières nouvelles\\.",
             )
 
-    async def _get_news_context(self) -> str:
-        """Get the latest 3 syntheses as LLM context."""
+    async def _get_news_context(self) -> tuple:
+        """
+        Get the latest syntheses as LLM context.
+        Returns (context_str, has_real_news: bool)
+        """
         try:
             from app.db.qdrant_client import get_qdrant_service
             qdrant = get_qdrant_service()
             if not qdrant or not qdrant.client:
-                return "Aucune synthèse disponible."
+                return "Service indisponible.", False
 
             results = await qdrant.client.scroll(
                 collection_name=f"{settings.QDRANT_COLLECTION}_syntheses",
-                limit=4,
+                limit=5,
                 with_payload=True,
                 with_vectors=False,
             )
             points = results[0] if results else []
             if not points:
-                return "Aucune synthèse disponible pour le moment. Le pipeline n'a pas encore tourné."
+                return "Aucune synthèse.", False
 
             parts = []
-            for point in points[:4]:
+            for point in points[:5]:
                 p = point.payload or {}
                 title = p.get("title", "Sans titre")
-                intro = p.get("introduction", p.get("summary", ""))[:250]
+                intro = p.get("introduction", p.get("summary", ""))[:300]
                 category = p.get("category", "")
-                parts.append(f"[{category}] {title} — {intro}")
-            return "\n".join(parts)
+                created = p.get("created_at", "")
+                parts.append(f"[{category}] {title}\n  → {intro}\n  (publié: {created})")
+            return "\n\n".join(parts), True
 
         except Exception as e:
             logger.warning(f"Failed to get news context: {e}")
-            return "Synthèses temporairement indisponibles."
+            return "Synthèses temporairement indisponibles.", False
+
+    # ─── Redis Persistent Memory ───
+
+    async def _redis_load_history(self, chat_id: int) -> list:
+        """Load conversation history from Redis. Falls back to in-memory."""
+        # Try in-memory cache first (fast path)
+        if str(chat_id) in self._conversation_history:
+            return list(self._conversation_history[str(chat_id)])
+        # Try Redis
+        try:
+            import redis.asyncio as aioredis
+            r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+            raw = await r.get(f"novapress:chat:{chat_id}")
+            await r.aclose()
+            if raw:
+                history = json.loads(raw)
+                self._conversation_history[str(chat_id)] = history
+                return list(history)
+        except Exception as e:
+            logger.debug(f"Redis load history failed (fallback to empty): {e}")
+        return []
+
+    async def _redis_save_history(self, chat_id: int, history: list) -> None:
+        """Save conversation history to Redis with 30-day TTL."""
+        try:
+            import redis.asyncio as aioredis
+            r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+            await r.setex(
+                f"novapress:chat:{chat_id}",
+                60 * 60 * 24 * 30,  # 30 days TTL
+                json.dumps(history, ensure_ascii=False),
+            )
+            await r.aclose()
+        except Exception as e:
+            logger.debug(f"Redis save history failed (in-memory only): {e}")
+
+    async def _redis_del_history(self, chat_id: int) -> None:
+        """Delete conversation history from Redis."""
+        try:
+            import redis.asyncio as aioredis
+            r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+            await r.delete(f"novapress:chat:{chat_id}")
+            await r.aclose()
+        except Exception as e:
+            logger.debug(f"Redis del history failed: {e}")
 
     async def _call_llm(self, messages: list) -> str:
         """Call DeepSeek V3.2 via OpenRouter for conversational AI."""
