@@ -62,6 +62,10 @@ websockets>=13.0
 edge-tts>=6.1.0  # Microsoft Edge TTS for audio summaries
 pydub>=0.25.1    # Audio concatenation for podcast generator (requires ffmpeg)
 
+# Charts & Data Visualization
+matplotlib>=3.8.0  # PNG chart generation for Telegram bot
+numpy>=1.26.0      # Already listed above, referenced here for clarity
+
 # Utilities
 python-dateutil>=2.9.0
 pytz>=2024.1

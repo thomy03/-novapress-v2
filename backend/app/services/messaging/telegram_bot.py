@@ -32,6 +32,12 @@ from app.core.config import settings
 # ─── Intent Detection Patterns ───
 
 INTENT_PATTERNS = {
+    "chart": re.compile(
+        r"\b(graphique|graphe|courbe|visualise|stats?|statistiques?|"
+        r"montre.moi les|distribution|répartition.*catégor|"
+        r"évolution graphe|tendance graphique)\b",
+        re.IGNORECASE,
+    ),
     "persona": re.compile(
         r"(comme|en mode|style|parle.moi comme)\s+(le\s+)?"
         r"(cynique|optimiste|conteur|satiriste|historien|philosophe|scientifique)",
@@ -173,6 +179,32 @@ class TelegramBot:
             return result.get("ok", False)
         except Exception as e:
             logger.error(f"Failed to send voice message: {e}")
+            return False
+
+    async def send_photo(
+        self,
+        chat_id: Union[str, int],
+        photo_bytes: bytes,
+        caption: str = "",
+    ) -> bool:
+        """Send a PNG chart image to a Telegram chat."""
+        if not self._initialized:
+            return False
+        try:
+            import io as _io
+
+            client = await self._get_client()
+            files = {"photo": ("chart.png", _io.BytesIO(photo_bytes), "image/png")}
+            data: Dict[str, Any] = {"chat_id": str(chat_id)}
+            if caption:
+                data["caption"] = caption[:1024]
+            resp = await client.post(f"{self.base_url}/sendPhoto", data=data, files=files)
+            result = resp.json()
+            if not result.get("ok"):
+                logger.warning(f"Telegram sendPhoto failed: {result.get('description')}")
+            return result.get("ok", False)
+        except Exception as e:
+            logger.error(f"Failed to send photo: {e}")
             return False
 
     # ─── Routing ───
@@ -710,7 +742,12 @@ class TelegramBot:
             # 1. Detect intent
             intent = self._detect_intent(text)
 
-            # 2. Handle specific intents
+            # 2. Handle chart intent early — sends images, not text
+            if intent == "chart":
+                await self._handle_chart_request(chat_id, text)
+                return
+
+            # 3. Handle specific intents
             if intent == "persona":
                 persona_id = self._extract_persona(text)
                 if persona_id:
@@ -764,28 +801,41 @@ class TelegramBot:
                 f"Tu es Alex, le pote journaliste de NovaPress — celui qui sait tout sur l'actu.\n"
                 f"On est le {today}.\n\n"
                 f"TON STYLE :\n"
-                f"- Tu tutoies l'utilisateur, naturellement, comme un ami qui te parle de l'actu\n"
-                f"- Tu es passionné, direct, sans jargon inutile\n"
-                f"- Tu peux faire des blagues légères mais tu restes précis sur les faits\n"
-                f"- Tu adaptes la longueur à la question : parfois 2 lignes, parfois plus si c'est complexe\n"
-                f"- Quand tu as un lien vers une synthèse, tu l'envoies naturellement\n"
-                f"  Exemple : \"J'ai une synthèse là-dessus, tu peux la lire ici : [lien]\"\n\n"
+                f"- Tu tutoies, tu es passionné et direct — comme un ami qui t'explique l'actu\n"
+                f"- Pour une question simple → réponse courte (2-4 lignes)\n"
+                f"- Pour une analyse → structure comme un vrai article avec sections et listes\n"
+                f"- Ton naturel, sans jargon, tu peux être légèrement ironique sur des sujets légers\n\n"
+                f"FORMATAGE MARKDOWN (Telegram le supporte, utilise-le !) :\n"
+                f"- **Titre de section** pour les parties importantes\n"
+                f"- • ou - pour les listes à puces\n"
+                f"- `stat ou chiffre clé` pour les données numériques\n"
+                f"- [Lire la synthèse complète](URL) pour les liens — TOUJOURS utiliser ce format\n"
+                f"- Pour des comparaisons, structure en deux parties claires\n\n"
+                f"EXEMPLE de bonne réponse structurée :\n"
+                f"**🔍 Situation en Ukraine**\n"
+                f"Voici ce que j'ai sur le sujet :\n\n"
+                f"**Points clés**\n"
+                f"- La situation évolue sur le front Est...\n"
+                f"- `12 sources` croisées, score de fiabilité `78/100`\n\n"
+                f"**Analyse**\n"
+                f"Les dernières synthèses montrent une tendance...\n\n"
+                f"[Lire la synthèse complète](https://novapressai.duckdns.org/synthesis/xxx)\n\n"
                 f"{persona_instructions}\n\n"
                 f"{memory_context}\n\n"
                 f"{context_block}\n\n"
                 f"{intent_instruction}"
-                f"RÈGLES NON-NÉGOCIABLES :\n"
-                f"- Réponds TOUJOURS en français\n"
-                f"- Ne jamais inventer des faits d'actualité — si tu sais pas, dis-le\n"
-                f"- Pas de markdown lourd (pas de **, __, ``` etc.) — du texte naturel\n"
-                f"- Si quelqu'un demande un lien vers une synthèse et que t'en as un, donne-le !"
+                f"RÈGLES :\n"
+                f"- TOUJOURS en français\n"
+                f"- Ne jamais inventer des faits\n"
+                f"- Quand tu as un lien vers une synthèse, donne-le avec [texte](url)\n"
+                f"- Utilise le markdown pour structurer, mais reste naturel — pas de template rigide\n"
             )
 
             messages = [{"role": "system", "content": system_prompt}]
             messages.extend(history[-self.MAX_CHAT_HISTORY:])
             messages.append({"role": "user", "content": text})
 
-            response_text = await self._call_llm(messages)
+            response_text = await self._call_llm(messages, max_tokens=600)
 
             # Save history
             history.append({"role": "user", "content": text})
@@ -800,7 +850,9 @@ class TelegramBot:
                 memory_mgr.maybe_extract(chat_id, history, self._call_llm)
             )
 
-            await self.send_message(chat_id, response_text, parse_mode=None)
+            # Convert markdown to Telegram HTML and send
+            html_text = self._md_to_html(response_text)
+            await self.send_message(chat_id, html_text, parse_mode="HTML")
 
         except Exception as e:
             logger.error(f"Chat LLM error: {e}")
@@ -808,6 +860,97 @@ class TelegramBot:
                 chat_id,
                 "⚠️ Je ne peux pas répondre pour le moment\\.\n"
                 "Essayez /briefing pour les dernières nouvelles\\.",
+            )
+
+    # ─── Chart Generation ───
+
+    async def _handle_chart_request(self, chat_id: int, text: str) -> None:
+        """Generate and send chart(s) based on user query intent."""
+        await self._send_typing(chat_id)
+        try:
+            from app.db.qdrant_client import get_qdrant_service
+            from app.services.messaging.chart_generator import (
+                generate_category_chart,
+                generate_timeline_chart,
+                generate_transparency_chart,
+            )
+
+            qdrant = get_qdrant_service()
+            syntheses = await asyncio.to_thread(qdrant.get_latest_syntheses, 50)
+
+            if not syntheses:
+                await self.send_message(
+                    chat_id,
+                    "Pas encore de synthèses — lance /pipeline d'abord !",
+                    parse_mode=None,
+                )
+                return
+
+            text_lower = text.lower()
+            sent = 0
+
+            # Map keywords to specific charts
+            if any(w in text_lower for w in ["catégor", "categor", "thème", "sujet", "répartition"]):
+                img = generate_category_chart(syntheses)
+                if img:
+                    await self.send_photo(chat_id, img, "📊 Répartition par catégorie")
+                    sent += 1
+
+            if any(w in text_lower for w in ["fiabilité", "fiabilite", "transparence", "score", "confiance"]):
+                img = generate_transparency_chart(syntheses)
+                if img:
+                    await self.send_photo(chat_id, img, "🔍 Score de transparence par catégorie")
+                    sent += 1
+
+            if any(w in text_lower for w in ["évolution", "evolution", "timeline", "jours", "semaine", "volume"]):
+                img = generate_timeline_chart(syntheses)
+                if img:
+                    await self.send_photo(chat_id, img, "📈 Volume sur 7 jours")
+                    sent += 1
+
+            # Default: send all 3 charts
+            if sent == 0:
+                for gen_fn, caption in [
+                    (generate_timeline_chart, "📈 Volume sur 7 jours"),
+                    (generate_category_chart, "📊 Répartition par catégorie"),
+                    (generate_transparency_chart, "🔍 Score de transparence moyen"),
+                ]:
+                    img = gen_fn(syntheses)
+                    if img:
+                        await self.send_photo(chat_id, img, caption)
+
+            # Text summary
+            cat_count: Dict[str, int] = {}
+            for s in syntheses[:30]:
+                cat = (s.get("category") or "AUTRE").upper()
+                cat_count[cat] = cat_count.get(cat, 0) + 1
+            top = sorted(cat_count.items(), key=lambda x: x[1], reverse=True)[:3]
+            top_str = ", ".join(f"{c} ({n})" for c, n in top)
+            avg_score = (
+                sum(float(s.get("transparency_score") or 0) for s in syntheses[:30])
+                / max(len(syntheses[:30]), 1)
+            )
+            await self.send_message(
+                chat_id,
+                f"Sur les {len(syntheses)} dernières synthèses 📊\n"
+                f"Top catégories : {top_str}\n"
+                f"Score de transparence moyen : {avg_score:.0f}/100",
+                parse_mode=None,
+            )
+
+        except ImportError:
+            await self.send_message(
+                chat_id,
+                "Graphiques non disponibles (matplotlib manquant). "
+                "Utilise /briefing pour les stats en texte.",
+                parse_mode=None,
+            )
+        except Exception as e:
+            logger.error(f"Chart request failed: {e}")
+            await self.send_message(
+                chat_id,
+                "Oops, impossible de générer les graphiques pour le moment.",
+                parse_mode=None,
             )
 
     # ─── Smart RAG ───
@@ -1153,6 +1296,39 @@ class TelegramBot:
     def _strip_markdown(text: str) -> str:
         """Remove markdown formatting for plain text fallback."""
         text = re.sub(r"[\\*_~`\[\]()]", "", text)
+        return text
+
+    @staticmethod
+    def _md_to_html(text: str) -> str:
+        """
+        Convert simple markdown from LLM output to Telegram HTML format.
+        Supports: **bold**, *italic*, `code`, [text](url).
+        Escapes HTML special chars in plain text.
+        """
+        import html as _html
+
+        # 1. Protect [text](url) links before escaping
+        links: list = []
+
+        def _save_link(m: re.Match) -> str:
+            links.append((m.group(1), m.group(2)))
+            return f"\x00LINK{len(links) - 1}\x00"
+
+        text = re.sub(r"\[([^\]]+)\]\(([^)\s]+)\)", _save_link, text)
+
+        # 2. Escape HTML special chars in body text
+        text = _html.escape(text, quote=False)
+
+        # 3. Convert markdown to HTML tags
+        text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text, flags=re.DOTALL)
+        text = re.sub(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", r"<i>\1</i>", text, flags=re.DOTALL)
+        text = re.sub(r"`([^`\n]+)`", r"<code>\1</code>", text)
+
+        # 4. Restore links as HTML <a> tags
+        for i, (link_text, url) in enumerate(links):
+            escaped_text = _html.escape(link_text, quote=False)
+            text = text.replace(f"\x00LINK{i}\x00", f'<a href="{url}">{escaped_text}</a>')
+
         return text
 
     async def shutdown(self):
