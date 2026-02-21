@@ -25,11 +25,14 @@ class TelegramBot:
 
     API_BASE = "https://api.telegram.org/bot{token}"
 
+    MAX_CHAT_HISTORY = 8  # Messages per conversation kept in memory
+
     def __init__(self):
         self.token = settings.TELEGRAM_BOT_TOKEN
         self.base_url = self.API_BASE.format(token=self.token)
         self._http_client = None
         self._subscribers: Dict[str, set] = {}  # chat_id -> set of topics
+        self._conversation_history: Dict[str, list] = {}  # chat_id -> message list
         self._initialized = False
 
     async def _get_client(self):
@@ -143,7 +146,7 @@ class TelegramBot:
         if not chat_id or not text:
             return
 
-        # Parse command
+        # Parse command or free-text
         if text.startswith("/"):
             parts = text.split(maxsplit=1)
             command = parts[0].lower().split("@")[0]  # Remove @botname suffix
@@ -157,10 +160,15 @@ class TelegramBot:
                 "/follow": self._handle_follow,
                 "/unfollow": self._handle_unfollow,
                 "/help": self._handle_help,
+                "/pipeline": self._handle_pipeline,
+                "/reset": self._handle_reset,
             }
 
             handler = handlers.get(command, self._handle_unknown)
             await handler(chat_id, args)
+        else:
+            # Free-text → LLM conversation with DeepSeek V3.2
+            await self._handle_chat(chat_id, text)
 
     async def _handle_start(self, chat_id: int, args: str) -> None:
         """Welcome message and onboarding."""
@@ -170,13 +178,16 @@ class TelegramBot:
             "Chaque jour, j'analyse des centaines d'articles "
             "pour vous livrer l'essentiel de l'actualité\\.\n\n"
             "🧠 *L'IA qui vous briefe\\.*\n\n"
-            "📋 *Commandes disponibles :*\n"
-            "• /briefing — Recevoir votre briefing IA\n"
-            "• /search `sujet` — Chercher un sujet\n"
-            "• /perspectives — Voir d'autres points de vue\n"
-            "• /follow `sujet` — Suivre un thème\n"
-            "• /help — Aide complète\n\n"
-            "💡 _Tapez_ /briefing _pour commencer\\!_"
+            "💬 *Posez\\-moi directement vos questions en texte libre \\!*\n"
+            "_\"Que se passe\\-t\\-il en Ukraine ?\", \"Explique\\-moi la crise économique\"_\n\n"
+            "📋 *Commandes :*\n"
+            "• /briefing — Votre briefing IA quotidien\n"
+            "• /search `sujet` — Recherche dans les synthèses\n"
+            "• /perspectives — Mêmes news, différents points de vue\n"
+            "• /follow `sujet` — Alertes sur un thème\n"
+            "• /pipeline — Lancer le pipeline d'actualités\n"
+            "• /reset — Réinitialiser la conversation\n\n"
+            "💡 _Commencez par taper_ /briefing _ou posez une question\\!_"
         )
 
         keyboard = {
@@ -388,6 +399,9 @@ class TelegramBot:
         """Show help message."""
         text = (
             "🗞️ *NovaPress — Aide*\n\n"
+            "💬 *Mode conversation :*\n"
+            "_Tapez n'importe quelle question en texte libre\\!_\n"
+            "_\"Que s'est\\-il passé aujourd'hui ?\", \"Analyse la situation en Chine\"_\n\n"
             "📋 *Commandes :*\n\n"
             "🗞️ /briefing\n"
             "  _Votre briefing IA quotidien_\n\n"
@@ -397,8 +411,10 @@ class TelegramBot:
             "  _La même actu vue par différentes personas_\n\n"
             "📡 /follow `sujet`\n"
             "  _Suivre un thème et recevoir des alertes_\n\n"
-            "🚫 /unfollow `sujet`\n"
-            "  _Arrêter de suivre un thème_\n\n"
+            "🚀 /pipeline\n"
+            "  _Lancer le pipeline d'actualités maintenant_\n\n"
+            "🔄 /reset\n"
+            "  _Réinitialiser la conversation_\n\n"
             "─" * 20 + "\n"
             "🌐 [NovaPress Web](https://novapressai.duckdns.org)\n"
             "💡 NovaPress — _L'IA qui vous briefe\\._"
@@ -406,12 +422,157 @@ class TelegramBot:
 
         await self.send_message(chat_id, text)
 
+    async def _handle_pipeline(self, chat_id: int, args: str) -> None:
+        """Trigger the news pipeline via admin API."""
+        await self._send_typing(chat_id)
+        try:
+            client = await self._get_client()
+            resp = await client.post(
+                "http://localhost:5000/api/admin/pipeline/start",
+                headers={"x-admin-key": settings.ADMIN_API_KEY},
+                json={"mode": "SCRAPE", "max_articles_per_source": 15},
+                timeout=15.0,
+            )
+            data = resp.json()
+            if data.get("status") == "started" or "already" in str(data).lower():
+                await self.send_message(
+                    chat_id,
+                    "🚀 *Pipeline NovaPress lancé\\!*\n\n"
+                    "⏱ Les synthèses seront prêtes dans 10\\-15 minutes\\.\n"
+                    "Tapez /briefing ensuite pour les recevoir\\.",
+                )
+            else:
+                await self.send_message(chat_id, f"ℹ️ Pipeline : `{str(data)[:100]}`")
+        except Exception as e:
+            logger.error(f"Pipeline trigger from Telegram failed: {e}")
+            await self.send_message(
+                chat_id,
+                "⚠️ Impossible de lancer le pipeline pour le moment\\.",
+            )
+
+    async def _handle_reset(self, chat_id: int, args: str) -> None:
+        """Reset conversation history for this chat."""
+        self._conversation_history.pop(str(chat_id), None)
+        await self.send_message(
+            chat_id,
+            "🔄 *Conversation réinitialisée\\.*\n\n"
+            "Je recommence à zéro\\. Comment puis\\-je vous aider \\?",
+        )
+
+    async def _handle_chat(self, chat_id: int, text: str) -> None:
+        """Handle free-text messages with DeepSeek V3.2 via OpenRouter."""
+        await self._send_typing(chat_id)
+
+        try:
+            history_key = str(chat_id)
+            history = self._conversation_history.get(history_key, [])
+
+            # Get news context from Qdrant
+            news_context = await self._get_news_context()
+
+            system_prompt = (
+                "Tu es le journaliste IA de NovaPress — \"L'IA qui vous briefe.\"\n"
+                "Tu réponds TOUJOURS en français, de manière concise et journalistique.\n"
+                "Tu informes sur l'actualité, analyses les événements, et réponds aux questions.\n\n"
+                f"DERNIÈRES SYNTHÈSES NOVAPRESS :\n{news_context}\n\n"
+                "RÈGLES :\n"
+                "- Réponds en 3-5 phrases maximum\n"
+                "- Style journalistique professionnel, factuel\n"
+                "- Si une info est dans les synthèses, cite-la\n"
+                "- Si tu n'as pas l'info, dis-le clairement\n"
+                "- NE PAS utiliser de markdown Telegram (*bold*, _italic_) dans ta réponse"
+            )
+
+            # Build message list
+            messages = [{"role": "system", "content": system_prompt}]
+            messages.extend(history[-self.MAX_CHAT_HISTORY:])
+            messages.append({"role": "user", "content": text})
+
+            # Call DeepSeek V3.2 via OpenRouter
+            response_text = await self._call_llm(messages)
+
+            # Save to history
+            history.append({"role": "user", "content": text})
+            history.append({"role": "assistant", "content": response_text})
+            if len(history) > self.MAX_CHAT_HISTORY * 2:
+                history = history[-self.MAX_CHAT_HISTORY * 2:]
+            self._conversation_history[history_key] = history
+
+            # Send plain text response (no MarkdownV2 to avoid escaping issues)
+            escaped = self._escape_md_static(response_text)
+            await self.send_message(chat_id, escaped, parse_mode="MarkdownV2")
+
+        except Exception as e:
+            logger.error(f"Chat LLM error: {e}")
+            await self.send_message(
+                chat_id,
+                "⚠️ Je ne peux pas répondre pour le moment\\.\n"
+                "Essayez /briefing pour les dernières nouvelles\\.",
+            )
+
+    async def _get_news_context(self) -> str:
+        """Get the latest 3 syntheses as LLM context."""
+        try:
+            from app.db.qdrant_client import get_qdrant_service
+            qdrant = get_qdrant_service()
+            if not qdrant or not qdrant.client:
+                return "Aucune synthèse disponible."
+
+            results = await qdrant.client.scroll(
+                collection_name=f"{settings.QDRANT_COLLECTION}_syntheses",
+                limit=4,
+                with_payload=True,
+                with_vectors=False,
+            )
+            points = results[0] if results else []
+            if not points:
+                return "Aucune synthèse disponible pour le moment. Le pipeline n'a pas encore tourné."
+
+            parts = []
+            for point in points[:4]:
+                p = point.payload or {}
+                title = p.get("title", "Sans titre")
+                intro = p.get("introduction", p.get("summary", ""))[:250]
+                category = p.get("category", "")
+                parts.append(f"[{category}] {title} — {intro}")
+            return "\n".join(parts)
+
+        except Exception as e:
+            logger.warning(f"Failed to get news context: {e}")
+            return "Synthèses temporairement indisponibles."
+
+    async def _call_llm(self, messages: list) -> str:
+        """Call DeepSeek V3.2 via OpenRouter for conversational AI."""
+        client = await self._get_client()
+        resp = await client.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://novapressai.duckdns.org",
+                "X-Title": "NovaPress AI Bot",
+            },
+            json={
+                "model": settings.OPENROUTER_MODEL,
+                "messages": messages,
+                "max_tokens": 400,
+                "temperature": 0.7,
+            },
+            timeout=30.0,
+        )
+        data = resp.json()
+        if data.get("choices"):
+            return data["choices"][0]["message"]["content"].strip()
+        logger.error(f"OpenRouter error: {data}")
+        raise RuntimeError("LLM returned no response")
+
     async def _handle_unknown(self, chat_id: int, args: str) -> None:
         """Handle unknown commands."""
         await self.send_message(
             chat_id,
             "❓ Commande inconnue\\.\n"
-            "Tapez /help pour la liste des commandes\\.",
+            "Tapez /help pour la liste des commandes\\.\n"
+            "💬 Ou écrivez simplement votre question en texte libre\\!",
         )
 
     # ─── Notification Sending ───
