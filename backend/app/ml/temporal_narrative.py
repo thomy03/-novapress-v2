@@ -264,7 +264,7 @@ class TemporalNarrativeEngine:
             if isinstance(created_at, (int, float)) and created_at > 0:
                 try:
                     date = datetime.fromtimestamp(created_at)
-                except:
+                except (ValueError, TypeError, OSError):
                     date = datetime.now()
             else:
                 date = datetime.now()
@@ -317,7 +317,7 @@ class TemporalNarrativeEngine:
                     if isinstance(created_at, (int, float)) and created_at > 0:
                         try:
                             date = datetime.fromtimestamp(created_at).strftime('%d/%m')
-                        except:
+                        except (ValueError, TypeError, OSError):
                             date = "?"
                     else:
                         date = "?"
@@ -373,7 +373,7 @@ class TemporalNarrativeEngine:
 
                 if days_since_last > 7:
                     return "resolved"
-            except:
+            except (ValueError, TypeError, OSError):
                 pass
 
         # If we have many updates recently, it's at peak
@@ -493,7 +493,7 @@ class TemporalNarrativeEngine:
             try:
                 first_date = datetime.fromisoformat(timeline[0]['date'])
                 days_tracked = (datetime.now() - first_date).days
-            except:
+            except (ValueError, TypeError, OSError):
                 pass
 
         # Extract contradiction history (if stored)

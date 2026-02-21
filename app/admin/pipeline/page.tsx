@@ -523,7 +523,7 @@ export default function AdminPipelinePage() {
                   <select
                     id="pipeline-mode-select"
                     value={pipelineMode}
-                    onChange={(e) => setPipelineMode(e.target.value as any)}
+                    onChange={(e) => setPipelineMode(e.target.value as 'SCRAPE' | 'TOPIC' | 'SIMULATION')}
                     disabled={status?.is_running}
                     aria-label="Mode du pipeline"
                     aria-disabled={status?.is_running}

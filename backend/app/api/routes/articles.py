@@ -36,7 +36,7 @@ def format_article_for_frontend(article: Dict[str, Any]) -> Dict[str, Any]:
     if isinstance(published_at, (int, float)) and published_at > 0:
         try:
             published_at_iso = datetime.fromtimestamp(published_at).isoformat()
-        except:
+        except (ValueError, TypeError, OSError):
             published_at_iso = datetime.now().isoformat()
     else:
         published_at_iso = datetime.now().isoformat()
@@ -122,9 +122,11 @@ async def get_articles(
             "hasNext": next_offset is not None,
             "hasPrev": page > 1
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to fetch articles: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/{article_id}")
@@ -144,7 +146,7 @@ async def get_article(request: Request, article_id: str):
         raise
     except Exception as e:
         logger.error(f"Failed to fetch article {article_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/{article_id}/related")
@@ -183,7 +185,7 @@ async def get_related_articles(
         raise
     except Exception as e:
         logger.error(f"Failed to fetch related articles: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/breaking")

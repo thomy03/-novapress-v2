@@ -80,6 +80,13 @@ export interface Article {
   metaTitle?: string;
   metaDescription?: string;
   canonicalUrl?: string;
+
+  // AI Synthesis fields (present when article is a synthesis)
+  complianceScore?: number;
+  timeline_events?: Array<{ date: string; event: string; sources?: string[] }>;
+  narrative_arc?: 'emerging' | 'developing' | 'peak' | 'declining' | 'resolved';
+  causal_graph?: { nodes: Array<{ id: string; label: string }>; edges: Array<{ source: string; target: string; label?: string }> };
+  causal_chain?: Array<{ cause: string; effect: string; type?: string }>;
 }
 
 export interface ArticleCluster {

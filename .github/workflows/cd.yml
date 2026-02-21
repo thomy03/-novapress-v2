@@ -75,15 +75,28 @@ jobs:
     environment: staging
 
     steps:
-      - name: Deploy to staging
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to staging via SSH
+        if: vars.DEPLOY_HOST != ''
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ vars.DEPLOY_HOST }}
+          username: ${{ vars.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd ${{ vars.DEPLOY_PATH || '/opt/novapress' }}
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            docker system prune -f
+
+      - name: Skip deploy (no host configured)
+        if: vars.DEPLOY_HOST == ''
         run: |
-          echo "Deploying to staging environment..."
-          echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-backend:main"
-          # Add your deployment commands here
-          # Examples:
-          # - SSH to server and docker-compose pull
-          # - Trigger Kubernetes deployment
-          # - Use cloud provider CLI (AWS ECS, GCP Cloud Run, etc.)
+          echo "No DEPLOY_HOST configured. Set it in GitHub repository variables to enable deployment."
+          echo "Required vars: DEPLOY_HOST, DEPLOY_USER, DEPLOY_PATH"
+          echo "Required secrets: DEPLOY_SSH_KEY"
 
   # Deploy to production (on release tags)
   deploy-production:
@@ -93,9 +106,23 @@ jobs:
     environment: production
 
     steps:
-      - name: Deploy to production
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to production via SSH
+        if: vars.DEPLOY_HOST != ''
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ vars.DEPLOY_HOST }}
+          username: ${{ vars.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd ${{ vars.DEPLOY_PATH || '/opt/novapress' }}
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            echo "Deployed ${{ github.ref_name }} to production"
+
+      - name: Skip deploy (no host configured)
+        if: vars.DEPLOY_HOST == ''
         run: |
-          echo "Deploying to production environment..."
-          echo "Tag: ${{ github.ref_name }}"
-          # Add your production deployment commands here
-          # Ensure proper approval gates are configured in GitHub environment settings
+          echo "No DEPLOY_HOST configured for production."

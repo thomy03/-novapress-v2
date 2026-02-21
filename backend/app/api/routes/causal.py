@@ -207,7 +207,7 @@ async def get_causal_graph(synthesis_id: str):
         raise
     except Exception as e:
         logger.error(f"Failed to get causal graph for synthesis {synthesis_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/syntheses/{synthesis_id}/historical-graph", response_model=HistoricalCausalGraphResponse)
@@ -356,7 +356,7 @@ async def get_historical_causal_graph(
         raise
     except Exception as e:
         logger.error(f"Failed to get historical causal graph for {synthesis_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/syntheses/{synthesis_id}/causal-preview", response_model=CausalPreviewResponse)
@@ -497,9 +497,11 @@ async def get_entity_causal_profile(
             related_entities=list(related_entities)[:20]
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get causal profile for entity {entity_name}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/stats")
@@ -545,9 +547,11 @@ async def get_causal_stats():
             "narrative_flows": narrative_flows
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get causal stats: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ==========================================

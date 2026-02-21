@@ -1120,6 +1120,7 @@ class AdvancedNewsScraper:
         self.scraped_urls: Set[str] = set()
         self.article_hashes: Set[str] = set()
         self.last_request_time: Dict[str, datetime] = {}
+        self._rate_limit_locks: Dict[str, asyncio.Lock] = {}
 
     def get_active_sources(self) -> List[str]:
         """
@@ -1171,18 +1172,21 @@ class AdvancedNewsScraper:
 
     async def _respect_rate_limit(self, domain: str):
         """
-        Rate limiting intelligent par domaine
-        Évite de surcharger les serveurs
+        Rate limiting intelligent par domaine avec lock pour éviter les race conditions.
         """
-        source_config = self.WORLD_NEWS_SOURCES.get(domain, {})
-        rate_limit = source_config.get("rate_limit", 2.0)
+        if domain not in self._rate_limit_locks:
+            self._rate_limit_locks[domain] = asyncio.Lock()
 
-        if domain in self.last_request_time:
-            elapsed = (datetime.now() - self.last_request_time[domain]).total_seconds()
-            if elapsed < rate_limit:
-                await asyncio.sleep(rate_limit - elapsed)
+        async with self._rate_limit_locks[domain]:
+            source_config = self.WORLD_NEWS_SOURCES.get(domain, {})
+            rate_limit = source_config.get("rate_limit", 2.0)
 
-        self.last_request_time[domain] = datetime.now()
+            if domain in self.last_request_time:
+                elapsed = (datetime.now() - self.last_request_time[domain]).total_seconds()
+                if elapsed < rate_limit:
+                    await asyncio.sleep(rate_limit - elapsed)
+
+            self.last_request_time[domain] = datetime.now()
 
     def _detect_paywall(self, html: str, url: str) -> bool:
         """

@@ -62,9 +62,11 @@ async def search_articles(
             "query": q
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Search failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/suggestions")
@@ -164,6 +166,8 @@ async def get_search_suggestions(
             "total": len(suggestions)
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Suggestions failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")

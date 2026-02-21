@@ -77,6 +77,10 @@ export interface SynthesisData {
   // Predictions & Historical Context (Phase 11)
   predictions?: Prediction[];
   historicalContext?: HistoricalContext;
+  // Transparency Score (Phase 2)
+  transparencyScore?: number;
+  transparencyLabel?: string;
+  transparencyBreakdown?: Record<string, { score: number; weight: number; detail: string }>;
 }
 
 // ========== Related Synthesis Type ==========

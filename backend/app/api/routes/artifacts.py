@@ -212,7 +212,7 @@ async def get_entity_frequency(synthesis_id: str, limit: int = 20):
     if isinstance(enrichment, str):
         try:
             enrichment = json.loads(enrichment)
-        except:
+        except (json.JSONDecodeError, ValueError, TypeError):
             enrichment = {}
 
     # Add entities from RAG if available
@@ -265,7 +265,7 @@ async def get_sentiment_history(synthesis_id: str, days: int = 30):
     if isinstance(enrichment, str):
         try:
             enrichment = json.loads(enrichment)
-        except:
+        except (json.JSONDecodeError, ValueError, TypeError):
             enrichment = {}
 
     grok_data = enrichment.get("grok", {})
@@ -288,7 +288,7 @@ async def get_sentiment_history(synthesis_id: str, days: int = 30):
     if isinstance(related, str):
         try:
             related = json.loads(related)
-        except:
+        except (json.JSONDecodeError, ValueError, TypeError):
             related = []
 
     # Build history from related syntheses
@@ -343,7 +343,7 @@ async def get_source_diversity(synthesis_id: str):
     if isinstance(source_articles, str):
         try:
             source_articles = json.loads(source_articles)
-        except:
+        except (json.JSONDecodeError, ValueError, TypeError):
             source_articles = []
 
     # Categorize sources

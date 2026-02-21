@@ -80,7 +80,7 @@ function drawNeuralNode(
   const y = node.y || 0;
 
   // Get phase for this node (use id hash if no phase provided)
-  const nodePhase = (node as any).phase || (node.id.charCodeAt(0) * 0.5);
+  const nodePhase = node.phase || (node.id.charCodeAt(0) * 0.5);
 
   // BREATHING EFFECT: subtle size pulse based on time + node's unique phase
   const breathe = 1 + Math.sin(time / 1200 + nodePhase) * 0.04;

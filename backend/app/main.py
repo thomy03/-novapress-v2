@@ -33,10 +33,8 @@ from app.core.metrics import generate_metrics, get_content_type, set_app_info
 
 # Rate limiter instance
 limiter = Limiter(key_func=get_remote_address)
-# from app.db.session import init_db  # TEMP DISABLED
 from app.db.qdrant_client import init_qdrant
 from app.ml.embeddings import init_embedding_model
-# from app.ml.llm import init_llm  # TEMP DISABLED
 from app.ml.knowledge_graph import init_knowledge_graph
 
 
@@ -55,10 +53,6 @@ async def lifespan(app: FastAPI):
     # Set application info for Prometheus
     set_app_info(version="2.0.0", environment="development" if settings.DEBUG else "production")
 
-    # Initialize database (TEMPORARILY DISABLED - using Qdrant only)
-    # logger.info("📦 Initializing database...")
-    # await init_db()
-
     # Initialize Qdrant (optional - auth works without it)
     try:
         logger.info("🗄️ Connecting to Qdrant...")
@@ -72,10 +66,6 @@ async def lifespan(app: FastAPI):
         await init_embedding_model()
     except Exception as e:
         logger.warning(f"⚠️ Embedding model not available: {e}. Continuing without embeddings.")
-
-    # Ollama LLM (TEMPORARILY DISABLED - not needed for testing)
-    # logger.info("🧠 Connecting to Ollama LLM...")
-    # await init_llm()
 
     # Initialize spaCy (optional - auth works without it)
     try:
@@ -93,11 +83,30 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"⚠️ Topic Detection Service not available: {e}")
 
+    # Initialize Telegram Bot (Sprint 1 — Le Boss Briefing)
+    if settings.TELEGRAM_BOT_TOKEN:
+        try:
+            logger.info("🤖 Initializing Telegram Bot...")
+            from app.services.messaging.telegram_bot import init_telegram_bot
+            bot_ok = await init_telegram_bot()
+            if bot_ok:
+                logger.success("✅ Telegram Bot ready — L'IA qui vous briefe!")
+        except Exception as e:
+            logger.warning(f"⚠️ Telegram Bot not available: {e}")
+    else:
+        logger.info("ℹ️ Telegram Bot disabled (no TELEGRAM_BOT_TOKEN)")
+
     logger.success("✅ Backend ready!")
 
     yield
 
+    # Shutdown
     logger.info("👋 Shutting down NovaPress AI v2 Backend")
+    try:
+        from app.services.messaging.telegram_bot import get_telegram_bot
+        await get_telegram_bot().shutdown()
+    except Exception:
+        pass
 
 
 app = FastAPI(
@@ -221,6 +230,39 @@ app.include_router(causal.router, prefix=f"{settings.API_V1_PREFIX}/causal", tag
 app.include_router(admin.router, prefix=f"{settings.API_V1_PREFIX}/admin", tags=["Admin"])
 app.include_router(intelligence.router, prefix=f"{settings.API_V1_PREFIX}/intelligence", tags=["Intelligence-Hub"])
 app.include_router(artifacts.router, prefix=f"{settings.API_V1_PREFIX}/artifacts", tags=["Artifacts"])
+
+
+# ─── Telegram Webhook ───
+
+@app.post("/webhook/telegram")
+async def telegram_webhook(request: Request):
+    """
+    Receive Telegram bot updates via webhook.
+    Configure with: https://api.telegram.org/bot<TOKEN>/setWebhook?url=<YOUR_URL>/webhook/telegram
+    """
+    try:
+        from app.services.messaging.telegram_bot import get_telegram_bot
+        bot = get_telegram_bot()
+        update = await request.json()
+        await bot.handle_update(update)
+        return JSONResponse({"ok": True})
+    except Exception as e:
+        logger.error(f"Telegram webhook error: {e}")
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
+# ─── Briefing API ───
+
+@app.get(f"{settings.API_V1_PREFIX}/briefing")
+async def get_briefing():
+    """
+    Get the latest AI briefing — "L'IA qui vous briefe."
+    Returns the top syntheses of the day, ranked by relevance.
+    """
+    from app.services.briefing_service import get_briefing_service
+    service = get_briefing_service()
+    briefing = await service.get_latest_briefing()
+    return briefing
 
 
 if __name__ == "__main__":

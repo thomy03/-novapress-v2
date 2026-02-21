@@ -662,9 +662,11 @@ async def process_pending_keywords(
             "new_keywords_learned": learned_count,
             "timestamp": datetime.now().isoformat()
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to process keywords: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/keywords/refresh-cache")
@@ -746,7 +748,7 @@ async def toggle_synthesis_publish(
         raise
     except Exception as e:
         logger.error(f"Failed to toggle publish: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/synthesis/{synthesis_id}/moderation")
@@ -806,7 +808,7 @@ async def set_moderation_flag(
         raise
     except Exception as e:
         logger.error(f"Failed to set moderation flag: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/syntheses/moderation-report")

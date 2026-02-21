@@ -12,6 +12,7 @@ export {
 } from './useMediaQuery';
 export { useServiceWorker } from './useServiceWorker';
 export { usePerformanceMonitoring } from './usePerformanceMonitoring';
+export { useBookmarks } from './useBookmarks';
 
 // React Query hooks for cached data fetching
 export {

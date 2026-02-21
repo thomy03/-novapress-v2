@@ -5,6 +5,7 @@ Using pydantic-settings for type-safe environment variables
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
 from pathlib import Path
+import warnings
 
 # Get the backend directory (where .env should be)
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
@@ -30,8 +31,9 @@ class Settings(BaseSettings):
     QDRANT_API_KEY: str = ""
     QDRANT_COLLECTION: str = "novapress_articles"
 
-    # Security
-    SECRET_KEY: str = "change-this-secret-key-in-production"
+    # Security — MUST be set via .env for stable JWT sessions
+    # If not set, a default dev key is used (NOT safe for production)
+    SECRET_KEY: str = "novapress-dev-key-CHANGE-IN-PRODUCTION"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
@@ -157,6 +159,21 @@ class Settings(BaseSettings):
     MAX_FACT_CHECK_CLAIMS: int = 3  # Max claims to verify per synthesis
     ENRICHMENT_RETRY_COUNT: int = 3  # Number of retries on API failure
 
+    # Telegram Bot — "Le Boss Briefing"
+    TELEGRAM_BOT_TOKEN: str = ""  # Required: get from @BotFather on Telegram
+    TELEGRAM_WEBHOOK_URL: str = ""  # Public URL for webhook (e.g., https://your-domain/webhook/telegram)
+    TELEGRAM_DAILY_BRIEFING_HOUR: int = 7  # Send daily briefing at 7:00 AM
+    TELEGRAM_DAILY_BRIEFING_MINUTE: int = 0
+    TELEGRAM_MAX_SEARCH_RESULTS: int = 3  # Max search results per /search command
+
+    # Briefing Service
+    BRIEFING_TOP_SYNTHESES: int = 5  # Number of top syntheses per briefing
+    BRIEFING_MIN_COMPLIANCE_SCORE: int = 70  # Minimum compliance score for inclusion
+
+    # Discord Webhook
+    DISCORD_WEBHOOK_URL: str = ""  # Discord channel webhook URL
+    DISCORD_NOTIFY_BREAKING: bool = False  # If True, only send breaking news notifications
+
     @property
     def rss_feeds_list(self) -> List[str]:
         """Parse RSS feeds string into list"""
@@ -164,3 +181,9 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+if settings.SECRET_KEY == "novapress-dev-key-CHANGE-IN-PRODUCTION":
+    warnings.warn(
+        "SECRET_KEY is using default dev value! Set a secure key in .env for production.",
+        stacklevel=1,
+    )
