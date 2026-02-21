@@ -1300,9 +1300,18 @@ Contenu existant (extrait):
             ]
             synthesis_embeddings = self.embedding_service.encode(synthesis_texts)
 
-            # Store each synthesis
+            # Store each synthesis and trigger proactive alerts
+            from app.services.messaging.alert_service import get_alert_service
+            alert_svc = get_alert_service()
+
             for synthesis, embedding in zip(syntheses, synthesis_embeddings):
                 self.qdrant.upsert_synthesis(synthesis, embedding)
+                # Notify subscribers (non-blocking)
+                try:
+                    import asyncio
+                    asyncio.create_task(alert_svc.check_new_synthesis(synthesis))
+                except Exception as alert_err:
+                    logger.debug(f"Alert notification skipped: {alert_err}")
 
             logger.success(f"✅ Stored {len(syntheses)} syntheses")
             return True

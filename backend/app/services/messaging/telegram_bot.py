@@ -1,58 +1,103 @@
 """
 NovaPress Telegram Bot — "L'IA qui vous briefe."
-Delivers AI-powered news intelligence directly in Telegram.
+Advanced conversational AI with Smart RAG, User Profiles, Strategic Memory,
+Proactive Alerts, Podcast Generation, and Intent Detection.
 
 Commands:
-  /start          — Welcome message + onboarding
-  /briefing       — Latest AI briefing (top syntheses)
-  /search <query> — Semantic search in Qdrant
+  /start          — Welcome + onboarding
+  /briefing       — Personalized AI briefing
+  /search <query> — Semantic search in syntheses
   /perspectives   — Same news from different persona perspectives
-  /follow <topic> — Subscribe to a topic for alerts
-  /unfollow <topic> — Unsubscribe from a topic
+  /follow <topic> — Subscribe to a topic (Redis-persisted)
+  /unfollow <t>   — Unsubscribe from a topic
+  /topics         — Show followed topics + interest scores
+  /preferences    — View and edit your profile
+  /alerts <on|off> — Toggle proactive alerts
+  /frequency <daily|realtime> — Set alert frequency
+  /podcast        — Generate a 3-minute audio briefing
+  /pipeline       — Trigger the news pipeline
+  /reset          — Reset conversation (keeps strategic memories)
   /help           — Command reference
 """
 import asyncio
 import json
-from typing import Optional, Dict, Any, Union
+import re
+from typing import Any, Dict, List, Optional, Union
 from datetime import datetime, timezone
 from loguru import logger
 
 from app.core.config import settings
 
 
+# ─── Intent Detection Patterns ───
+
+INTENT_PATTERNS = {
+    "persona": re.compile(
+        r"(comme|en mode|style|parle.moi comme)\s+(le\s+)?"
+        r"(cynique|optimiste|conteur|satiriste|historien|philosophe|scientifique)",
+        re.IGNORECASE,
+    ),
+    "compare": re.compile(
+        r"\b(compare[zr]?|versus|vs\.?|différence entre|comparer)\b", re.IGNORECASE
+    ),
+    "weekly": re.compile(
+        r"\b(résumé?|bilan)\s+(de la |cette )?(semaine|week)\b", re.IGNORECASE
+    ),
+    "entity": re.compile(
+        r"\b(que se passe(-t-il)?|quoi de neuf|news?)\s+(avec|sur|pour|à propos de)\s+(.+)",
+        re.IGNORECASE,
+    ),
+    "transparency": re.compile(
+        r"\b(fiable|fiabilité|confiance|transparence|vérifi|source)\b", re.IGNORECASE
+    ),
+    "trend": re.compile(
+        r"\b(tendance|trend|évolution|arc narratif|émergent|déclinant)\b", re.IGNORECASE
+    ),
+    "causal": re.compile(
+        r"\b(cause[sz]?|pourquoi|conséquence|impact|graphe causal)\b", re.IGNORECASE
+    ),
+}
+
+PERSONA_MAP = {
+    "cynique": "le_cynique",
+    "optimiste": "l_optimiste",
+    "conteur": "le_conteur",
+    "satiriste": "le_satiriste",
+    "historien": "l_historien",
+    "philosophe": "le_philosophe",
+    "scientifique": "le_scientifique",
+}
+
+
 class TelegramBot:
-    """NovaPress Telegram Bot using raw HTTP (no heavy dependency)."""
+    """NovaPress Telegram Bot — Advanced conversational AI."""
 
     API_BASE = "https://api.telegram.org/bot{token}"
-
-    MAX_CHAT_HISTORY = 8  # Messages per conversation kept in memory
+    MAX_CHAT_HISTORY = 10
 
     def __init__(self):
         self.token = settings.TELEGRAM_BOT_TOKEN
         self.base_url = self.API_BASE.format(token=self.token)
         self._http_client = None
-        self._subscribers: Dict[str, set] = {}  # chat_id -> set of topics
-        self._conversation_history: Dict[str, list] = {}  # chat_id -> message list
+        self._conversation_history: Dict[str, list] = {}
         self._initialized = False
+        # Active persona per chat (resets when explicitly changed)
+        self._active_persona: Dict[str, str] = {}
 
     async def _get_client(self):
-        """Lazy-init httpx client."""
         if self._http_client is None:
             import httpx
             self._http_client = httpx.AsyncClient(timeout=30.0)
         return self._http_client
 
-    async def initialize(self):
-        """Initialize the bot and verify token."""
+    async def initialize(self) -> bool:
         if not self.token:
             logger.warning("⚠️ TELEGRAM_BOT_TOKEN not set — Telegram bot disabled")
             return False
-
         try:
             client = await self._get_client()
             resp = await client.get(f"{self.base_url}/getMe")
             data = resp.json()
-
             if data.get("ok"):
                 bot_info = data["result"]
                 logger.success(
@@ -60,11 +105,12 @@ class TelegramBot:
                     f"({bot_info.get('first_name')})"
                 )
                 self._initialized = True
+                # Wire alert service
+                from app.services.messaging.alert_service import get_alert_service
+                get_alert_service().set_bot(self)
                 return True
-            else:
-                logger.error(f"Telegram bot init failed: {data}")
-                return False
-
+            logger.error(f"Telegram bot init failed: {data}")
+            return False
         except Exception as e:
             logger.error(f"Failed to initialize Telegram bot: {e}")
             return False
@@ -78,47 +124,62 @@ class TelegramBot:
         parse_mode: Optional[str] = "MarkdownV2",
         reply_markup: Optional[Dict] = None,
     ) -> bool:
-        """Send a message to a Telegram chat."""
         if not self._initialized:
             return False
-
         try:
             client = await self._get_client()
-            payload: Dict[str, Any] = {
-                "chat_id": chat_id,
-                "text": text,
-            }
+            payload: Dict[str, Any] = {"chat_id": chat_id, "text": text}
             if parse_mode:
                 payload["parse_mode"] = parse_mode
             if reply_markup:
                 payload["reply_markup"] = json.dumps(reply_markup)
-
             resp = await client.post(f"{self.base_url}/sendMessage", json=payload)
             data = resp.json()
-
             if not data.get("ok"):
                 logger.warning(f"Telegram send failed: {data.get('description')}")
-                # Retry without parse_mode if markdown fails
                 if "parse" in data.get("description", "").lower():
                     payload["parse_mode"] = None
                     payload["text"] = self._strip_markdown(text)
-                    resp = await client.post(
-                        f"{self.base_url}/sendMessage", json=payload
-                    )
-                    return resp.json().get("ok", False)
+                    resp2 = await client.post(f"{self.base_url}/sendMessage", json=payload)
+                    return resp2.json().get("ok", False)
                 return False
-
             return True
-
         except Exception as e:
             logger.error(f"Failed to send Telegram message: {e}")
             return False
 
-    # ─── Command Handlers ───
+    async def send_voice(
+        self,
+        chat_id: Union[str, int],
+        audio_bytes: bytes,
+        caption: Optional[str] = None,
+    ) -> bool:
+        """Send a voice message (OGG/MP3) to a Telegram chat."""
+        if not self._initialized:
+            return False
+        try:
+            import io
+            client = await self._get_client()
+            files = {"voice": ("briefing.ogg", io.BytesIO(audio_bytes), "audio/ogg")}
+            data: Dict[str, Any] = {"chat_id": str(chat_id)}
+            if caption:
+                data["caption"] = caption[:1024]
+            resp = await client.post(
+                f"{self.base_url}/sendVoice", data=data, files=files
+            )
+            result = resp.json()
+            if not result.get("ok"):
+                logger.warning(f"Telegram sendVoice failed: {result.get('description')}")
+            return result.get("ok", False)
+        except Exception as e:
+            logger.error(f"Failed to send voice message: {e}")
+            return False
+
+    # ─── Routing ───
 
     async def handle_update(self, update: Dict[str, Any]) -> None:
-        """Process an incoming Telegram update (webhook or polling)."""
-        # Handle callback queries (inline keyboard button taps)
+        """Process an incoming Telegram update."""
+        # Callback queries (inline keyboard)
         callback = update.get("callback_query")
         if callback:
             chat_id = callback.get("message", {}).get("chat", {}).get("id")
@@ -128,7 +189,6 @@ class TelegramBot:
                     await self._handle_briefing(chat_id, "")
                 elif data == "search_help":
                     await self._handle_search(chat_id, "")
-                # Answer callback to remove loading spinner
                 try:
                     client = await self._get_client()
                     await client.post(
@@ -139,18 +199,15 @@ class TelegramBot:
                     pass
             return
 
-        # Handle regular messages
         message = update.get("message", {})
         text = message.get("text", "")
         chat_id = message.get("chat", {}).get("id")
-
         if not chat_id or not text:
             return
 
-        # Parse command or free-text
         if text.startswith("/"):
             parts = text.split(maxsplit=1)
-            command = parts[0].lower().split("@")[0]  # Remove @botname suffix
+            command = parts[0].lower().split("@")[0]
             args = parts[1] if len(parts) > 1 else ""
 
             handlers = {
@@ -160,19 +217,28 @@ class TelegramBot:
                 "/perspectives": self._handle_perspectives,
                 "/follow": self._handle_follow,
                 "/unfollow": self._handle_unfollow,
+                "/topics": self._handle_topics,
+                "/preferences": self._handle_preferences,
+                "/alerts": self._handle_alerts,
+                "/frequency": self._handle_frequency,
+                "/podcast": self._handle_podcast,
                 "/help": self._handle_help,
                 "/pipeline": self._handle_pipeline,
                 "/reset": self._handle_reset,
             }
-
             handler = handlers.get(command, self._handle_unknown)
             await handler(chat_id, args)
         else:
-            # Free-text → LLM conversation with DeepSeek V3.2
             await self._handle_chat(chat_id, text)
+
+    # ─── Command Handlers ───
 
     async def _handle_start(self, chat_id: int, args: str) -> None:
         """Welcome message and onboarding."""
+        # Init user profile
+        from app.services.messaging.user_profile import get_profile_manager
+        await get_profile_manager().get_profile(chat_id)
+
         text = (
             "🗞️ *Bienvenue sur NovaPress\\!*\n\n"
             "Je suis votre *journaliste IA personnel*\\. "
@@ -180,39 +246,53 @@ class TelegramBot:
             "pour vous livrer l'essentiel de l'actualité\\.\n\n"
             "🧠 *L'IA qui vous briefe\\.*\n\n"
             "💬 *Posez\\-moi directement vos questions en texte libre \\!*\n"
-            "_\"Que se passe\\-t\\-il en Ukraine ?\", \"Explique\\-moi la crise économique\"_\n\n"
+            "_\"Que se passe\\-t\\-il en Ukraine ?\", \"Analyse la situation économique\"_\n\n"
             "📋 *Commandes :*\n"
             "• /briefing — Votre briefing IA quotidien\n"
-            "• /search `sujet` — Recherche dans les synthèses\n"
-            "• /perspectives — Mêmes news, différents points de vue\n"
+            "• /search `sujet` — Recherche sémantique\n"
             "• /follow `sujet` — Alertes sur un thème\n"
-            "• /pipeline — Lancer le pipeline d'actualités\n"
-            "• /reset — Réinitialiser la conversation\n\n"
-            "💡 _Commencez par taper_ /briefing _ou posez une question\\!_"
+            "• /topics — Vos sujets suivis\n"
+            "• /preferences — Votre profil\n"
+            "• /podcast — Briefing audio 3 minutes\n"
+            "• /pipeline — Lancer le pipeline\n\n"
+            "💡 _Commencez par_ /briefing _ou posez une question\\!_"
         )
-
         keyboard = {
-            "inline_keyboard": [
-                [
-                    {"text": "📰 Mon Briefing", "callback_data": "briefing"},
-                    {"text": "🔍 Rechercher", "callback_data": "search_help"},
-                ],
-            ]
+            "inline_keyboard": [[
+                {"text": "📰 Mon Briefing", "callback_data": "briefing"},
+                {"text": "🔍 Rechercher", "callback_data": "search_help"},
+            ]]
         }
-
         await self.send_message(chat_id, text, reply_markup=keyboard)
 
     async def _handle_briefing(self, chat_id: int, args: str) -> None:
-        """Send the latest AI briefing."""
-        # Send typing indicator
+        """Send a personalized AI briefing."""
         await self._send_typing(chat_id)
-
         try:
             from app.services.briefing_service import get_briefing_service
+            from app.services.messaging.user_profile import get_profile_manager
+
             service = get_briefing_service()
+            # Use personalized hours lookback if user is active
             briefing = await service.get_latest_briefing()
+
+            # Personalise: filter by top interests
+            profile_mgr = get_profile_manager()
+            filters = await profile_mgr.get_personalized_filters(chat_id)
+            top_cats = filters.get("categories", [])
+
+            if top_cats and briefing.get("items"):
+                # Re-rank: boost items matching user's top categories
+                for item in briefing["items"]:
+                    if item.get("category") in top_cats:
+                        item["_personal_boost"] = 2.0
+                briefing["items"].sort(
+                    key=lambda x: x.get("_personal_boost", 1.0), reverse=True
+                )
+
             formatted = service.format_telegram_briefing(briefing)
             await self.send_message(chat_id, formatted)
+
         except Exception as e:
             logger.error(f"Briefing generation failed: {e}")
             await self.send_message(
@@ -223,7 +303,7 @@ class TelegramBot:
             )
 
     async def _handle_search(self, chat_id: int, args: str) -> None:
-        """Semantic search in Qdrant."""
+        """Semantic search in Qdrant syntheses."""
         if not args.strip():
             await self.send_message(
                 chat_id,
@@ -240,28 +320,9 @@ class TelegramBot:
         query = args.strip()
 
         try:
-            from app.db.qdrant_client import get_qdrant_service
-            from app.ml.embeddings import get_embedding_service
+            results, has_results = await self._smart_search(query, chat_id)
 
-            embeddings = get_embedding_service()
-            qdrant = get_qdrant_service()
-
-            if not embeddings or not embeddings.model or not qdrant or not qdrant.client:
-                raise RuntimeError("Search services not available")
-
-            # Encode query
-            query_embedding = await embeddings.encode_async([query])
-
-            # Search in syntheses collection
-            from qdrant_client.models import SearchParams
-            results = await qdrant.client.search(
-                collection_name=f"{settings.QDRANT_COLLECTION}_syntheses",
-                query_vector=query_embedding[0],
-                limit=settings.TELEGRAM_MAX_SEARCH_RESULTS,
-                with_payload=True,
-            )
-
-            if not results:
+            if not has_results:
                 escaped_query = self._escape_md_static(query)
                 await self.send_message(
                     chat_id,
@@ -270,20 +331,17 @@ class TelegramBot:
                 )
                 return
 
-            # Format results
             lines = [f"🔍 *Résultats pour :* _{self._escape_md_static(query)}_\n"]
-
-            for i, result in enumerate(results, 1):
-                payload = result.payload or {}
-                title = self._escape_md_static(payload.get("title", "Sans titre"))
-                summary = self._escape_md_static(
-                    payload.get("introduction", payload.get("summary", ""))[:150]
+            # results is a list of synthesis dicts with 'score'
+            for i, synth in enumerate(results[:settings.TELEGRAM_MAX_SEARCH_RESULTS], 1):
+                title = self._escape_md_static(synth.get("title", "Sans titre"))
+                passage = self._escape_md_static(
+                    self._extract_relevant_passage(synth, query)[:200]
                 )
-                score = result.score
-                sources = payload.get("source_count", "?")
-
+                score = synth.get("score", 0.0)
+                sources = synth.get("source_count", synth.get("num_sources", "?"))
                 lines.append(f"*{i}\\. {title}*")
-                lines.append(f"_{summary}_")
+                lines.append(f"_{passage}_")
                 lines.append(f"📊 Pertinence: {score:.0%} · 📰 {sources} sources\n")
 
             await self.send_message(chat_id, "\n".join(lines))
@@ -299,7 +357,6 @@ class TelegramBot:
     async def _handle_perspectives(self, chat_id: int, args: str) -> None:
         """Show the latest synthesis from different persona perspectives."""
         await self._send_typing(chat_id)
-
         try:
             from app.services.briefing_service import get_briefing_service
             service = get_briefing_service()
@@ -315,36 +372,35 @@ class TelegramBot:
 
             item = briefing["items"][0]
             title = self._escape_md_static(item["title"])
-            summary = self._escape_md_static(item["summary"][:200])
+            summary = item["summary"][:250]
 
-            cynique_text = self._escape_md_static("Encore une annonce qui ne changera rien...")
-            optimiste_text = self._escape_md_static("Voila une avancee prometteuse pour l'avenir !")
-            conteur_text = self._escape_md_static("Il etait une fois, dans un monde en mutation...")
-            satiriste_text = self._escape_md_static("Et pendant ce temps, les experts sont tous d'accord... sur leur desaccord.")
+            # Generate real persona snippets from the summary text
+            personas = {
+                "Le Cynique 😏": self._cynique_transform(summary),
+                "L'Optimiste 🌟": self._optimiste_transform(summary),
+                "Le Conteur 📖": self._conteur_transform(summary),
+                "Le Satiriste 🃏": self._satiriste_transform(summary),
+            }
 
-            text = (
-                f"\U0001f3ad *PERSPECTIVES \u2014 {title}*\n\n"
-                f"_{summary}_\n\n"
-                "Les personas NovaPress :\n\n"
-                f"\U0001f60f *Le Cynique* : \"_{cynique_text}_\"\n\n"
-                f"\U0001f31f *L'Optimiste* : \"_{optimiste_text}_\"\n\n"
-                f"\U0001f4d6 *Le Conteur* : \"_{conteur_text}_\"\n\n"
-                f"\U0001faa9 *Le Satiriste* : \"_{satiriste_text}_\"\n\n"
-                "\U0001f4a1 _Les vraies perspectives personnalisees arrivent avec NovaPress Pro\\!_"
+            lines = [f"🎭 *PERSPECTIVES — {title}*\n"]
+            for persona_name, snippet in personas.items():
+                esc_name = self._escape_md_static(persona_name)
+                esc_snippet = self._escape_md_static(snippet)
+                lines.append(f"*{esc_name}*")
+                lines.append(f"\"_{esc_snippet}_\"\n")
+
+            lines.append(
+                "💡 Tapez _\"Parle\\-moi comme le cynique\"_ pour changer de perspective\\!"
             )
-
-            await self.send_message(chat_id, text)
+            await self.send_message(chat_id, "\n".join(lines))
 
         except Exception as e:
             logger.error(f"Perspectives failed: {e}")
-            await self.send_message(
-                chat_id, "⚠️ Perspectives indisponibles pour le moment\\."
-            )
+            await self.send_message(chat_id, "⚠️ Perspectives indisponibles pour le moment\\.")
 
     async def _handle_follow(self, chat_id: int, args: str) -> None:
-        """Subscribe to a topic."""
-        topic = args.strip().lower()
-
+        """Subscribe to a topic — persisted in Redis."""
+        topic = args.strip()
         if not topic:
             await self.send_message(
                 chat_id,
@@ -352,79 +408,252 @@ class TelegramBot:
                 "Utilisez : `/follow sujet`\n\n"
                 "Exemples :\n"
                 "• `/follow intelligence artificielle`\n"
-                "• `/follow géopolitique`\n"
+                "• `/follow Ukraine`\n"
                 "• `/follow crypto`",
             )
             return
 
-        chat_key = str(chat_id)
-        if chat_key not in self._subscribers:
-            self._subscribers[chat_key] = set()
+        from app.services.messaging.user_profile import get_profile_manager
+        from app.services.messaging.alert_service import get_alert_service
 
-        self._subscribers[chat_key].add(topic)
+        await get_profile_manager().follow_topic(chat_id, topic)
+        await get_alert_service().register_user(chat_id)
 
         escaped = self._escape_md_static(topic)
-        current = ", ".join(
-            self._escape_md_static(t) for t in sorted(self._subscribers[chat_key])
-        )
+        follows = await get_profile_manager().get_followed_topics(chat_id)
+        current = ", ".join(self._escape_md_static(t) for t in follows[:10])
 
         await self.send_message(
             chat_id,
             f"✅ Vous suivez maintenant : *{escaped}*\n\n"
-            f"📋 Vos sujets suivis : _{current}_\n\n"
-            "🔔 Vous recevrez une alerte quand une nouvelle synthèse "
-            "sur ce sujet sera publiée\\.",
+            f"📋 Vos sujets : _{current}_\n\n"
+            "🔔 Vous recevrez des alertes sur ce sujet\\. "
+            "Configurez la fréquence avec /frequency\\.",
         )
 
     async def _handle_unfollow(self, chat_id: int, args: str) -> None:
         """Unsubscribe from a topic."""
-        topic = args.strip().lower()
-        chat_key = str(chat_id)
-
-        if not topic or chat_key not in self._subscribers:
-            await self.send_message(
-                chat_id,
-                "📡 Utilisez : `/unfollow sujet`",
-            )
+        topic = args.strip()
+        if not topic:
+            await self.send_message(chat_id, "📡 Utilisez : `/unfollow sujet`")
             return
 
-        self._subscribers[chat_key].discard(topic)
-
+        from app.services.messaging.user_profile import get_profile_manager
+        await get_profile_manager().unfollow_topic(chat_id, topic)
         escaped = self._escape_md_static(topic)
+        await self.send_message(chat_id, f"❌ Vous ne suivez plus : *{escaped}*")
+
+    async def _handle_topics(self, chat_id: int, args: str) -> None:
+        """Show followed topics and interest scores."""
+        from app.services.messaging.user_profile import get_profile_manager
+        pm = get_profile_manager()
+
+        follows = await pm.get_followed_topics(chat_id)
+        interests = await pm.get_top_interests(chat_id, limit=7)
+
+        lines = ["📡 *Vos sujets et intérêts*\n"]
+
+        if follows:
+            lines.append("*Sujets suivis :*")
+            for t in follows:
+                lines.append(f"• {self._escape_md_static(t)}")
+            lines.append("")
+
+        if interests:
+            lines.append("*Catégories d'intérêt \\(score\\) :*")
+            bars = ["▓▓▓▓▓", "▓▓▓▓░", "▓▓▓░░", "▓▓░░░", "▓░░░░", "░░░░░"]
+            for name, score in interests:
+                bar_idx = min(5, max(0, 5 - int(score / 2)))
+                bar = bars[bar_idx]
+                lines.append(
+                    f"• {self._escape_md_static(name)} {bar} {score:.1f}"
+                )
+        elif not follows:
+            lines.append(
+                "_Aucun intérêt détecté\\. Posez des questions "
+                "ou utilisez /follow pour suivre des sujets\\._"
+            )
+
+        lines.append("")
+        lines.append("_Utilisez /follow `sujet` pour en ajouter un\\._")
+        await self.send_message(chat_id, "\n".join(lines))
+
+    async def _handle_preferences(self, chat_id: int, args: str) -> None:
+        """Show and edit user preferences."""
+        from app.services.messaging.user_profile import get_profile_manager
+        pm = get_profile_manager()
+        profile = await pm.get_profile(chat_id)
+
+        # Handle sub-commands: /preferences persona neutral
+        if args.strip():
+            parts = args.strip().split(maxsplit=1)
+            key = parts[0].lower()
+            val = parts[1] if len(parts) > 1 else ""
+            if key in ("persona", "frequence", "frequency", "langue", "language"):
+                await pm.set_preference(chat_id, key, val)
+                await self.send_message(
+                    chat_id,
+                    f"✅ Préférence mise à jour : *{self._escape_md_static(key)}* → `{self._escape_md_static(val)}`",
+                )
+                return
+
+        persona = self._escape_md_static(profile.get("preferred_persona", "neutral"))
+        freq = self._escape_md_static(profile.get("alert_frequency", "off"))
+        lang = self._escape_md_static(profile.get("language", "fr"))
+        registered = profile.get("registered_at", "")
+
+        from app.services.messaging.memory_manager import get_memory_manager
+        memories = await get_memory_manager().get_all_memories(chat_id)
+        mem_count = len(memories)
+
+        lines = [
+            "⚙️ *Votre profil NovaPress*\n",
+            f"🎭 Persona : `{persona}`",
+            f"🔔 Alertes : `{freq}`",
+            f"🌍 Langue : `{lang}`",
+            f"🧠 Mémoires stratégiques : `{mem_count}`\n",
+            "*Pour modifier :*",
+            "• `/preferences persona le\\_cynique`",
+            "• `/frequency daily` ou `/frequency realtime`",
+            "• `/alerts on` ou `/alerts off`",
+        ]
+        await self.send_message(chat_id, "\n".join(lines))
+
+    async def _handle_alerts(self, chat_id: int, args: str) -> None:
+        """Toggle proactive alerts on/off."""
+        from app.services.messaging.user_profile import get_profile_manager
+        from app.services.messaging.alert_service import get_alert_service
+        pm = get_profile_manager()
+        alert_svc = get_alert_service()
+
+        arg = args.strip().lower()
+        if arg in ("on", "true", "1", "activer", "yes", "oui"):
+            await pm.set_preference(chat_id, "alert_frequency", "daily")
+            await alert_svc.register_user(chat_id)
+            await self.send_message(
+                chat_id,
+                "🔔 *Alertes activées\\!*\n\n"
+                "Vous recevrez un digest quotidien des synthèses "
+                "correspondant à vos sujets suivis\\.\n\n"
+                "Changez la fréquence avec /frequency daily\\|realtime",
+            )
+        elif arg in ("off", "false", "0", "désactiver", "no", "non"):
+            await pm.set_preference(chat_id, "alert_frequency", "off")
+            await alert_svc.unregister_user(chat_id)
+            await self.send_message(chat_id, "🔕 *Alertes désactivées\\.*")
+        else:
+            freq = await pm.get_preference(chat_id, "alert_frequency", "off")
+            esc_freq = self._escape_md_static(freq)
+            await self.send_message(
+                chat_id,
+                f"🔔 *Alertes* — Statut actuel : `{esc_freq}`\n\n"
+                "• `/alerts on` — Activer\n"
+                "• `/alerts off` — Désactiver",
+            )
+
+    async def _handle_frequency(self, chat_id: int, args: str) -> None:
+        """Set alert frequency."""
+        from app.services.messaging.user_profile import get_profile_manager
+        from app.services.messaging.alert_service import get_alert_service
+        pm = get_profile_manager()
+
+        arg = args.strip().lower()
+        valid = {"daily": "quotidien", "realtime": "temps réel"}
+        if arg in valid:
+            await pm.set_preference(chat_id, "alert_frequency", arg)
+            await get_alert_service().register_user(chat_id)
+            label = self._escape_md_static(valid[arg])
+            await self.send_message(
+                chat_id,
+                f"✅ Fréquence d'alertes : *{label}*\n\n"
+                "Assurez\\-vous d'avoir suivi des sujets avec /follow\\.",
+            )
+        else:
+            await self.send_message(
+                chat_id,
+                "⏱ *Fréquence des alertes*\n\n"
+                "• `/frequency daily` — Un digest quotidien\n"
+                "• `/frequency realtime` — Alerte immédiate à chaque synthèse",
+            )
+
+    async def _handle_podcast(self, chat_id: int, args: str) -> None:
+        """Generate and send a 3-minute audio briefing."""
+        await self._send_typing(chat_id)
         await self.send_message(
             chat_id,
-            f"❌ Vous ne suivez plus : *{escaped}*",
+            "🎙️ *Génération du podcast en cours…*\n"
+            "_Henri et Denise préparent votre briefing audio\\._\n"
+            "_Cela peut prendre 30 à 60 secondes\\._",
         )
 
+        try:
+            from app.services.briefing_service import get_briefing_service
+            from app.services.podcast_generator import get_podcast_generator
+
+            # Get top syntheses
+            service = get_briefing_service()
+            briefing = await service.get_latest_briefing(limit=4)
+
+            if not briefing.get("items"):
+                await self.send_message(
+                    chat_id,
+                    "⚠️ Aucune synthèse disponible pour le podcast\\.\n"
+                    "Lancez /pipeline d'abord\\.",
+                )
+                return
+
+            syntheses = briefing["items"]
+            gen = get_podcast_generator()
+
+            audio_bytes = await gen.generate_podcast(
+                syntheses=syntheses,
+                duration_target=180,
+                llm_call=self._call_llm_with_max_tokens,
+            )
+
+            if audio_bytes:
+                caption = "🗞️ NovaPress Podcast — Votre briefing du jour avec Henri et Denise"
+                ok = await self.send_voice(chat_id, audio_bytes, caption=caption)
+                if not ok:
+                    # Fallback: text briefing
+                    raise RuntimeError("sendVoice failed")
+            else:
+                raise RuntimeError("Podcast generation returned None")
+
+        except Exception as e:
+            logger.error(f"Podcast generation failed: {e}")
+            await self.send_message(
+                chat_id,
+                "⚠️ Podcast indisponible pour le moment\\.\n"
+                "Voici le briefing texte à la place :",
+            )
+            await self._handle_briefing(chat_id, "")
+
     async def _handle_help(self, chat_id: int, args: str) -> None:
-        """Show help message."""
         text = (
             "🗞️ *NovaPress — Aide*\n\n"
             "💬 *Mode conversation :*\n"
-            "_Tapez n'importe quelle question en texte libre\\!_\n"
-            "_\"Que s'est\\-il passé aujourd'hui ?\", \"Analyse la situation en Chine\"_\n\n"
+            "_Tapez n'importe quelle question en texte libre\\!_\n\n"
             "📋 *Commandes :*\n\n"
-            "🗞️ /briefing\n"
-            "  _Votre briefing IA quotidien_\n\n"
-            "🔍 /search `sujet`\n"
-            "  _Recherche sémantique dans les synthèses_\n\n"
-            "🎭 /perspectives\n"
-            "  _La même actu vue par différentes personas_\n\n"
-            "📡 /follow `sujet`\n"
-            "  _Suivre un thème et recevoir des alertes_\n\n"
-            "🚀 /pipeline\n"
-            "  _Lancer le pipeline d'actualités maintenant_\n\n"
-            "🔄 /reset\n"
-            "  _Réinitialiser la conversation_\n\n"
-            "─" * 20 + "\n"
-            "🌐 [NovaPress Web](https://novapressai.duckdns.org)\n"
+            "🗞️ /briefing — Briefing IA quotidien\n"
+            "🔍 /search `sujet` — Recherche sémantique\n"
+            "🎭 /perspectives — Différents points de vue\n"
+            "🎙️ /podcast — Briefing audio 3 minutes\n"
+            "📡 /follow `sujet` — Suivre un thème\n"
+            "📡 /unfollow `sujet` — Ne plus suivre\n"
+            "📊 /topics — Vos sujets et intérêts\n"
+            "⚙️ /preferences — Votre profil\n"
+            "🔔 /alerts on\\|off — Activer/désactiver les alertes\n"
+            "⏱ /frequency daily\\|realtime — Fréquence alertes\n"
+            "🚀 /pipeline — Lancer le pipeline\n"
+            "🔄 /reset — Réinitialiser la conversation\n\n"
+            "─────────────────────────\n"
+            "🌐 [NovaPress Web](https://novapressai\\.duckdns\\.org)\n"
             "💡 NovaPress — _L'IA qui vous briefe\\._"
         )
-
         await self.send_message(chat_id, text)
 
     async def _handle_pipeline(self, chat_id: int, args: str) -> None:
-        """Trigger the news pipeline via admin API."""
         await self._send_typing(chat_id)
         try:
             client = await self._get_client()
@@ -446,71 +675,113 @@ class TelegramBot:
                 await self.send_message(chat_id, f"ℹ️ Pipeline : `{str(data)[:100]}`")
         except Exception as e:
             logger.error(f"Pipeline trigger from Telegram failed: {e}")
-            await self.send_message(
-                chat_id,
-                "⚠️ Impossible de lancer le pipeline pour le moment\\.",
-            )
+            await self.send_message(chat_id, "⚠️ Impossible de lancer le pipeline pour le moment\\.")
 
     async def _handle_reset(self, chat_id: int, args: str) -> None:
-        """Reset conversation history for this chat (RAM + Redis)."""
+        """Reset conversation history (keeps strategic memories and profile)."""
         self._conversation_history.pop(str(chat_id), None)
+        self._active_persona.pop(str(chat_id), None)
         await self._redis_del_history(chat_id)
         await self.send_message(
             chat_id,
             "🔄 *Conversation réinitialisée\\.*\n\n"
-            "Je recommence à zéro\\. Comment puis\\-je vous aider \\?",
+            "📝 _Note : votre profil et vos mémoires stratégiques sont conservés\\._\n"
+            "Comment puis\\-je vous aider \\?",
         )
 
+    async def _handle_unknown(self, chat_id: int, args: str) -> None:
+        await self.send_message(
+            chat_id,
+            "❓ Commande inconnue\\.\n"
+            "Tapez /help pour la liste des commandes\\.\n"
+            "💬 Ou écrivez simplement votre question en texte libre\\!",
+        )
+
+    # ─── Main Chat Handler ───
+
     async def _handle_chat(self, chat_id: int, text: str) -> None:
-        """Handle free-text messages with DeepSeek V3.2 via OpenRouter."""
+        """Free-text chat with Smart RAG, persona, memory, intent detection."""
         await self._send_typing(chat_id)
 
         try:
-            from datetime import datetime, timezone
             today = datetime.now(timezone.utc).strftime("%A %d %B %Y")
-
-            # Load persistent history from Redis
             history = await self._redis_load_history(chat_id)
 
-            # Get news context from Qdrant
-            news_context, has_real_news = await self._get_news_context()
+            # 1. Detect intent
+            intent = self._detect_intent(text)
+
+            # 2. Handle specific intents
+            if intent == "persona":
+                persona_id = self._extract_persona(text)
+                if persona_id:
+                    self._active_persona[str(chat_id)] = persona_id
+                    await self.send_message(
+                        chat_id,
+                        f"🎭 Mode *{self._escape_md_static(persona_id.replace('_', ' '))}* activé\\!\n"
+                        "Je vais répondre avec ce style\\.",
+                        parse_mode="MarkdownV2",
+                    )
+                    return
+
+            # 3. Smart RAG: semantic search for relevant news
+            news_context, has_real_news = await self._smart_search(text, chat_id)
+
+            # 4. Update user interests from detected categories
+            from app.services.messaging.user_profile import get_profile_manager
+            pm = get_profile_manager()
+            detected_cats = pm.detect_categories(text)
+            if detected_cats:
+                await pm.update_from_interaction(chat_id, detected_cats)
+
+            # 5. Get strategic memories
+            from app.services.messaging.memory_manager import get_memory_manager
+            memory_mgr = get_memory_manager()
+            memory_context = await memory_mgr.get_context(chat_id)
+
+            # 6. Build system prompt
+            active_persona = self._active_persona.get(str(chat_id), "neutral")
+            persona_instructions = self._get_persona_instructions(active_persona)
 
             if has_real_news:
                 context_block = (
-                    f"DERNIÈRES SYNTHÈSES NOVAPRESS (sources réelles, pipeline de ce jour) :\n"
+                    "SYNTHÈSES NOVAPRESS PERTINENTES (sources réelles) :\n"
                     f"{news_context}\n\n"
-                    "INSTRUCTION : Base tes réponses sur ces synthèses en priorité."
+                    "INSTRUCTION : Base tes réponses sur ces synthèses en priorité. "
+                    "Cite les titres des synthèses sources quand pertinent."
                 )
             else:
                 context_block = (
-                    "IMPORTANT — AUCUNE SYNTHÈSE DISPONIBLE :\n"
-                    "Le pipeline NovaPress n'a pas encore tourné aujourd'hui.\n"
-                    "Tu ne connais PAS l'actualité récente. Ne l'invente PAS.\n"
-                    "Si on te demande les news du jour, réponds honnêtement que les données "
-                    "ne sont pas encore chargées et suggère /pipeline ou /briefing."
+                    "IMPORTANT — AUCUNE SYNTHÈSE PERTINENTE TROUVÉE :\n"
+                    "Le pipeline n'a pas encore généré de synthèses sur ce sujet.\n"
+                    "Ne l'invente PAS. Réponds honnêtement et suggère /pipeline ou /briefing."
                 )
+
+            # Add intent-specific instructions
+            intent_instruction = self._get_intent_instruction(intent, text)
 
             system_prompt = (
                 f"Tu es le journaliste IA de NovaPress — \"L'IA qui vous briefe.\"\n"
                 f"Date actuelle : {today}\n"
-                f"Tu réponds TOUJOURS en français, de manière concise et journalistique.\n\n"
+                f"Tu réponds TOUJOURS en français, de manière concise et journalistique.\n"
+                f"{persona_instructions}\n\n"
+                f"{memory_context}\n\n"
                 f"{context_block}\n\n"
+                f"{intent_instruction}"
                 "RÈGLES ABSOLUES :\n"
-                "- Réponds en 3-5 phrases maximum\n"
+                "- Réponds en 3-6 phrases maximum\n"
                 "- Style factuel, professionnel, sans sensationnalisme\n"
                 "- NE JAMAIS inventer ou halluciner des faits d'actualité\n"
                 "- Si tu n'as pas l'info, dis-le clairement et suggère /briefing\n"
-                "- NE PAS utiliser de formatage markdown dans ta réponse (pas de **, pas de __)"
+                "- NE PAS utiliser de formatage markdown (pas de **, pas de __)"
             )
 
             messages = [{"role": "system", "content": system_prompt}]
             messages.extend(history[-self.MAX_CHAT_HISTORY:])
             messages.append({"role": "user", "content": text})
 
-            # Call DeepSeek V3.2 via OpenRouter
             response_text = await self._call_llm(messages)
 
-            # Persist updated history to Redis
+            # Save history
             history.append({"role": "user", "content": text})
             history.append({"role": "assistant", "content": response_text})
             if len(history) > self.MAX_CHAT_HISTORY * 2:
@@ -518,7 +789,11 @@ class TelegramBot:
             self._conversation_history[str(chat_id)] = history
             await self._redis_save_history(chat_id, history)
 
-            # Send as plain text to avoid MarkdownV2 escaping issues
+            # Trigger memory extraction (non-blocking, every 5 interactions)
+            asyncio.create_task(
+                memory_mgr.maybe_extract(chat_id, history, self._call_llm)
+            )
+
             await self.send_message(chat_id, response_text, parse_mode=None)
 
         except Exception as e:
@@ -529,49 +804,248 @@ class TelegramBot:
                 "Essayez /briefing pour les dernières nouvelles\\.",
             )
 
-    async def _get_news_context(self) -> tuple:
+    # ─── Smart RAG ───
+
+    async def _smart_search(self, query: str, chat_id: int) -> tuple:
         """
-        Get the latest syntheses as LLM context.
-        Returns (context_str, has_real_news: bool)
+        Semantic search in Qdrant syntheses using BGE-M3 embeddings.
+        Returns (context_str, has_real_news: bool).
         """
         try:
             from app.db.qdrant_client import get_qdrant_service
+            from app.ml.embeddings import embedding_service
+
             qdrant = get_qdrant_service()
-            if not qdrant or not qdrant.client:
-                return "Service indisponible.", False
 
-            results = await qdrant.client.scroll(
-                collection_name=f"{settings.QDRANT_COLLECTION}_syntheses",
-                limit=5,
-                with_payload=True,
-                with_vectors=False,
-            )
-            points = results[0] if results else []
-            if not points:
-                return "Aucune synthèse.", False
+            # Encode query using BGE-M3 in a thread (sync call)
+            if embedding_service.model:
+                query_vector = await asyncio.to_thread(
+                    embedding_service.encode_single, query
+                )
+                # Search Qdrant by similarity
+                results = await asyncio.to_thread(
+                    qdrant.search_syntheses_by_embedding,
+                    query_vector.tolist(),
+                    5,  # limit
+                    0.55,  # score_threshold
+                )
+            else:
+                results = []
 
+            # Fallback: if no semantic matches, get latest syntheses
+            if not results:
+                results = await asyncio.to_thread(
+                    qdrant.get_latest_syntheses, 3
+                )
+                if not results:
+                    return "Aucune synthèse disponible.", False
+                # Mark as fallback (no score)
+                for r in results:
+                    r.setdefault("score", 0.0)
+                has_real_news = True
+                is_semantic = False
+            else:
+                has_real_news = True
+                is_semantic = True
+
+            # Build context from relevant passages
             parts = []
-            for point in points[:5]:
-                p = point.payload or {}
-                title = p.get("title", "Sans titre")
-                intro = p.get("introduction", p.get("summary", ""))[:300]
-                category = p.get("category", "")
-                created = p.get("created_at", "")
-                parts.append(f"[{category}] {title}\n  → {intro}\n  (publié: {created})")
-            return "\n\n".join(parts), True
+            for synth in results:
+                cat = synth.get("category", "")
+                title = synth.get("title", "Sans titre")
+                passage = self._extract_relevant_passage(synth, query)
+                sources = synth.get("source_count", synth.get("num_sources", 0))
+                ts_score = synth.get("transparency_score", 0)
+                created = synth.get("created_at", "")
 
+                parts.append(
+                    f"[{cat}] {title}\n"
+                    f"  Sources: {sources} | Score transparence: {ts_score}/100\n"
+                    f"  {passage}\n"
+                    f"  (publié: {created})"
+                )
+
+            context = "\n\n---\n\n".join(parts)
+            return context, has_real_news
+
+        except RuntimeError:
+            # Qdrant or embedding not initialized
+            return "Services de recherche non disponibles.", False
         except Exception as e:
-            logger.warning(f"Failed to get news context: {e}")
+            logger.warning(f"Smart search failed: {e}")
             return "Synthèses temporairement indisponibles.", False
+
+    @staticmethod
+    def _extract_relevant_passage(synth: Dict, query: str) -> str:
+        """
+        Extract the most relevant ~300-char passage from a synthesis.
+        Simple keyword matching — no LLM needed.
+        """
+        # Fields to search in order of priority
+        fields = [
+            synth.get("body", ""),
+            synth.get("introduction", synth.get("summary", "")),
+            synth.get("analysis", ""),
+        ]
+
+        query_words = set(query.lower().split())
+        best_passage = ""
+        best_score = -1
+
+        for field in fields:
+            if not field or not isinstance(field, str):
+                continue
+            # Slide a 300-char window and score by keyword overlap
+            for i in range(0, max(1, len(field) - 300), 100):
+                window = field[i : i + 300]
+                window_words = set(window.lower().split())
+                score = len(query_words & window_words)
+                if score > best_score:
+                    best_score = score
+                    best_passage = window
+
+        if best_passage:
+            return best_passage.strip()
+
+        # Fallback: first 300 chars of introduction
+        intro = synth.get("introduction", synth.get("summary", ""))
+        return str(intro)[:300].strip() if intro else "Pas de contenu disponible."
+
+    # ─── Intent Detection ───
+
+    @staticmethod
+    def _detect_intent(text: str) -> Optional[str]:
+        """Detect special intent from user message."""
+        for intent_name, pattern in INTENT_PATTERNS.items():
+            if pattern.search(text):
+                return intent_name
+        return None
+
+    @staticmethod
+    def _extract_persona(text: str) -> Optional[str]:
+        """Extract persona ID from intent match."""
+        text_lower = text.lower()
+        for keyword, persona_id in PERSONA_MAP.items():
+            if keyword in text_lower:
+                return persona_id
+        return None
+
+    @staticmethod
+    def _get_persona_instructions(persona_id: str) -> str:
+        """Return style instructions for the active persona."""
+        instructions = {
+            "neutral": "",
+            "le_cynique": (
+                "PERSONA ACTIF — Le Cynique (Edouard Vaillant) :\n"
+                "Ton sardonique, sceptique, désabusé. Cherche la contradiction. "
+                "Formules: 'Quelle surprise...', 'Encore une fois...', 'Comme d'habitude...'"
+            ),
+            "l_optimiste": (
+                "PERSONA ACTIF — L'Optimiste (Claire Horizon) :\n"
+                "Ton enthousiaste, constructif, solutions-focused. "
+                "Valorise les avancées, les opportunités, l'espoir."
+            ),
+            "le_conteur": (
+                "PERSONA ACTIF — Le Conteur (Alexandre Duval) :\n"
+                "Style narratif, dramatique. Commence par 'Il était une fois...' "
+                "ou une mise en scène dramatique. Raconte l'actu comme un feuilleton."
+            ),
+            "le_satiriste": (
+                "PERSONA ACTIF — Le Satiriste (Le Bouffon) :\n"
+                "Ton absurdiste, parodique. Traite l'actualité avec ironie légère. "
+                "Style Le Gorafi mais subtil."
+            ),
+            "l_historien": (
+                "PERSONA ACTIF — L'Historien :\n"
+                "Replace les événements dans leur contexte historique. "
+                "Références aux précédents historiques. Ton académique mais accessible."
+            ),
+            "le_philosophe": (
+                "PERSONA ACTIF — Le Philosophe :\n"
+                "Questionne les présupposés. Explore les implications éthiques et sociétales. "
+                "Ton réflexif, cite des courants de pensée."
+            ),
+            "le_scientifique": (
+                "PERSONA ACTIF — Le Scientifique :\n"
+                "Données, chiffres, consensus scientifique. "
+                "Méfiance envers les assertions sans preuves. Ton factuel et rigoureux."
+            ),
+        }
+        return instructions.get(persona_id, "")
+
+    @staticmethod
+    def _get_intent_instruction(intent: Optional[str], text: str) -> str:
+        """Return additional LLM instructions based on detected intent."""
+        if not intent:
+            return ""
+        instructions = {
+            "compare": (
+                "L'utilisateur veut comparer deux sujets. "
+                "Structure ta réponse en deux parties claires avec les similitudes et différences.\n"
+            ),
+            "weekly": (
+                "L'utilisateur veut un résumé de la semaine. "
+                "Synthétise les grandes tendances des synthèses disponibles.\n"
+            ),
+            "transparency": (
+                "L'utilisateur s'interroge sur la fiabilité de l'info. "
+                "Mentionne le score de transparence des synthèses pertinentes et le nombre de sources.\n"
+            ),
+            "trend": (
+                "L'utilisateur veut connaître les tendances. "
+                "Mentionne le narrative_arc (émergent, en développement, au pic, en déclin) si disponible.\n"
+            ),
+            "causal": (
+                "L'utilisateur cherche les causes et conséquences. "
+                "Explique les liens causaux identifiés dans les synthèses.\n"
+            ),
+        }
+        return instructions.get(intent, "")
+
+    # ─── Persona Transforms (lightweight, no LLM) ───
+
+    @staticmethod
+    def _cynique_transform(text: str) -> str:
+        prefix = "Quelle surprise... "
+        return (prefix + text[:180]).strip()
+
+    @staticmethod
+    def _optimiste_transform(text: str) -> str:
+        prefix = "Une avancée prometteuse : "
+        return (prefix + text[:180]).strip()
+
+    @staticmethod
+    def _conteur_transform(text: str) -> str:
+        prefix = "Il était une fois... "
+        return (prefix + text[:180]).strip()
+
+    @staticmethod
+    def _satiriste_transform(text: str) -> str:
+        prefix = "Breaking : les experts s'accordent à dire... "
+        return (prefix + text[:160]).strip()
+
+    # ─── Notifications ───
+
+    async def notify_subscribers(self, synthesis: Dict[str, Any]) -> int:
+        """
+        Notify subscribers about a new synthesis.
+        Called by the pipeline after synthesis storage.
+        Returns number of notifications sent.
+        """
+        if not self._initialized:
+            return 0
+        try:
+            from app.services.messaging.alert_service import get_alert_service
+            return await get_alert_service().check_new_synthesis(synthesis)
+        except Exception as e:
+            logger.warning(f"notify_subscribers failed: {e}")
+            return 0
 
     # ─── Redis Persistent Memory ───
 
     async def _redis_load_history(self, chat_id: int) -> list:
-        """Load conversation history from Redis. Falls back to in-memory."""
-        # Try in-memory cache first (fast path)
         if str(chat_id) in self._conversation_history:
             return list(self._conversation_history[str(chat_id)])
-        # Try Redis
         try:
             import redis.asyncio as aioredis
             r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
@@ -582,25 +1056,23 @@ class TelegramBot:
                 self._conversation_history[str(chat_id)] = history
                 return list(history)
         except Exception as e:
-            logger.debug(f"Redis load history failed (fallback to empty): {e}")
+            logger.debug(f"Redis load history failed: {e}")
         return []
 
     async def _redis_save_history(self, chat_id: int, history: list) -> None:
-        """Save conversation history to Redis with 30-day TTL."""
         try:
             import redis.asyncio as aioredis
             r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
             await r.setex(
                 f"novapress:chat:{chat_id}",
-                60 * 60 * 24 * 30,  # 30 days TTL
+                60 * 60 * 24 * 30,
                 json.dumps(history, ensure_ascii=False),
             )
             await r.aclose()
         except Exception as e:
-            logger.debug(f"Redis save history failed (in-memory only): {e}")
+            logger.debug(f"Redis save history failed: {e}")
 
     async def _redis_del_history(self, chat_id: int) -> None:
-        """Delete conversation history from Redis."""
         try:
             import redis.asyncio as aioredis
             r = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
@@ -609,8 +1081,10 @@ class TelegramBot:
         except Exception as e:
             logger.debug(f"Redis del history failed: {e}")
 
-    async def _call_llm(self, messages: list) -> str:
-        """Call DeepSeek V3.2 via OpenRouter for conversational AI."""
+    # ─── LLM Calls ───
+
+    async def _call_llm(self, messages: list, max_tokens: int = 400) -> str:
+        """Call DeepSeek V3.2 via OpenRouter."""
         client = await self._get_client()
         resp = await client.post(
             "https://openrouter.ai/api/v1/chat/completions",
@@ -623,7 +1097,7 @@ class TelegramBot:
             json={
                 "model": settings.OPENROUTER_MODEL,
                 "messages": messages,
-                "max_tokens": 400,
+                "max_tokens": max_tokens,
                 "temperature": 0.7,
             },
             timeout=30.0,
@@ -634,56 +1108,15 @@ class TelegramBot:
         logger.error(f"OpenRouter error: {data}")
         raise RuntimeError("LLM returned no response")
 
-    async def _handle_unknown(self, chat_id: int, args: str) -> None:
-        """Handle unknown commands."""
-        await self.send_message(
-            chat_id,
-            "❓ Commande inconnue\\.\n"
-            "Tapez /help pour la liste des commandes\\.\n"
-            "💬 Ou écrivez simplement votre question en texte libre\\!",
-        )
-
-    # ─── Notification Sending ───
-
-    async def notify_subscribers(self, synthesis: Dict[str, Any]) -> int:
-        """
-        Notify subscribers about a new synthesis matching their topics.
-
-        Returns:
-            Number of notifications sent
-        """
-        if not self._initialized:
-            return 0
-
-        title = synthesis.get("title", "").lower()
-        category = synthesis.get("category", "").lower()
-        key_points = " ".join(synthesis.get("key_points", [])).lower()
-        searchable = f"{title} {category} {key_points}"
-
-        sent = 0
-        for chat_id, topics in self._subscribers.items():
-            for topic in topics:
-                if topic in searchable:
-                    try:
-                        escaped_title = self._escape_md_static(synthesis.get("title", ""))
-                        escaped_topic = self._escape_md_static(topic)
-                        await self.send_message(
-                            int(chat_id),
-                            f"🔔 *Nouvelle synthèse sur {escaped_topic} \\!*\n\n"
-                            f"*{escaped_title}*\n\n"
-                            "Tapez /briefing pour lire le briefing complet\\.",
-                        )
-                        sent += 1
-                    except Exception as e:
-                        logger.warning(f"Failed to notify {chat_id}: {e}")
-                    break  # Only notify once per subscriber
-
-        return sent
+    async def _call_llm_with_max_tokens(
+        self, messages: list, max_tokens: int = 1200
+    ) -> str:
+        """LLM call with higher token limit for podcast/memory extraction."""
+        return await self._call_llm(messages, max_tokens=max_tokens)
 
     # ─── Utilities ───
 
     async def _send_typing(self, chat_id: int) -> None:
-        """Send typing indicator."""
         try:
             client = await self._get_client()
             await client.post(
@@ -708,7 +1141,6 @@ class TelegramBot:
     @staticmethod
     def _strip_markdown(text: str) -> str:
         """Remove markdown formatting for plain text fallback."""
-        import re
         text = re.sub(r"[\\*_~`\[\]()]", "", text)
         return text
 
@@ -717,6 +1149,15 @@ class TelegramBot:
         if self._http_client:
             await self._http_client.aclose()
             self._http_client = None
+        from app.services.messaging.user_profile import get_profile_manager
+        from app.services.messaging.memory_manager import get_memory_manager
+        from app.services.messaging.alert_service import get_alert_service
+        try:
+            await get_profile_manager().close()
+            await get_memory_manager().close()
+            await get_alert_service().close()
+        except Exception:
+            pass
 
 
 # Global instance

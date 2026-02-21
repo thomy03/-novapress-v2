@@ -1402,6 +1402,54 @@ class QdrantService:
             logger.error(f"Failed to get recent syntheses: {e}")
             return []
 
+    def search_syntheses_by_embedding(
+        self,
+        vector: List[float],
+        limit: int = 5,
+        score_threshold: float = 0.6,
+    ) -> List[Dict[str, Any]]:
+        """
+        Semantic search in the syntheses collection by embedding vector.
+
+        Args:
+            vector: Query embedding (1024-dim BGE-M3)
+            limit: Max results to return
+            score_threshold: Minimum cosine similarity (0.0-1.0)
+
+        Returns:
+            List of synthesis payloads with 'score' field, sorted by score desc
+        """
+        if not self.client:
+            raise RuntimeError("Qdrant not initialized")
+
+        try:
+            results = self.client.query_points(
+                collection_name=self.syntheses_collection,
+                query=vector,
+                limit=limit,
+                score_threshold=score_threshold,
+                with_payload=True,
+            )
+
+            syntheses = []
+            for point in results.points:
+                payload = dict(point.payload or {})
+                payload["id"] = str(point.id)
+                payload["score"] = point.score
+                # Parse key_points from pipe-separated string
+                kp_str = payload.get("key_points", "")
+                if kp_str and isinstance(kp_str, str):
+                    payload["keyPoints"] = [k.strip() for k in kp_str.split("|") if k.strip()]
+                else:
+                    payload["keyPoints"] = []
+                syntheses.append(payload)
+
+            return syntheses
+
+        except Exception as e:
+            logger.error(f"Synthesis semantic search failed: {e}")
+            return []
+
     def get_syntheses_with_vectors(self, days: int = 7, limit: int = 100) -> List[Dict[str, Any]]:
         """
         Get recent syntheses WITH their embedding vectors for hybrid clustering.

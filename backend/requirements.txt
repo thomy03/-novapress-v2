@@ -60,6 +60,7 @@ websockets>=13.0
 
 # Text-to-Speech
 edge-tts>=6.1.0  # Microsoft Edge TTS for audio summaries
+pydub>=0.25.1    # Audio concatenation for podcast generator (requires ffmpeg)
 
 # Utilities
 python-dateutil>=2.9.0
