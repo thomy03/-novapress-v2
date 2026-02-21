@@ -15,6 +15,7 @@ try:
     matplotlib.use("Agg")  # Non-interactive backend — no display needed
     import matplotlib.pyplot as plt
     import matplotlib.ticker as ticker
+    import numpy as np
 
     HAS_MATPLOTLIB = True
 except ImportError:
@@ -47,6 +48,7 @@ def _apply_newspaper_style(fig: Any, ax: Any, title: str) -> None:
     fig.patch.set_facecolor(BG_COLOR)
     ax.set_facecolor(BG_COLOR)
 
+    # Spine style
     for spine in ["top", "right"]:
         ax.spines[spine].set_visible(False)
     for spine in ["bottom", "left"]:
@@ -57,6 +59,7 @@ def _apply_newspaper_style(fig: Any, ax: Any, title: str) -> None:
     ax.yaxis.label.set_color(SECONDARY_COLOR)
     ax.yaxis.label.set_fontsize(9)
     ax.set_title(title, color=TEXT_COLOR, fontsize=11, fontweight="bold", pad=12, loc="left")
+
     fig.tight_layout(pad=2.5)
 
 
@@ -84,6 +87,7 @@ def generate_category_chart(syntheses: List[Dict[str, Any]]) -> Optional[bytes]:
         fig, ax = plt.subplots(figsize=(7, 4))
         bars = ax.bar(cats, values, color=colors, edgecolor="white", linewidth=0.5, width=0.65)
 
+        # Value labels
         for bar, val in zip(bars, values):
             ax.text(
                 bar.get_x() + bar.get_width() / 2,
@@ -98,10 +102,12 @@ def generate_category_chart(syntheses: List[Dict[str, Any]]) -> Optional[bytes]:
 
         ax.set_ylabel("Nombre de synthèses", color=SECONDARY_COLOR, fontsize=9)
         ax.yaxis.set_major_locator(ticker.MaxNLocator(integer=True))
-        ax.set_ylim(bottom=0, top=max(values) * 1.25)
+        ax.set_ylim(bottom=0, top=max(values) * 1.2)
+        _apply_newspaper_style(fig, ax, "Synthèses par catégorie")
+
+        # Subtle grid
         ax.yaxis.grid(True, color=BORDER_COLOR, linewidth=0.5, linestyle="--")
         ax.set_axisbelow(True)
-        _apply_newspaper_style(fig, ax, "Synthèses par catégorie")
 
         buf = io.BytesIO()
         plt.savefig(buf, format="png", dpi=130, bbox_inches="tight", facecolor=BG_COLOR)
@@ -110,7 +116,7 @@ def generate_category_chart(syntheses: List[Dict[str, Any]]) -> Optional[bytes]:
         return buf.read()
 
     except Exception as exc:
-        logger.error(f"category_chart failed: {exc}")
+        logger.error("category_chart failed: " + str(exc))
         return None
 
 
@@ -137,20 +143,19 @@ def generate_transparency_chart(syntheses: List[Dict[str, Any]]) -> Optional[byt
         avgs = [sum(v) / len(v) for v in cat_scores.values()]
         colors = [CATEGORY_COLORS.get(c, CATEGORY_COLORS["AUTRE"]) for c in cats]
 
-        # Sort ascending so highest appears on top
+        # Sort ascending so highest is on top
         sorted_data = sorted(zip(cats, avgs, colors), key=lambda x: x[1])
-        if not sorted_data:
-            return None
-        cats_s, avgs_s, colors_s = zip(*sorted_data)
+        cats, avgs, colors = zip(*sorted_data) if sorted_data else ([], [], [])
 
         fig, ax = plt.subplots(figsize=(7, 4))
-        bars = ax.barh(list(cats_s), list(avgs_s), color=list(colors_s), edgecolor="white", linewidth=0.5, height=0.55)
+        bars = ax.barh(cats, avgs, color=colors, edgecolor="white", linewidth=0.5, height=0.55)
 
-        for bar, val in zip(bars, avgs_s):
+        # Value labels
+        for bar, val in zip(bars, avgs):
             ax.text(
-                val + 0.8,
+                val + 0.5,
                 bar.get_y() + bar.get_height() / 2,
-                f"{val:.0f}/100",
+                "{:.0f}/100".format(val),
                 va="center",
                 color=TEXT_COLOR,
                 fontsize=9,
@@ -170,7 +175,7 @@ def generate_transparency_chart(syntheses: List[Dict[str, Any]]) -> Optional[byt
         return buf.read()
 
     except Exception as exc:
-        logger.error(f"transparency_chart failed: {exc}")
+        logger.error("transparency_chart failed: " + str(exc))
         return None
 
 
@@ -208,6 +213,8 @@ def generate_timeline_chart(syntheses: List[Dict[str, Any]]) -> Optional[bytes]:
         values = [counts[k] for k in day_keys]
 
         fig, ax = plt.subplots(figsize=(8, 4))
+
+        # Fill area under curve
         ax.fill_between(range(7), values, alpha=0.12, color=ACCENT)
         ax.plot(
             range(7),
@@ -221,6 +228,7 @@ def generate_timeline_chart(syntheses: List[Dict[str, Any]]) -> Optional[bytes]:
             markeredgewidth=2,
         )
 
+        # Value labels on non-zero points
         for i, v in enumerate(values):
             if v > 0:
                 ax.annotate(
@@ -250,5 +258,5 @@ def generate_timeline_chart(syntheses: List[Dict[str, Any]]) -> Optional[bytes]:
         return buf.read()
 
     except Exception as exc:
-        logger.error(f"timeline_chart failed: {exc}")
+        logger.error("timeline_chart failed: " + str(exc))
         return None

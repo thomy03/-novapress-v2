@@ -13,6 +13,16 @@ import dynamic from 'next/dynamic';
 const BottomNav = dynamic(() => import('./layout/BottomNav'), { ssr: false });
 const MobileHeader = dynamic(() => import('./layout/MobileHeader'), { ssr: false });
 
+// Lazy-load PWA components (client-only, non-blocking)
+const InstallPrompt = dynamic(
+  () => import('./pwa/InstallPrompt').then((m) => ({ default: m.InstallPrompt })),
+  { ssr: false }
+);
+const UpdateNotifier = dynamic(
+  () => import('./pwa/UpdateNotifier').then((m) => ({ default: m.UpdateNotifier })),
+  { ssr: false }
+);
+
 interface ProvidersProps {
   children: ReactNode;
 }
@@ -68,6 +78,8 @@ export function Providers({ children }: ProvidersProps) {
                   {isMobile && <MobileHeader />}
                   {children}
                   {isMobile && <BottomNav />}
+                  <InstallPrompt />
+                  <UpdateNotifier />
                 </div>
               </ReadingProfileProvider>
             </ArticlesProvider>

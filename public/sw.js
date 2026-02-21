@@ -170,14 +170,92 @@ self.addEventListener('notificationclick', (event) => {
 // ─── Background Sync ───
 
 self.addEventListener('sync', (event) => {
-  if (event.tag === 'background-sync') {
+  if (event.tag === 'sync-bookmarks') {
+    console.log('[SW] Background sync: bookmarks');
+    event.waitUntil(syncPendingBookmarks());
+  } else if (event.tag === 'background-sync') {
     console.log('[SW] Background sync triggered');
-    event.waitUntil(doBackgroundSync());
+    event.waitUntil(syncPendingBookmarks());
   }
 });
 
-async function doBackgroundSync() {
-  console.log('[SW] Performing background sync...');
+/**
+ * Sync pending bookmark operations stored in IndexedDB.
+ * Called when network becomes available after offline actions.
+ */
+async function syncPendingBookmarks() {
+  let db;
+  try {
+    db = await openOfflineDB();
+    const pending = await getAllPendingOps(db);
+
+    if (!pending.length) {
+      console.log('[SW] No pending bookmarks to sync');
+      return;
+    }
+
+    console.log(`[SW] Syncing ${pending.length} pending bookmark operations`);
+
+    for (const op of pending) {
+      try {
+        const resp = await fetch(op.url || '/api/v1/bookmarks', {
+          method: op.method || 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(op.data),
+        });
+        if (resp.ok) {
+          await deletePendingOp(db, op.id);
+          console.log(`[SW] Synced op ${op.id}`);
+        } else {
+          console.warn(`[SW] Server rejected op ${op.id}: ${resp.status}`);
+        }
+      } catch (err) {
+        console.warn(`[SW] Failed to sync op ${op.id}:`, err);
+        // Will retry on next sync event
+      }
+    }
+  } catch (err) {
+    console.error('[SW] Background sync failed:', err);
+    throw err; // Re-throw to retry
+  } finally {
+    if (db) db.close();
+  }
+}
+
+// ─── IndexedDB helpers ───
+
+function openOfflineDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('novapress-offline', 1);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('pending-ops')) {
+        db.createObjectStore('pending-ops', { keyPath: 'id', autoIncrement: true });
+      }
+    };
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function getAllPendingOps(db) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('pending-ops', 'readonly');
+    const store = tx.objectStore('pending-ops');
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function deletePendingOp(db, id) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('pending-ops', 'readwrite');
+    const store = tx.objectStore('pending-ops');
+    const req = store.delete(id);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
 }
 
 // ─── Messages ───

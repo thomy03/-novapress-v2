@@ -175,6 +175,12 @@ class Settings(BaseSettings):
     DISCORD_WEBHOOK_URL: str = ""  # Discord channel webhook URL
     DISCORD_NOTIFY_BREAKING: bool = False  # If True, only send breaking news notifications
 
+    # Web Push Notifications (VAPID)
+    # Generate keys: python -c "from pywebpush import Vapid; v=Vapid(); v.generate_keys(); print(v.private_key); print(v.public_key)"
+    VAPID_PRIVATE_KEY: str = ""   # Set in .env
+    VAPID_PUBLIC_KEY: str = ""    # Set in .env + NEXT_PUBLIC_VAPID_PUBLIC_KEY in frontend .env.local
+    VAPID_EMAIL: str = ""         # Contact email, e.g. mailto:admin@novapress.ai
+
     @property
     def rss_feeds_list(self) -> List[str]:
         """Parse RSS feeds string into list"""

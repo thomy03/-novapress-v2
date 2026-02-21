@@ -736,7 +736,20 @@ class TelegramBot:
         await self._send_typing(chat_id)
 
         try:
-            today = datetime.now(timezone.utc).strftime("%A %d %B %Y")
+            now_utc = datetime.now(timezone.utc)
+            today = now_utc.strftime("%A %d %B %Y")
+
+            # B4 — Situational time context
+            hour = now_utc.hour
+            if hour < 6:
+                time_ctx = "nuit (ultra-concis, l'utilisateur est peut-être en veille)"
+            elif hour < 12:
+                time_ctx = "matin (sois concis et direct, l'utilisateur démarre sa journée)"
+            elif hour < 18:
+                time_ctx = "après-midi (ton équilibré)"
+            else:
+                time_ctx = "soir (plus détendu, tu peux développer un peu plus)"
+
             history = await self._redis_load_history(chat_id)
 
             # 1. Detect intent
@@ -799,7 +812,7 @@ class TelegramBot:
 
             system_prompt = (
                 f"Tu es Alex, le pote journaliste de NovaPress — celui qui sait tout sur l'actu.\n"
-                f"On est le {today}.\n\n"
+                f"On est le {today}. Moment de la journée : {time_ctx}.\n\n"
                 f"TON STYLE :\n"
                 f"- Tu tutoies, tu es passionné et direct — comme un ami qui t'explique l'actu\n"
                 f"- Pour une question simple → réponse courte (2-4 lignes)\n"
@@ -845,7 +858,12 @@ class TelegramBot:
             self._conversation_history[str(chat_id)] = history
             await self._redis_save_history(chat_id, history)
 
-            # Trigger memory extraction (non-blocking, every 5 interactions)
+            # B1 — Check immediate triggers (profile-revealing info → extract now)
+            asyncio.create_task(
+                memory_mgr.check_immediate_trigger(chat_id, text, self._call_llm)
+            )
+
+            # Trigger periodic memory extraction (every 5 interactions)
             asyncio.create_task(
                 memory_mgr.maybe_extract(chat_id, history, self._call_llm)
             )

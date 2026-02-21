@@ -11,6 +11,7 @@ export {
   useReducedMotion
 } from './useMediaQuery';
 export { useServiceWorker } from './useServiceWorker';
+export { usePushNotifications } from './usePushNotifications';
 export { usePerformanceMonitoring } from './usePerformanceMonitoring';
 export { useBookmarks } from './useBookmarks';
 
