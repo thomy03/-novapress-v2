@@ -5,14 +5,14 @@ import { useState, useEffect, useCallback } from 'react';
 // Set via NEXT_PUBLIC_VAPID_PUBLIC_KEY in .env.local
 const PUBLIC_VAPID_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '';
 
-/** Convert URL-safe base64 to Uint8Array for applicationServerKey */
-function urlBase64ToUint8Array(base64: string): Uint8Array {
+/** Convert URL-safe base64 to ArrayBuffer for applicationServerKey */
+function urlBase64ToUint8Array(base64: string): ArrayBuffer {
   const padding = '='.repeat((4 - (base64.length % 4)) % 4);
   const b64 = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/');
   const raw = atob(b64);
   const arr = new Uint8Array(raw.length);
   for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
-  return arr;
+  return arr.buffer as ArrayBuffer;
 }
 
 export interface PushState {
