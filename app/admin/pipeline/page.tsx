@@ -40,8 +40,9 @@ export default function AdminPipelinePage() {
       // Don't attempt connection if component is unmounted
       if (!isMountedRef.current) return;
 
-      // Hardcode for reliability - env vars can be tricky in Next.js client
-      const wsUrl = 'ws://localhost:5000/ws/pipeline';
+      // Detect protocol dynamically — works on http (dev) and https (prod)
+      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${proto}//${window.location.host}/ws/pipeline`;
       console.log('Connecting to WebSocket:', wsUrl);
       const ws = new WebSocket(wsUrl);
 

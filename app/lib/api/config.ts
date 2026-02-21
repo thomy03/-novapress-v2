@@ -1,6 +1,12 @@
+// In production (non-localhost), use relative/dynamic URLs so any domain works without rebuilding.
+// In dev (localhost), fall back to explicit local addresses.
+const _isLocalhost = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+const _wsProto = typeof window !== 'undefined' ? (window.location.protocol === 'https:' ? 'wss:' : 'ws:') : 'ws:';
+const _wsHost = typeof window !== 'undefined' ? window.location.host : 'localhost:5000';
+
 export const API_CONFIG = {
-  BASE_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000',
-  WS_URL: process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:5000',
+  BASE_URL: process.env.NEXT_PUBLIC_API_URL || (_isLocalhost ? 'http://localhost:5000' : ''),
+  WS_URL: process.env.NEXT_PUBLIC_WS_URL || (_isLocalhost ? 'ws://localhost:5000' : `${_wsProto}//${_wsHost}`),
   ENDPOINTS: {
     ARTICLES: '/api/articles',
     TRENDING: '/api/trending',
