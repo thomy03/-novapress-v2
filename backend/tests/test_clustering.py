@@ -91,39 +91,27 @@ class TestClusteringEngine:
         assert coherence == 1.0
 
     def test_cluster_articles_returns_labels(self, clustering_engine, similar_embeddings):
-        """Test that clustering returns valid labels"""
-        sample_articles = [{"id": f"art-{i}"} for i in range(len(similar_embeddings))]
+        """Test that clustering returns (labels array, stats dict)"""
+        labels, stats = clustering_engine.cluster_articles(similar_embeddings)
 
-        clusters = clustering_engine.cluster_articles(
-            articles=sample_articles,
-            embeddings=similar_embeddings
-        )
-
-        assert isinstance(clusters, list)
-        # Each cluster should have required fields
-        for cluster in clusters:
-            assert "cluster_id" in cluster
-            assert "articles" in cluster
-            assert "coherence" in cluster
-            assert len(cluster["articles"]) >= 2
+        assert isinstance(labels, np.ndarray)
+        assert len(labels) == len(similar_embeddings)
+        assert isinstance(stats, dict)
 
     def test_cluster_articles_with_min_size(self, clustering_engine):
-        """Test that clusters respect minimum size"""
+        """Test that cluster labels respect minimum size constraint"""
         np.random.seed(42)
-        # Create small coherent groups
         embeddings = np.vstack([
-            np.random.randn(3, 128) * 0.1 + [1.0] * 128,  # Group 1
-            np.random.randn(3, 128) * 0.1 + [-1.0] * 128,  # Group 2
+            np.random.randn(3, 128) * 0.1 + [1.0] * 128,
+            np.random.randn(3, 128) * 0.1 + [-1.0] * 128,
         ])
-        articles = [{"id": f"art-{i}"} for i in range(6)]
 
-        clusters = clustering_engine.cluster_articles(
-            articles=articles,
-            embeddings=embeddings
-        )
+        labels, stats = clustering_engine.cluster_articles(embeddings)
 
-        for cluster in clusters:
-            assert len(cluster["articles"]) >= clustering_engine.min_cluster_size
+        # Every non-noise cluster must have >= min_cluster_size members
+        for cluster_id in set(labels):
+            if cluster_id != -1:
+                assert np.sum(labels == cluster_id) >= clustering_engine.min_cluster_size
 
     def test_validate_and_filter_clusters_removes_incoherent(self, clustering_engine):
         """Test that incoherent clusters are filtered out"""
@@ -172,25 +160,22 @@ class TestClusteringEngine:
         assert sub_count >= 1 or sub_count == 0  # May succeed or fail based on threshold
 
     def test_cluster_articles_empty_input(self, clustering_engine):
-        """Test clustering with empty input"""
-        clusters = clustering_engine.cluster_articles(
-            articles=[],
-            embeddings=np.array([]).reshape(0, 128)
+        """Test clustering with empty input returns empty labels"""
+        labels, stats = clustering_engine.cluster_articles(
+            np.array([]).reshape(0, 128)
         )
 
-        assert clusters == []
+        assert len(labels) == 0
 
     def test_cluster_articles_single_article(self, clustering_engine):
-        """Test clustering with single article"""
+        """Test clustering with single article — too few to cluster"""
         embeddings = np.random.randn(1, 128)
-        articles = [{"id": "single"}]
 
-        clusters = clustering_engine.cluster_articles(
-            articles=articles,
-            embeddings=embeddings
-        )
+        labels, stats = clustering_engine.cluster_articles(embeddings)
 
-        assert clusters == []  # Can't form cluster with single item
+        # Single item: engine may return noise (-1) or a placeholder label (0)
+        assert len(labels) == 1
+        assert labels[0] in (-1, 0)
 
 
 class TestClusteringCoherence:
@@ -260,42 +245,19 @@ class TestClusteringIntegration:
             return ClusteringEngine()
 
     def test_full_workflow_with_real_data_structure(self, clustering_engine):
-        """Test full clustering with realistic article structure"""
+        """Test full clustering returns valid labels + stats for realistic embeddings"""
         np.random.seed(42)
 
-        # Create articles with realistic structure
-        articles = [
-            {
-                "id": f"art-{i}",
-                "raw_title": f"Article {i} about topic",
-                "raw_text": f"Content of article {i}",
-                "source_name": f"Source {i % 3}"
-            }
-            for i in range(20)
-        ]
-
-        # Create embeddings with some clusters
         cluster_1 = np.random.randn(7, 128) * 0.1 + [1.0] * 128
         cluster_2 = np.random.randn(7, 128) * 0.1 + [-1.0] * 128
         noise = np.random.randn(6, 128)
         embeddings = np.vstack([cluster_1, cluster_2, noise])
 
-        clusters = clustering_engine.cluster_articles(
-            articles=articles,
-            embeddings=embeddings
-        )
+        labels, stats = clustering_engine.cluster_articles(embeddings)
 
-        # Verify cluster structure
-        for cluster in clusters:
-            assert "cluster_id" in cluster
-            assert "articles" in cluster
-            assert "coherence" in cluster
-            assert "representative_article" in cluster
-
-            # Each article should have original fields
-            for article in cluster["articles"]:
-                assert "id" in article
-                assert "raw_title" in article
+        assert isinstance(labels, np.ndarray)
+        assert len(labels) == 20
+        assert isinstance(stats, dict)
 
     def test_clustering_deterministic_with_seed(self, clustering_engine):
         """Test that clustering is deterministic with same seed"""

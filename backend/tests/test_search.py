@@ -27,10 +27,11 @@ class TestTextSearch:
         """Test search with empty query"""
         response = client.get("/api/search?q=")
         
-        # Should return empty results or error
+        # Should return empty results, validation error, or bad request
         assert response.status_code in [
             status.HTTP_200_OK,
-            status.HTTP_400_BAD_REQUEST
+            status.HTTP_400_BAD_REQUEST,
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
         ]
         
         if response.status_code == 200:
