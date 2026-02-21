@@ -109,6 +109,7 @@ export interface Prediction {
   type: PredictionType;
   timeframe: PredictionTimeframe;
   rationale: string;
+  signal_watch?: string;
 }
 
 export interface PredictionsResponse {

@@ -260,9 +260,27 @@ export default function PredictionExplorer({ synthesisId, compact = false }: Pre
             {/* Rationale */}
             {selectedPrediction.rationale && (
               <div style={styles.panelRationaleSection}>
-                <h4 style={styles.panelRationaleTitle}>Raisonnement</h4>
+                <h4 style={styles.panelRationaleTitle}>Analyse journalistique</h4>
                 <p style={styles.panelRationaleText}>
                   {selectedPrediction.rationale}
+                </p>
+              </div>
+            )}
+
+            {/* Signal à surveiller */}
+            {selectedPrediction.signal_watch && (
+              <div style={{
+                ...styles.panelRationaleSection,
+                backgroundColor: '#FFFBEB',
+                borderLeft: '3px solid #F59E0B',
+                padding: '12px',
+                marginTop: '12px',
+              }}>
+                <h4 style={{ ...styles.panelRationaleTitle, color: '#92400E' }}>
+                  👁 Signal à surveiller
+                </h4>
+                <p style={{ ...styles.panelRationaleText, color: '#78350F', fontStyle: 'italic' }}>
+                  {selectedPrediction.signal_watch}
                 </p>
               </div>
             )}

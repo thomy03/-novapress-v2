@@ -858,22 +858,28 @@ INSTRUCTIONS SPÉCIALES
    - "Décision/annonce" → "Impact attendu"
    - "Problème identifié" → "Mesures proposées"
 
-8. 🔮 PRÉDICTIONS FUTURES (predictions): OBLIGATOIRE - 2-4 scénarios probables
+8. 🔮 SCÉNARIOS FUTURS (predictions): OBLIGATOIRE - 2-4 scénarios analysés comme un journaliste d'investigation
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   Basé sur les tendances identifiées, génère 2-4 conséquences FUTURES probables:
+   ⚠️ PAS de liste mécanique de faits. Raisonne comme un journaliste senior qui croise les sources:
 
-   Comment identifier les prédictions:
-   - Quel est le scénario le plus PROBABLE si la tendance actuelle continue?
-   - Quelles RÉACTIONS des acteurs clés peut-on anticiper?
-   - Quels PRÉCÉDENTS historiques similaires suggèrent quelle issue?
-   - Quels RISQUES ou OPPORTUNITÉS émergent?
+   MÉTHODE JOURNALISTIQUE:
+   1. SCÉNARIO PRINCIPAL (>60%): Celui qui découle logiquement des faits dominants.
+      Nomme-le clairement ("Le scénario de l'escalade", "La voie du compromis").
+      Explique POURQUOI c'est le plus probable: quels signaux CONCRETS observés dans les sources le soutiennent?
+      Mentionne un précédent historique similaire si pertinent.
 
-   Types de prédictions:
-   - "economic": Impact économique (marchés, emploi, inflation)
-   - "political": Réactions politiques, élections, lois
-   - "social": Mouvements sociaux, opinion publique
-   - "geopolitical": Relations internationales, conflits
-   - "tech": Évolutions technologiques, régulations
+   2. SCÉNARIO ALTERNATIF (30-60%): Le retournement possible. Qu'est-ce qui pourrait changer la donne?
+      Identifie le SIGNAL FAIBLE qui indiquerait que ce scénario se concrétise.
+
+   3. SCÉNARIO DISRUPTIF (<30%): L'hypothèse que personne ne veut envisager mais que les données ne permettent pas d'écarter.
+
+   Pour chaque scénario, génère ces champs:
+   - "prediction": Titre du scénario + description narrative (2-3 phrases, pas juste un fait sec)
+   - "rationale": Raisonnement éditorial — quels SIGNAUX CONCRETS des sources soutiennent ce scénario + précédent historique si applicable
+   - "signal_watch": "Surveiller [indicateur précis] pour confirmer ce scénario" (ce que le lecteur doit observer)
+   - "probability": 0.0-1.0
+   - "type": "economic" | "political" | "social" | "geopolitical" | "tech"
+   - "timeframe": "court_terme" (< 2 semaines) | "moyen_terme" (1-3 mois) | "long_terme" (> 3 mois)
 
 9. 📊 ANALYSE TONALE (sentiment): OBLIGATOIRE
    - "positive": bonne nouvelle, succès, progrès, avancée
@@ -919,18 +925,20 @@ Format JSON (causal_chain + predictions + sentiment + topic_intensity OBLIGATOIR
   ],
   "predictions": [
     {{
-      "prediction": "Risque d'escalade des tensions sociales avec de nouvelles manifestations d'ici 2 semaines",
+      "prediction": "Le scénario de l'escalade sociale — Si les hausses de prix persistent sans réponse gouvernementale, une mobilisation syndicale organisée est probable d'ici deux semaines. Les appels à la grève générale observés dans plusieurs villes pourraient se fédérer.",
       "probability": 0.75,
       "type": "social",
       "timeframe": "court_terme",
-      "rationale": "La hausse des prix et le mécontentement observé suggèrent une mobilisation croissante"
+      "rationale": "Trois signaux convergents: (1) la rhétorique syndicale s'est durcie depuis 48h selon Le Monde et France Info, (2) le précédent de 2019 montre qu'une telle configuration mène à des grèves dans 70% des cas, (3) aucun geste d'apaisement gouvernemental n'a été annoncé.",
+      "signal_watch": "Surveiller les annonces de l'intersyndicale dans les 72h — une conférence de presse commune serait le signal d'une mobilisation nationale coordonnée."
     }},
     {{
-      "prediction": "Négociations diplomatiques probables pour désamorcer la crise économique",
-      "probability": 0.60,
+      "prediction": "La voie du compromis — Une négociation discrète entre gouvernement et syndicats, loin des caméras, pourrait désamorcer la crise avant qu'elle n'atteigne son point de rupture.",
+      "probability": 0.50,
       "type": "political",
       "timeframe": "moyen_terme",
-      "rationale": "Les précédents historiques montrent que les sanctions prolongées mènent souvent à des pourparlers"
+      "rationale": "Les précédents historiques (2010, 2016) montrent que les crises similaires ont souvent abouti à des concessions de dernière minute. Le calendrier politique — élections dans 6 mois — crée une pression supplémentaire pour éviter une image de chaos.",
+      "signal_watch": "Surveiller les déclarations du ministre du Travail: un changement de ton vers 'le dialogue' indiquerait des négociations en coulisses."
     }},
     {{
       "prediction": "Impact négatif sur les marchés financiers européens si la crise persiste",

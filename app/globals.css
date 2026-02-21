@@ -781,8 +781,9 @@ button, a, input[type="button"], input[type="submit"] {
   to { opacity: 1; transform: scale(1); }
 }
 
-.novaline-present { animation: novalinePulse 2s ease-in-out infinite; }
-.novaline-pulse-ring { animation: novalinePulseRing 2s ease-out infinite; }
+/* transform-box + transform-origin fix SVG scaling (scales from element center, not SVG origin) */
+.novaline-present { animation: novalinePulse 2s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.novaline-pulse-ring { animation: novalinePulseRing 2s ease-out infinite; transform-box: fill-box; transform-origin: center; }
 .novaline-contradiction { animation: contradictionPulse 1.5s ease-in-out infinite; }
 .novaline-tooltip { animation: novalineTooltipFade 0.2s ease-out; }
 .novaline-vertical-line { animation: novalineLineGrow 0.5s ease-out; }

@@ -281,20 +281,13 @@ export function NovaLineHorizontal({
             />
           )}
 
-          {/* Reference line at "Today" */}
+          {/* Reference line at "Today" — label removed to avoid duplication with XAxis tick */}
           {presentPoint && (
             <ReferenceLine
               x={presentPoint.displayDate}
               stroke={NOVALINE_THEME.pointPresent}
               strokeDasharray="4 4"
               strokeWidth={1}
-              label={{
-                value: "AUJOURD'HUI",
-                position: 'top',
-                fill: NOVALINE_THEME.pointPresent,
-                fontSize: 9,
-                fontWeight: 600,
-              }}
             />
           )}
 
