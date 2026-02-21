@@ -103,7 +103,7 @@ class PipelineManager:
         self._empty_source_counts: Dict[str, int] = {}  # Track consecutive empty results
 
         # Configuration
-        self.SOURCE_TIMEOUT = 15  # seconds per source (reduced from 30)
+        self.SOURCE_TIMEOUT = 45  # seconds per source (increased to 45s for RSS+fallback)
         self.MAX_CONSECUTIVE_FAILURES = 3  # blacklist after X failures
         self.MAX_CONSECUTIVE_EMPTY = 2  # trigger discovery after X consecutive empty results
         self.MAX_LOGS = 500  # keep last 500 logs

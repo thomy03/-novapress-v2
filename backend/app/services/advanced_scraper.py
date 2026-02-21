@@ -16,8 +16,9 @@ from loguru import logger
 import hashlib
 from functools import lru_cache
 import re
+import random
 
-from app.core.config import settings
+from app.core.config import settings, USER_AGENTS
 from app.ml.embeddings import get_embedding_service
 
 # Playwright (optional fallback for JS-rendered sites)
@@ -51,12 +52,36 @@ class AdvancedNewsScraper:
     """
 
     # Default timeout per source (seconds)
-    DEFAULT_SOURCE_TIMEOUT = 15.0  # Timeout for entire source scraping
-    DEFAULT_ARTICLE_TIMEOUT = 15.0  # Timeout per individual article (augmenté de 8s)
+    DEFAULT_SOURCE_TIMEOUT = 30.0  # Timeout for entire source scraping (augmenté 15→30s)
+    DEFAULT_ARTICLE_TIMEOUT = 20.0  # Timeout per individual article (augmenté 15→20s)
 
     # Retry configuration (Phase 1 - Plan Backend)
     MAX_RETRIES = 3
     RETRY_BACKOFF_BASE = 2.0  # Backoff exponentiel: 2s, 4s, 8s
+
+
+    # Native RSS feeds for sources that block direct scraping
+    RSS_FEEDS = {
+        "nytimes.com": "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml",
+        "theguardian.com": "https://www.theguardian.com/world/rss",
+        "bbc.com": "http://feeds.bbci.co.uk/news/rss.xml",
+        "bbc.co.uk": "http://feeds.bbci.co.uk/news/rss.xml",
+        "lemonde.fr": "https://www.lemonde.fr/rss/une.xml",
+        "lefigaro.fr": "https://www.lefigaro.fr/rss/figaro_actualites.xml",
+        "spiegel.de": "https://www.spiegel.de/schlagzeilen/index.rss",
+        "elpais.com": "https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada",
+        "reuters.com": "https://feeds.reuters.com/reuters/topNews",
+        "apnews.com": "https://feeds.apnews.com/apnews/topnews",
+        "ft.com": "https://www.ft.com/news-feed?format=rss",
+        "washingtonpost.com": "https://feeds.washingtonpost.com/rss/world",
+        "bloomberg.com": "https://feeds.bloomberg.com/markets/news.rss",
+        "techcrunch.com": "https://techcrunch.com/feed/",
+        "wired.com": "https://www.wired.com/feed/rss",
+        "lequipe.fr": "https://www.lequipe.fr/rss/actu_rss.xml",
+        "francetvinfo.fr": "https://www.francetvinfo.fr/titres.rss",
+        "liberation.fr": "https://www.liberation.fr/arc/outboundfeeds/rss/?outputType=xml",
+        "lesechos.fr": "https://www.lesechos.fr/rss/rss_manchettes.xml",
+    }
 
     # Sources mondiales de qualité
     WORLD_NEWS_SOURCES = {
@@ -1112,7 +1137,7 @@ class AdvancedNewsScraper:
 
     def __init__(self):
         self.client = httpx.AsyncClient(
-            headers={"User-Agent": settings.USER_AGENT},
+            headers={"User-Agent": random.choice(USER_AGENTS)},
             timeout=settings.REQUEST_TIMEOUT,
             follow_redirects=True
         )
@@ -1357,6 +1382,13 @@ class AdvancedNewsScraper:
                     logger.warning(f"Article too short or empty: {url}")
                     return None
 
+            # Paywall meter: tronquer à 2000 chars si paywall détecté mais contenu partiel
+            if "subscribe" in effective_text.lower() or "paywall" in effective_text.lower():
+                if len(effective_text) > 2000:
+                    effective_text = effective_text[:2000]
+                    is_partial_content = True
+                    logger.info(f"🔒 Paywall meter: truncated to 2000 chars for {url[:50]}")
+
             # Vérifier paywall (Disabled for now as it's too aggressive)
             # if article.html and self._detect_paywall(article.html, url):
             #     logger.warning(f"Paywall detected: {url}")
@@ -1410,7 +1442,7 @@ class AdvancedNewsScraper:
         """Extract article using Newspaper3k (blocking)"""
         # Configure proper headers with realistic User-Agent
         config = Config()
-        config.browser_user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+        config.browser_user_agent = random.choice(USER_AGENTS)
         config.request_timeout = 10  # Augmenté à 10s (était 5s) - Phase 1 Plan Backend
         config.number_threads = 1
         config.memoize_articles = False
@@ -1479,7 +1511,7 @@ class AdvancedNewsScraper:
             async with async_playwright() as p:
                 browser = await p.chromium.launch(headless=True)
                 context = await browser.new_context(
-                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/121.0.0.0 Safari/537.36'
+                    user_agent=random.choice(USER_AGENTS)
                 )
                 page = await context.new_page()
 
@@ -1509,6 +1541,106 @@ class AdvancedNewsScraper:
             logger.warning(f"🎭 Playwright failed: {e}")
             return None
 
+
+    async def _scrape_rss_feed(self, rss_url: str, max_articles: int = 10) -> List[Dict[str, Any]]:
+        """
+        Scrape articles from a native RSS feed.
+        Used as primary method for sources that block direct scraping.
+        """
+        try:
+            import feedparser
+            logger.info(f"📡 Fetching RSS feed: {rss_url[:60]}")
+            feed = await asyncio.to_thread(feedparser.parse, rss_url)
+
+            if not feed.entries:
+                logger.warning(f"Empty RSS feed: {rss_url[:60]}")
+                return []
+
+            articles = []
+            for entry in feed.entries[:max_articles]:
+                title = entry.get("title", "")
+                link = entry.get("link", "")
+                summary = entry.get("summary", entry.get("description", ""))
+                published = entry.get("published", entry.get("updated", ""))
+
+                if not title or not link:
+                    continue
+
+                # Clean summary (strip HTML tags)
+                if summary:
+                    from bs4 import BeautifulSoup as _BS
+                    summary = _BS(summary, "html.parser").get_text(separator=" ").strip()
+
+                if len(summary) < 20:
+                    summary = title
+
+                # Get domain from RSS URL or entry link
+                domain = self._get_domain(link) or self._get_domain(rss_url)
+                source_config = self.WORLD_NEWS_SOURCES.get(domain, {})
+                source_name = source_config.get("name", domain)
+
+                # Deduplicate
+                content_hash = hashlib.md5((title + link).encode()).hexdigest()
+                if content_hash in self.article_hashes:
+                    continue
+                self.article_hashes.add(content_hash)
+
+                # Parse published date
+                try:
+                    from email.utils import parsedate_to_datetime
+                    pub_dt = parsedate_to_datetime(published).isoformat() if published else datetime.now().isoformat()
+                except Exception:
+                    pub_dt = datetime.now().isoformat()
+
+                article_data = {
+                    "url": link,
+                    "source_name": source_name,
+                    "source_domain": domain,
+                    "raw_title": title,
+                    "raw_text": summary,
+                    "summary": summary[:300],
+                    "published_at": pub_dt,
+                    "authors": [],
+                    "image_url": None,
+                    "language": "unknown",
+                    "keywords": [],
+                    "scraped_at": datetime.now().isoformat(),
+                    "is_partial_content": True,  # RSS entries are summaries
+                    "via_rss": True,
+                }
+                articles.append(article_data)
+                logger.success(f"📡 RSS article: {title[:60]}")
+
+            logger.info(f"📡 RSS feed returned {len(articles)} articles from {rss_url[:50]}")
+            return articles
+
+        except Exception as e:
+            logger.error(f"Failed to scrape RSS feed {rss_url[:60]}: {e}")
+            return []
+
+    async def _fallback_rss_summary(self, url: str, source_name: str) -> Optional[str]:
+        """
+        Fetch article summary via Google News RSS when direct scraping fails (403/timeout).
+        """
+        try:
+            import feedparser
+            search_query = source_name.replace(" ", "+")
+            rss_url = f"https://news.google.com/rss/search?q={search_query}&hl=fr&gl=FR&ceid=FR:fr"
+            feed = await asyncio.to_thread(feedparser.parse, rss_url)
+
+            for entry in feed.entries[:10]:
+                entry_link = entry.get("link", "")
+                if source_name.lower() in entry_link.lower() or url in entry_link:
+                    summary = entry.get("summary", entry.get("description", ""))
+                    if summary:
+                        from bs4 import BeautifulSoup as _BS
+                        summary = _BS(summary, "html.parser").get_text(separator=" ").strip()
+                    return summary or None
+            return None
+        except Exception as e:
+            logger.debug(f"Google News RSS fallback failed for {url[:50]}: {e}")
+            return None
+
     async def scrape_source(
         self,
         source_domain: str,
@@ -1530,6 +1662,21 @@ class AdvancedNewsScraper:
         if source_domain not in self.WORLD_NEWS_SOURCES:
             logger.warning(f"Unknown source: {source_domain}")
             return []
+
+        # Try native RSS feed first (always free, bypasses blocks)
+        if source_domain in self.RSS_FEEDS:
+            logger.info(f"📡 Trying native RSS feed for {source_domain} (bypass mode)")
+            try:
+                rss_articles = await asyncio.wait_for(
+                    self._scrape_rss_feed(self.RSS_FEEDS[source_domain], max_articles),
+                    timeout=30.0
+                )
+                if rss_articles:
+                    logger.success(f"✅ RSS bypass success for {source_domain}: {len(rss_articles)} articles")
+                    return rss_articles
+                logger.warning(f"RSS feed empty for {source_domain}, falling back to direct scraping")
+            except Exception as rss_err:
+                logger.warning(f"RSS feed failed for {source_domain}: {rss_err}, falling back to direct scraping")
 
         source_timeout = timeout or self.DEFAULT_SOURCE_TIMEOUT
 

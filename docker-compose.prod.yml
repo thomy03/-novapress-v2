@@ -8,8 +8,8 @@ services:
     image: nginx:alpine
     container_name: novapress_nginx
     ports:
-      - "80:80"
-      - "443:443"
+      - "8080:80"
+      # - "443:443"  # handled by Caddy
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - certbot_www:/var/www/certbot:ro
