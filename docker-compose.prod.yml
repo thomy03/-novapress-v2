@@ -80,6 +80,7 @@ services:
       # Telegram Bot (optional)
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:-}"
       TELEGRAM_WEBHOOK_URL: "https://novapressai.duckdns.org/webhook/telegram"
+      TELEGRAM_OWNER_CHAT_ID: "${TELEGRAM_OWNER_CHAT_ID:-}"
     depends_on:
       redis:
         condition: service_healthy

@@ -165,6 +165,7 @@ class Settings(BaseSettings):
     TELEGRAM_DAILY_BRIEFING_HOUR: int = 7  # Send daily briefing at 7:00 AM
     TELEGRAM_DAILY_BRIEFING_MINUTE: int = 0
     TELEGRAM_MAX_SEARCH_RESULTS: int = 3  # Max search results per /search command
+    TELEGRAM_OWNER_CHAT_ID: str = ""  # Owner chat ID for daily briefings (get after /start)
 
     # Briefing Service
     BRIEFING_TOP_SYNTHESES: int = 5  # Number of top syntheses per briefing

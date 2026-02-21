@@ -265,6 +265,51 @@ async def get_briefing():
     return briefing
 
 
+# ─── Telegram Broadcast Endpoint ───
+
+@app.post(f"{settings.API_V1_PREFIX}/telegram/send-briefing")
+async def telegram_send_briefing(request: Request):
+    """
+    Send the daily briefing to configured Telegram chat IDs.
+    Protected by x-admin-key header.
+    Usage: POST /api/telegram/send-briefing
+    """
+    admin_key = request.headers.get("x-admin-key", "")
+    if admin_key != settings.ADMIN_API_KEY:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    try:
+        from app.services.messaging.telegram_bot import get_telegram_bot
+        from app.services.briefing_service import get_briefing_service
+
+        bot = get_telegram_bot()
+        if not bot._initialized:
+            return JSONResponse({"error": "Telegram bot not initialized"}, status_code=503)
+
+        service = get_briefing_service()
+        briefing = await service.get_latest_briefing()
+        formatted = service.format_telegram_briefing(briefing)
+
+        chat_ids_str = settings.TELEGRAM_OWNER_CHAT_ID
+        if not chat_ids_str:
+            return JSONResponse({"error": "TELEGRAM_OWNER_CHAT_ID not configured"}, status_code=400)
+
+        # Support comma-separated list of chat IDs
+        chat_ids = [cid.strip() for cid in chat_ids_str.split(",") if cid.strip()]
+        sent = 0
+        for chat_id in chat_ids:
+            ok = await bot.send_message(int(chat_id), formatted)
+            if ok:
+                sent += 1
+
+        logger.info(f"Daily briefing sent to {sent}/{len(chat_ids)} Telegram chats")
+        return JSONResponse({"ok": True, "sent": sent, "total": len(chat_ids)})
+
+    except Exception as e:
+        logger.error(f"Telegram broadcast error: {e}")
+        return JSONResponse({"error": "Broadcast failed"}, status_code=500)
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
