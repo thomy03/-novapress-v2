@@ -5,7 +5,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from '../contexts/ThemeContext';
 import { AuthProvider } from '../contexts/AuthContext';
 import { ArticlesProvider } from '../contexts/ArticlesContext';
+import { ReadingProfileProvider } from '../contexts/ReadingProfileContext';
 import { ErrorBoundary } from './ErrorBoundary';
+import dynamic from 'next/dynamic';
+
+// Lazy-load mobile components (only rendered on mobile via CSS)
+const BottomNav = dynamic(() => import('./layout/BottomNav'), { ssr: false });
+const MobileHeader = dynamic(() => import('./layout/MobileHeader'), { ssr: false });
 
 interface ProvidersProps {
   children: ReactNode;
@@ -40,23 +46,30 @@ function getQueryClient() {
 
 export function Providers({ children }: ProvidersProps) {
   const [mounted, setMounted] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const queryClient = getQueryClient();
 
   useEffect(() => {
     setMounted(true);
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Always render with providers to avoid useTheme errors
-  // Use visibility:hidden before mount to avoid hydration mismatch
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
           <AuthProvider>
             <ArticlesProvider>
-              <div style={{ visibility: mounted ? 'visible' : 'hidden' }}>
-                {children}
-              </div>
+              <ReadingProfileProvider>
+                <div style={{ visibility: mounted ? 'visible' : 'hidden' }}>
+                  {isMobile && <MobileHeader />}
+                  {children}
+                  {isMobile && <BottomNav />}
+                </div>
+              </ReadingProfileProvider>
             </ArticlesProvider>
           </AuthProvider>
         </ThemeProvider>

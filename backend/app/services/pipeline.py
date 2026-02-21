@@ -22,6 +22,7 @@ from app.ml.advanced_rag import get_advanced_rag
 from app.ml.temporal_narrative import get_temporal_narrative_engine
 from app.ml.search_enrichment import get_search_enrichment_engine
 from app.ml.category_classifier import classify_synthesis
+from app.ml.transparency_score import transparency_scorer
 from app.ml.persona import (
     get_rotating_persona_for_category,
     get_intelligent_persona,
@@ -736,7 +737,7 @@ class PipelineEngine:
                         try:
                             parsed = datetime.fromisoformat(str(original_created_at).replace('Z', '+00:00'))
                             original_created_at_display = parsed.strftime("%d/%m/%Y à %H:%M")
-                        except:
+                        except (ValueError, TypeError, OSError):
                             original_created_at_display = str(original_created_at)
 
                     # Build context from existing synthesis
@@ -1019,6 +1020,23 @@ Contenu existant (extrait):
                     synthesis["story_id"] = str(uuid.uuid4())[:8]
 
                     logger.info(f"🆕 New story created: {synthesis['story_id']}")
+
+                # === TRANSPARENCY SCORE ===
+                try:
+                    rag_data = {
+                        "contradictions_count": synthesis.get("contradictions_count", 0),
+                        "fact_density": enhanced_context.get("avg_fact_density", 0.5) if enhanced_context else 0.5,
+                    }
+                    ts_result = transparency_scorer.calculate(synthesis, articles, rag_data)
+                    synthesis["transparency_score"] = ts_result["score"]
+                    synthesis["transparency_label"] = ts_result["label"]
+                    synthesis["transparency_breakdown"] = ts_result["breakdown"]
+                    logger.info(f"   Transparency: {ts_result['score']}/100 ({ts_result['label']})")
+                except Exception as e:
+                    logger.warning(f"⚠️ Transparency score failed: {e}")
+                    synthesis["transparency_score"] = 0
+                    synthesis["transparency_label"] = "N/A"
+                    synthesis["transparency_breakdown"] = {}
 
                 # Add the neutral/base synthesis
                 syntheses.append(synthesis)

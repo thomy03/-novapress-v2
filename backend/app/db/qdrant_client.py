@@ -146,7 +146,7 @@ class QdrantService:
                 try:
                     from datetime import datetime
                     published_at = datetime.fromisoformat(published_at.replace('Z', '+00:00')).timestamp()
-                except:
+                except (ValueError, TypeError, OSError):
                     published_at = 0.0
             else:
                 published_at = 0.0
@@ -1044,7 +1044,11 @@ class QdrantService:
                 # Phase 2.5: Kill Switch & Cost Tracker
                 "is_published": bool(synthesis.get("is_published", True)),  # Kill Switch - dépublier instantanément
                 "moderation_flag": str(synthesis.get("moderation_flag", "safe"))[:20],  # "safe", "warning", "blocked"
-                "generation_cost_usd": float(synthesis.get("generation_cost_usd", 0.0))  # Coût LLM de génération
+                "generation_cost_usd": float(synthesis.get("generation_cost_usd", 0.0)),  # Coût LLM de génération
+                # Transparency Score
+                "transparency_score": int(synthesis.get("transparency_score", 0)),
+                "transparency_label": str(synthesis.get("transparency_label", "N/A"))[:20],
+                "transparency_breakdown": synthesis.get("transparency_breakdown", {}),
             }
         )
 

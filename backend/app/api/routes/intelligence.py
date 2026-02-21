@@ -83,9 +83,11 @@ async def get_topics(
             limit=limit
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get topics: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/topics/hot", response_model=List[TopicResponse])
@@ -209,9 +211,11 @@ async def get_hot_topics(
 
         return formatted
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get hot topics: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/topics/{topic_id}", response_model=TopicDetailResponse)
@@ -290,7 +294,7 @@ async def get_topic(
         raise
     except Exception as e:
         logger.error(f"Failed to get topic {topic_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/topics/{topic_id}/graph", response_model=TopicCausalGraphResponse)
@@ -334,7 +338,7 @@ async def get_topic_graph(
         raise
     except Exception as e:
         logger.error(f"Failed to get topic graph {topic_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/topics/{topic_id}/timeline", response_model=TopicTimelineResponse)
@@ -380,7 +384,7 @@ async def get_topic_timeline(
         raise
     except Exception as e:
         logger.error(f"Failed to get topic timeline {topic_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # =========================================================================
@@ -422,9 +426,11 @@ async def get_entities(
             limit=limit
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get entities: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/entities/search")
@@ -458,9 +464,11 @@ async def search_entities(
 
         return formatted
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to search entities: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/entities/{entity_id}", response_model=EntityDetailResponse)
@@ -500,7 +508,7 @@ async def get_entity(
         raise
     except Exception as e:
         logger.error(f"Failed to get entity {entity_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/entities/{entity_id}/graph", response_model=EntityCausalProfile)
@@ -531,7 +539,7 @@ async def get_entity_graph(
         raise
     except Exception as e:
         logger.error(f"Failed to get entity graph {entity_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # =========================================================================
@@ -608,9 +616,11 @@ async def get_global_graph(
             stats=stats
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get global graph: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # =========================================================================
@@ -659,9 +669,11 @@ async def get_intelligence_stats():
             topics_by_arc=topics_by_arc
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to get intelligence stats: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # =========================================================================
@@ -1229,9 +1241,11 @@ async def trigger_topic_detection(
             "topic_names": [t.get("name", "") for t in topics]
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to trigger topic detection: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/aggregate-topic/{topic_id}")
@@ -1255,6 +1269,8 @@ async def trigger_causal_aggregation(
             "edges_count": len(result.get("edges", []))
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to aggregate topic {topic_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")

@@ -5,8 +5,6 @@ const nextConfig: NextConfig = {
   // Note: Comment this line for local development, uncomment for Docker build
   // output: 'standalone',
   images: {
-    // Allow any external image (for news sources)
-    unoptimized: true,
     remotePatterns: [
       {
         protocol: 'https',

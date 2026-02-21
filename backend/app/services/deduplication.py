@@ -153,7 +153,7 @@ class DeduplicationEngine:
                 days_old = (now - pub_date).days
                 freshness = max(0, 10 - days_old)  # Plus récent = meilleur
                 score += freshness
-            except:
+            except (ValueError, TypeError, OSError):
                 pass
 
             if score > best_score:

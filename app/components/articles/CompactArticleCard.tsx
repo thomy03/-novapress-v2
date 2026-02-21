@@ -47,13 +47,13 @@ export const CompactArticleCard = memo(function CompactArticleCard({
 
   // Check if article has AI features
   const isSynthesis = article.source?.name === 'NovaPress AI' ||
-                      (article as any).complianceScore !== undefined;
+                      article.complianceScore !== undefined;
 
   // Check for advanced AI features
-  const hasTimeline = (article as any).timeline_events?.length > 0 ||
-                      (article as any).narrative_arc;
-  const hasCausal = (article as any).causal_graph?.edges?.length > 0 ||
-                    (article as any).causal_chain?.length > 0;
+  const hasTimeline = (article.timeline_events?.length ?? 0) > 0 ||
+                      !!article.narrative_arc;
+  const hasCausal = (article.causal_graph?.edges?.length ?? 0) > 0 ||
+                    (article.causal_chain?.length ?? 0) > 0;
 
   return (
     <article

@@ -35,6 +35,7 @@ import {
   RelatedSynthesis
 } from '@/app/types/synthesis-page';
 import { getSavedPersona, savePersona } from '@/app/components/ui/PersonaSwitcher';
+import NewsXRay from '@/app/components/xray/NewsXRay';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
@@ -332,6 +333,20 @@ export default function SynthesisClient({ initialSynthesis }: SynthesisClientPro
 
           {/* Sources & Enrichment */}
           <SourcesSection synthesis={synthesis} />
+
+          {/* News X-Ray - Transparency Analysis */}
+          {synthesis.transparencyScore !== undefined && synthesis.transparencyScore > 0 && (
+            <NewsXRay
+              transparencyScore={synthesis.transparencyScore}
+              transparencyLabel={synthesis.transparencyLabel || 'N/A'}
+              transparencyBreakdown={synthesis.transparencyBreakdown || {}}
+              sourceArticles={synthesis.sourceArticles || []}
+              numSources={synthesis.numSources}
+              contradictionsCount={synthesis.historicalContext?.contradictionsCount || 0}
+              hasContradictions={synthesis.historicalContext?.hasContradictions || false}
+              causalGraphId={synthesis.id}
+            />
+          )}
 
           {/* Entity Frequency Chart - Key entities visualization */}
           <div style={{ marginTop: '32px' }}>

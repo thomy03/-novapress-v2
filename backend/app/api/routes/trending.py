@@ -77,9 +77,11 @@ async def get_trending_topics(
             "hours": hours,
             "type": "trending"
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to fetch trending topics: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/categories")
@@ -129,7 +131,7 @@ async def get_categories_stats(
             if stats["latest"] > 0:
                 try:
                     latest_iso = datetime.fromtimestamp(stats["latest"]).isoformat()
-                except:
+                except (ValueError, TypeError, OSError):
                     latest_iso = ""
 
             # A category is "hot" if it has >20% of total or >10 syntheses
@@ -153,9 +155,11 @@ async def get_categories_stats(
             "hours": hours,
             "type": "categories"
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to fetch categories stats: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/live-count")
@@ -178,9 +182,11 @@ async def get_live_count(
             "hours": hours,
             "type": "live-count"
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to fetch live count: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/{topic_id}/synthesis")
@@ -198,7 +204,7 @@ async def get_topic_synthesis(topic_id: str):
         raise
     except Exception as e:
         logger.error(f"Failed to fetch synthesis: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 def get_category_display_name(category: str) -> str:
@@ -244,9 +250,11 @@ async def get_recurring_topics(
             "days": days,
             "type": "recurring-topics"
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to fetch recurring topics: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/topics/{topic_name}/dashboard")
@@ -282,7 +290,7 @@ async def get_topic_dashboard(
         raise
     except Exception as e:
         logger.error(f"Failed to fetch topic dashboard: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/syntheses/{synthesis_id}/topic-info")
@@ -314,6 +322,8 @@ async def get_synthesis_topic_info(
             "synthesis_id": synthesis_id,
             **topic_info
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to check topic recurrence: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")

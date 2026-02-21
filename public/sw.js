@@ -1,232 +1,141 @@
-const CACHE_NAME = 'novapress-ai-v2.0.0';
-const STATIC_CACHE_NAME = `${CACHE_NAME}-static`;
-const DYNAMIC_CACHE_NAME = `${CACHE_NAME}-dynamic`;
-const API_CACHE_NAME = `${CACHE_NAME}-api`;
+/**
+ * NovaPress AI — Service Worker v2.1
+ * 
+ * Strategy:
+ *   - Network-first for everything (dev-friendly)
+ *   - Cache images and fonts for offline
+ *   - Push notifications support
+ *   - Background sync for offline actions
+ */
 
-// Assets to cache immediately
-const STATIC_ASSETS = [
-  '/',
-  '/favicon.ico',
-  '/_next/static/css/app/layout.css',
-  '/_next/static/chunks/main.js',
-  '/_next/static/chunks/webpack.js',
-  '/_next/static/chunks/polyfills.js'
-];
+const CACHE_VERSION = 'novapress-v2.1';
+const CACHE_NAME = `${CACHE_VERSION}-runtime`;
 
-// API endpoints to cache
-const API_ROUTES = [
-  '/api/articles',
-  '/api/tags',
-  '/api/categories'
-];
+// ─── Install ───
 
-// Cache strategies
-const CACHE_STRATEGIES = {
-  CACHE_FIRST: 'cache-first',
-  NETWORK_FIRST: 'network-first',
-  STALE_WHILE_REVALIDATE: 'stale-while-revalidate'
-};
-
-// Install event - cache static assets
 self.addEventListener('install', (event) => {
-  console.log('[SW] Installing service worker...');
-  
-  event.waitUntil(
-    caches.open(STATIC_CACHE_NAME)
-      .then((cache) => {
-        console.log('[SW] Caching static assets');
-        return cache.addAll(STATIC_ASSETS);
-      })
-      .then(() => {
-        console.log('[SW] Static assets cached successfully');
-        // Skip waiting to activate immediately
-        return self.skipWaiting();
-      })
-      .catch((error) => {
-        console.error('[SW] Error caching static assets:', error);
-      })
-  );
+  console.log('[SW] Installing v2.1...');
+  // Skip waiting to activate immediately
+  self.skipWaiting();
 });
 
-// Activate event - clean up old caches
+// ─── Activate ───
+
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating service worker...');
-  
+  console.log('[SW] Activating v2.1...');
+
   event.waitUntil(
     caches.keys()
-      .then((cacheNames) => {
-        return Promise.all(
-          cacheNames
-            .filter((cacheName) => {
-              // Delete old caches that don't match current version
-              return cacheName.includes('novapress-ai') && !cacheName.includes('v2.0.0');
-            })
-            .map((cacheName) => {
-              console.log('[SW] Deleting old cache:', cacheName);
-              return caches.delete(cacheName);
-            })
-        );
-      })
-      .then(() => {
-        console.log('[SW] Old caches cleaned up');
-        // Take control of all pages immediately
-        return self.clients.claim();
-      })
+      .then((names) => Promise.all(
+        names
+          .filter((name) => name !== CACHE_NAME)
+          .map((name) => {
+            console.log('[SW] Deleting old cache:', name);
+            return caches.delete(name);
+          })
+      ))
+      .then(() => self.clients.claim())
   );
 });
 
-// Fetch event - implement caching strategies
+// ─── Fetch ───
+
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
-  
-  // Skip non-GET requests
-  if (request.method !== 'GET') {
-    return;
-  }
-  
-  // Skip Chrome extensions
-  if (url.protocol === 'chrome-extension:') {
-    return;
-  }
-  // Skip cross-origin requests (backend API at different port)
-  if (url.origin !== self.location.origin) {
+
+  // Only handle GET requests from same origin
+  if (request.method !== 'GET') return;
+  if (url.origin !== self.location.origin) return;
+  if (url.protocol === 'chrome-extension:') return;
+
+  // Skip Next.js HMR / dev websockets
+  if (url.pathname.startsWith('/_next/webpack-hmr')) return;
+  if (url.pathname.startsWith('/__nextjs')) return;
+
+  // Images & fonts → cache-first (safe, they don't change often)
+  if (request.destination === 'image' || request.destination === 'font') {
+    event.respondWith(cacheFirst(request));
     return;
   }
 
-  
-  // API requests - Network first strategy
-  if (API_ROUTES.some(route => url.pathname.startsWith(route))) {
-    event.respondWith(networkFirstStrategy(request, API_CACHE_NAME));
-    return;
-  }
-  
-  // Images - Cache first strategy
-  if (request.destination === 'image') {
-    event.respondWith(cacheFirstStrategy(request, DYNAMIC_CACHE_NAME));
-    return;
-  }
-  
-  // Static assets - Cache first strategy
-  if (url.pathname.startsWith('/_next/static/') || 
-      url.pathname.startsWith('/static/') ||
-      url.pathname.includes('.css') ||
-      url.pathname.includes('.js')) {
-    event.respondWith(cacheFirstStrategy(request, STATIC_CACHE_NAME));
-    return;
-  }
-  
-  // HTML pages - Stale while revalidate strategy
-  if (request.headers.get('accept')?.includes('text/html')) {
-    event.respondWith(staleWhileRevalidateStrategy(request, DYNAMIC_CACHE_NAME));
-    return;
-  }
-  
-  // Default to network
-  event.respondWith(fetch(request));
+  // Everything else → network-first (always fresh, cache as fallback)
+  event.respondWith(networkFirst(request));
 });
 
-// Cache first strategy - good for static assets
-async function cacheFirstStrategy(request, cacheName) {
+// ─── Strategies ───
+
+async function networkFirst(request) {
   try {
-    const cache = await caches.open(cacheName);
-    const cachedResponse = await cache.match(request);
-    
-    if (cachedResponse) {
-      return cachedResponse;
+    const response = await fetch(request);
+    // Only cache successful responses
+    if (response.ok && response.status === 200) {
+      const cache = await caches.open(CACHE_NAME);
+      cache.put(request, response.clone());
     }
-    
-    const networkResponse = await fetch(request);
-    
-    if (networkResponse.ok) {
-      cache.put(request, networkResponse.clone());
-    }
-    
-    return networkResponse;
+    return response;
   } catch (error) {
-    console.error('[SW] Cache first strategy failed:', error);
-    return new Response('Network error occurred', { 
-      status: 500,
-      statusText: 'Network Error'
-    });
+    // Network failed → try cache
+    const cached = await caches.match(request);
+    if (cached) {
+      console.log('[SW] Serving from cache:', request.url);
+      return cached;
+    }
+    // No cache either → return offline page for navigation
+    if (request.destination === 'document') {
+      return new Response(
+        '<html><body style="font-family:sans-serif;text-align:center;padding:60px"><h1>📡 Hors connexion</h1><p>NovaPress n\'est pas disponible hors ligne pour le moment.</p><button onclick="location.reload()">Réessayer</button></body></html>',
+        { status: 503, headers: { 'Content-Type': 'text/html' } }
+      );
+    }
+    throw error;
   }
 }
 
-// Network first strategy - good for dynamic content
-async function networkFirstStrategy(request, cacheName) {
+async function cacheFirst(request) {
+  const cached = await caches.match(request);
+  if (cached) return cached;
+
   try {
-    const networkResponse = await fetch(request);
-    
-    if (networkResponse.ok) {
-      const cache = await caches.open(cacheName);
-      cache.put(request, networkResponse.clone());
+    const response = await fetch(request);
+    if (response.ok) {
+      const cache = await caches.open(CACHE_NAME);
+      cache.put(request, response.clone());
     }
-    
-    return networkResponse;
+    return response;
   } catch (error) {
-    console.log('[SW] Network failed, trying cache...');
-    
-    const cache = await caches.open(cacheName);
-    const cachedResponse = await cache.match(request);
-    
-    if (cachedResponse) {
-      return cachedResponse;
+    // Return transparent pixel for failed images
+    if (request.destination === 'image') {
+      return new Response(
+        'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+        { headers: { 'Content-Type': 'image/gif' } }
+      );
     }
-    
-    return new Response('Network error and no cached version available', { 
-      status: 503,
-      statusText: 'Service Unavailable'
-    });
+    throw error;
   }
 }
 
-// Stale while revalidate - good for frequently updated content
-async function staleWhileRevalidateStrategy(request, cacheName) {
-  const cache = await caches.open(cacheName);
-  const cachedResponse = await cache.match(request);
-  
-  // Fetch from network in background
-  const fetchPromise = fetch(request).then((networkResponse) => {
-    if (networkResponse.ok) {
-      cache.put(request, networkResponse.clone());
-    }
-    return networkResponse;
-  }).catch(() => {
-    // Network failed, but we might have cache
-    return cachedResponse;
-  });
-  
-  // Return cached version immediately if available, otherwise wait for network
-  return cachedResponse || fetchPromise;
-}
+// ─── Push Notifications ───
 
-// Push notification event handler
 self.addEventListener('push', (event) => {
-  console.log('[SW] Push notification received');
-
   if (!event.data) return;
 
   let data;
   try {
     data = event.data.json();
   } catch {
-    data = {
-      title: 'NovaPress AI',
-      body: event.data.text(),
-    };
+    data = { title: 'NovaPress AI', body: event.data.text() };
   }
 
   const options = {
     body: data.body || '',
-    icon: data.icon || '/icon-192.png',
-    badge: '/icon-192.png',
+    icon: data.icon || '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
     tag: data.tag || `novapress-${Date.now()}`,
-    data: {
-      url: data.url || '/',
-    },
+    data: { url: data.url || '/' },
     requireInteraction: data.requireInteraction || false,
     actions: [
-      { action: 'open', title: 'Lire' },
+      { action: 'open', title: '📰 Lire' },
       { action: 'close', title: 'Fermer' },
     ],
     vibrate: [100, 50, 100],
@@ -237,34 +146,29 @@ self.addEventListener('push', (event) => {
   );
 });
 
-// Notification click handler
-self.addEventListener('notificationclick', (event) => {
-  console.log('[SW] Notification clicked:', event.action);
-  event.notification.close();
+// ─── Notification Click ───
 
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
   if (event.action === 'close') return;
 
   const url = event.notification.data?.url || '/';
 
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // Check if there's already a NovaPress window open
-      for (const client of clientList) {
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const client of list) {
         if (client.url.includes(self.location.origin) && 'focus' in client) {
           client.navigate(url);
           return client.focus();
         }
       }
-
-      // Open a new window
-      if (clients.openWindow) {
-        return clients.openWindow(url);
-      }
+      if (clients.openWindow) return clients.openWindow(url);
     })
   );
 });
 
-// Background sync for offline actions
+// ─── Background Sync ───
+
 self.addEventListener('sync', (event) => {
   if (event.tag === 'background-sync') {
     console.log('[SW] Background sync triggered');
@@ -273,59 +177,13 @@ self.addEventListener('sync', (event) => {
 });
 
 async function doBackgroundSync() {
-  // Implement background sync logic here
-  // For example, send queued analytics or user actions
   console.log('[SW] Performing background sync...');
 }
 
-// Message handling for cache management
+// ─── Messages ───
+
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
+  if (event.data?.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
-  
-  if (event.data && event.data.type === 'CACHE_ARTICLES') {
-    // Cache specific articles for offline reading
-    const articles = event.data.articles;
-    cacheArticlesForOffline(articles);
-  }
 });
-
-async function cacheArticlesForOffline(articles) {
-  const cache = await caches.open(DYNAMIC_CACHE_NAME);
-  
-  for (const article of articles) {
-    try {
-      const response = await fetch(`/api/articles/${article.id}`);
-      if (response.ok) {
-        await cache.put(`/api/articles/${article.id}`, response.clone());
-      }
-    } catch (error) {
-      console.error('[SW] Failed to cache article:', article.id, error);
-    }
-  }
-}
-
-// Cleanup old cache entries periodically
-setInterval(async () => {
-  const cacheNames = await caches.keys();
-  
-  for (const cacheName of cacheNames) {
-    if (cacheName.includes(DYNAMIC_CACHE_NAME)) {
-      const cache = await caches.open(cacheName);
-      const requests = await cache.keys();
-      
-      // Remove entries older than 7 days
-      const oneWeekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
-      
-      for (const request of requests) {
-        const response = await cache.match(request);
-        const dateHeader = response?.headers.get('date');
-        
-        if (dateHeader && new Date(dateHeader).getTime() < oneWeekAgo) {
-          await cache.delete(request);
-        }
-      }
-    }
-  }
-}, 24 * 60 * 60 * 1000); // Run daily

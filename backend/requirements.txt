@@ -7,6 +7,7 @@ uvicorn[standard]>=0.32.0
 python-multipart>=0.0.12
 pydantic>=2.9.0
 pydantic-settings>=2.6.0
+httpx>=0.27.0
 
 # Database
 sqlalchemy>=2.0.36
@@ -33,7 +34,6 @@ numpy>=1.26.0
 # NLP & Knowledge Graph
 spacy>=3.7.0
 networkx>=3.1
-python-louvain>=0.16
 
 # Web Scraping
 httpx>=0.28.0
@@ -46,8 +46,6 @@ playwright>=1.40.0  # Fallback for JS-rendered sites (Phase 1 - Plan Backend)
 
 # LLM (OpenRouter)
 openai>=1.0.0
-langchain>=0.2.0
-langchain-community>=0.2.0
 
 # Auth & Security
 python-jose[cryptography]>=3.3.0

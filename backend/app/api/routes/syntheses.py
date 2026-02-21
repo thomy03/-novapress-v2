@@ -277,7 +277,7 @@ def format_synthesis_for_frontend(synthesis: Dict[str, Any]) -> Dict[str, Any]:
     if isinstance(created_at, (int, float)) and created_at > 0:
         try:
             created_at_iso = datetime.fromtimestamp(created_at).isoformat()
-        except:
+        except (ValueError, TypeError, OSError):
             created_at_iso = datetime.now().isoformat()
     else:
         created_at_iso = datetime.now().isoformat()
@@ -391,7 +391,7 @@ def format_synthesis_for_frontend(synthesis: Dict[str, Any]) -> Dict[str, Any]:
                     if isinstance(rel_created_at, (int, float)) and rel_created_at > 0:
                         try:
                             rel_created_at_iso = datetime.fromtimestamp(rel_created_at).isoformat()
-                        except:
+                        except (ValueError, TypeError, OSError):
                             rel_created_at_iso = ""
                     else:
                         rel_created_at_iso = ""
@@ -468,7 +468,11 @@ def format_synthesis_for_frontend(synthesis: Dict[str, Any]) -> Dict[str, Any]:
         "topics": _extract_topics_for_synthesis(synthesis),
         # ========== NEW: Predictions & Historical Context ==========
         "predictions": predictions,
-        "historicalContext": historical_context
+        "historicalContext": historical_context,
+        # Transparency Score
+        "transparencyScore": int(synthesis.get("transparency_score", 0)),
+        "transparencyLabel": synthesis.get("transparency_label", "N/A"),
+        "transparencyBreakdown": synthesis.get("transparency_breakdown", {}),
     }
 
 
@@ -644,9 +648,11 @@ async def get_syntheses(
                 "Cache-Control": "public, max-age=30",  # 30 seconds cache for fresher data
             }
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to fetch syntheses: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/breaking")
@@ -676,9 +682,61 @@ async def get_breaking_syntheses(
                 "Cache-Control": "public, max-age=30",  # 30 seconds for breaking news
             }
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to fetch breaking syntheses: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/brief")
+@limiter.limit("60/minute")
+async def get_morning_brief(
+    request: Request,
+    limit: int = Query(5, ge=1, le=10)
+):
+    """
+    Get the Morning Brief: top syntheses from the last 24h sorted by
+    (transparency_score * 0.6) + (recency_score * 0.4).
+    """
+    try:
+        qdrant = get_qdrant_service()
+        raw_syntheses = qdrant.get_latest_syntheses(limit=50)
+
+        now = datetime.now().timestamp()
+        scored = []
+        for s in raw_syntheses:
+            created = s.get("created_at", 0)
+            if isinstance(created, (int, float)) and created > 0:
+                age_hours = (now - created) / 3600
+                if age_hours > 24:
+                    continue
+                recency = max(0, 1.0 - (age_hours / 24))
+            else:
+                recency = 0.5
+
+            transparency = s.get("transparency_score", 0) / 100.0
+            combined = transparency * 0.6 + recency * 0.4
+            scored.append((combined, s))
+
+        scored.sort(key=lambda x: x[0], reverse=True)
+        top = [format_synthesis_for_frontend(s) for _, s in scored[:limit]]
+
+        return JSONResponse(
+            content={
+                "data": top,
+                "total": len(top),
+                "type": "brief"
+            },
+            headers={
+                "Cache-Control": "public, max-age=300",
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to fetch morning brief: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/live")
@@ -725,9 +783,11 @@ async def get_live_syntheses(
                 "Cache-Control": "public, max-age=60",  # 1 minute cache
             }
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to fetch live syntheses: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/category/{category}")
@@ -761,9 +821,11 @@ async def get_syntheses_by_category(
             "category": category.upper(),
             "type": "category"
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to fetch syntheses by category {category}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/personas")
@@ -835,7 +897,7 @@ async def get_synthesis(
         raise
     except Exception as e:
         logger.error(f"Failed to fetch synthesis {synthesis_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/by-id/{synthesis_id}/persona/{persona_id}")
@@ -984,7 +1046,7 @@ async def get_synthesis_with_persona(
         raise
     except Exception as e:
         logger.error(f"Failed to generate persona synthesis: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/by-id/{synthesis_id}/bias")
@@ -1024,7 +1086,7 @@ async def get_synthesis_bias(
         raise
     except Exception as e:
         logger.error(f"Failed to analyze bias for synthesis {synthesis_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/by-id/{synthesis_id}/fact-check")
@@ -1063,7 +1125,7 @@ async def get_synthesis_fact_check(
         raise
     except Exception as e:
         logger.error(f"Failed to fact-check synthesis {synthesis_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/by-id/{synthesis_id}/audio")
@@ -1129,7 +1191,7 @@ async def get_synthesis_audio(
         raise
     except Exception as e:
         logger.error(f"Failed to generate audio for synthesis {synthesis_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/by-id/{synthesis_id}/audio/status")
@@ -1166,7 +1228,7 @@ async def get_synthesis_audio_status(
         raise
     except Exception as e:
         logger.error(f"Failed to check audio status for synthesis {synthesis_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/by-id/{synthesis_id}/debate")
@@ -1206,7 +1268,7 @@ async def get_synthesis_debate(
         raise
     except Exception as e:
         logger.error(f"Failed to extract debate for synthesis {synthesis_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/by-id/{synthesis_id}/whatif")
@@ -1261,4 +1323,4 @@ async def get_synthesis_whatif(
         raise
     except Exception as e:
         logger.error(f"Failed to generate what-if scenarios for synthesis {synthesis_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")

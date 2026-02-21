@@ -182,7 +182,7 @@ async def get_synthesis_timeline(synthesis_id: str):
         raise
     except Exception as e:
         logger.error(f"Failed to get timeline for synthesis {synthesis_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/syntheses/{synthesis_id}/preview", response_model=TimelinePreviewResponse)
@@ -246,7 +246,7 @@ async def get_timeline_preview(synthesis_id: str):
             if isinstance(created_at, (int, float)) and created_at > 0:
                 try:
                     date_str = datetime.fromtimestamp(created_at).strftime('%d/%m/%Y')
-                except:
+                except (ValueError, TypeError, OSError):
                     date_str = ''
             else:
                 date_str = str(created_at)[:10] if created_at else ''
@@ -321,7 +321,7 @@ async def get_entity_evolution(synthesis_id: str):
         raise
     except Exception as e:
         logger.error(f"Failed to get entity evolution for {synthesis_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ==========================================
@@ -433,6 +433,6 @@ def _format_timestamp(ts: Any) -> str:
     if isinstance(ts, (int, float)) and ts > 0:
         try:
             return datetime.fromtimestamp(ts).isoformat()
-        except:
+        except (ValueError, TypeError, OSError):
             pass
     return datetime.now().isoformat()

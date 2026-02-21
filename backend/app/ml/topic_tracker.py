@@ -231,7 +231,7 @@ class TopicTracker:
         if isinstance(causal_graph, str):
             try:
                 causal_graph = json.loads(causal_graph)
-            except:
+            except (json.JSONDecodeError, ValueError, TypeError):
                 causal_graph = {}
 
         central = causal_graph.get('central_entity')
@@ -389,7 +389,7 @@ class TopicTracker:
             if isinstance(causal_graph, str):
                 try:
                     causal_graph = json.loads(causal_graph)
-                except:
+                except (json.JSONDecodeError, ValueError, TypeError):
                     continue
 
             for node in causal_graph.get('nodes', []):
@@ -425,7 +425,7 @@ class TopicTracker:
             if isinstance(enrichment, str):
                 try:
                     enrichment = json.loads(enrichment)
-                except:
+                except (json.JSONDecodeError, ValueError, TypeError):
                     enrichment = {}
 
             grok = enrichment.get('grok', {})
@@ -487,7 +487,7 @@ class TopicTracker:
             if isinstance(causal_graph, str):
                 try:
                     causal_graph = json.loads(causal_graph)
-                except:
+                except (json.JSONDecodeError, ValueError, TypeError):
                     continue
 
             for pred in causal_graph.get('predictions', []):
@@ -571,7 +571,7 @@ class TopicTracker:
             date = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
             cutoff = datetime.now(date.tzinfo) - timedelta(days=days)
             return date > cutoff
-        except:
+        except (ValueError, TypeError, OSError):
             return False
 
 

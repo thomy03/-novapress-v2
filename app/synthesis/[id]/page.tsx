@@ -12,11 +12,50 @@
 import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
+import type { Metadata } from 'next';
 import SynthesisClient from '@/app/components/synthesis/SynthesisClient';
 import { SynthesisData } from '@/app/types/synthesis-page';
 
 // ISR: Revalidate every 5 minutes
 export const revalidate = 300;
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { id } = await params;
+  const synthesis = await getSynthesis(id);
+
+  if (!synthesis) {
+    return { title: 'Synthese introuvable - NovaPress AI' };
+  }
+
+  const description = synthesis.summary
+    ? synthesis.summary.substring(0, 160)
+    : `Synthese IA de ${synthesis.numSources} sources par NovaPress AI`;
+
+  const ogParams = new URLSearchParams({
+    title: synthesis.title,
+    score: String(synthesis.transparencyScore || 0),
+    sources: String(synthesis.numSources || 0),
+    label: synthesis.transparencyLabel || '',
+  });
+
+  return {
+    title: `${synthesis.title} - NovaPress AI`,
+    description,
+    openGraph: {
+      title: synthesis.title,
+      description,
+      type: 'article',
+      siteName: 'NovaPress AI',
+      images: [`/api/og?${ogParams.toString()}`],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: synthesis.title,
+      description,
+      images: [`/api/og?${ogParams.toString()}`],
+    },
+  };
+}
 
 // Generate static params for common syntheses (optional optimization)
 // export async function generateStaticParams() {
@@ -78,7 +117,11 @@ async function getSynthesis(id: string): Promise<SynthesisData | null> {
       // Phase 11: Predictions & Historical Context
       predictions: data.predictions || [],
       historicalContext: data.historicalContext || undefined,
-      category: data.category || 'MONDE'
+      category: data.category || 'MONDE',
+      // Transparency Score
+      transparencyScore: data.transparencyScore || 0,
+      transparencyLabel: data.transparencyLabel || 'N/A',
+      transparencyBreakdown: data.transparencyBreakdown || {},
     };
 
     return synthesis;
