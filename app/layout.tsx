@@ -87,11 +87,11 @@ export default function RootLayout({
         <a href="#main-content" className="skip-to-content">
           Aller au contenu principal
         </a>
-        <StyledJsxRegistry><Providers>
+        <Providers>
           <main id="main-content" tabIndex={-1} style={{ paddingBottom: '70px' }}>
             {children}
           </main>
-        </Providers></StyledJsxRegistry>
+        </Providers>
 
         {/* Service Worker: unregister old, clear caches, register new */}
         <Script id="sw-register" strategy="afterInteractive">{`
