@@ -26,3 +26,6 @@ pyyaml==6.0.2
 # Auth (si besoin)
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+
+# LLM client (pour types d'exceptions dans les tests)
+openai>=1.0.0
