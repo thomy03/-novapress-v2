@@ -1,6 +1,7 @@
 "use client";
 
 import React, { memo } from 'react';
+import Link from 'next/link';
 import { Article } from '../../types/Article';
 import { useTheme } from '../../contexts/ThemeContext';
 import { AIBadge, CategoryBadge, Badge } from '../ui/Badge';
@@ -55,7 +56,10 @@ export const CompactArticleCard = memo(function CompactArticleCard({
   const hasCausal = (article.causal_graph?.edges?.length ?? 0) > 0 ||
                     (article.causal_chain?.length ?? 0) > 0;
 
+  const href = isSynthesis ? `/synthesis/${article.id}` : `/article/${article.id}`;
+
   return (
+    <Link href={href} style={{ display: 'block', textDecoration: 'none' }}>
     <article
       className="card-interactive"
       style={{
@@ -68,7 +72,6 @@ export const CompactArticleCard = memo(function CompactArticleCard({
         borderRadius: '12px',
         border: `1px solid ${theme.border}`,
       }}
-      onClick={() => onArticleClick(article)}
     >
       {/* Image with zoom on hover */}
       <div
@@ -231,6 +234,7 @@ export const CompactArticleCard = memo(function CompactArticleCard({
         }}
       />
     </article>
+    </Link>
   );
 });
 

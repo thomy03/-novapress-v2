@@ -196,23 +196,30 @@ export function ArticlesProvider({ children }: { children: React.ReactNode }) {
         // Try to fetch from API
         const response = await articlesService.getArticles({ limit: 50 });
 
-        if (response.data && response.data.length > 0) {
-          const convertedArticles = response.data.map(convertApiArticle);
-          dispatch({ type: 'SET_ARTICLES', payload: convertedArticles });
+        if (Array.isArray(response.data)) {
+          // API is reachable — mark as available regardless of article count
           dispatch({ type: 'SET_API_AVAILABLE', payload: true });
 
-          const tags = getPopularTags(convertedArticles, 15);
-          dispatch({ type: 'SET_POPULAR_TAGS', payload: tags });
-
-          console.log(`✅ Loaded ${convertedArticles.length} articles from API`);
+          if (response.data.length > 0) {
+            const convertedArticles = response.data.map(convertApiArticle);
+            dispatch({ type: 'SET_ARTICLES', payload: convertedArticles });
+            const tags = getPopularTags(convertedArticles, 15);
+            dispatch({ type: 'SET_POPULAR_TAGS', payload: tags });
+            console.log(`✅ Loaded ${convertedArticles.length} articles from API`);
+          } else {
+            // API available but DB empty (pipeline not yet run) — show mock for display
+            dispatch({ type: 'SET_ARTICLES', payload: mockArticles });
+            const tags = getPopularTags(mockArticles, 15);
+            dispatch({ type: 'SET_POPULAR_TAGS', payload: tags });
+            console.log('ℹ️ API available but no articles yet — showing demo content');
+          }
         } else {
-          // API returned empty data, use mock
-          throw new Error('API returned no articles');
+          throw new Error('Invalid API response format');
         }
       } catch (error) {
-        // Fallback to mock data if API fails
+        // API unreachable — fallback to mock data
         console.error('❌ API Error:', error);
-        console.log('⚠️ Using mock data as API is not available');
+        console.log('⚠️ API unreachable — using mock data');
         dispatch({ type: 'SET_ARTICLES', payload: mockArticles });
         dispatch({ type: 'SET_API_AVAILABLE', payload: false });
         const tags = getPopularTags(mockArticles, 15);
@@ -329,9 +336,11 @@ export function ArticlesProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const handleArticleClick = useCallback((article: Article) => {
-    console.log('Article clicked:', article.id, article.title);
-    // Navigate to article detail page
-    router.push(`/article/${article.id}`);
+    // Route synthesis articles to /synthesis/id, regular articles to /article/id
+    const isSynthesis = article.source?.name === 'NovaPress AI' ||
+                        article.complianceScore !== undefined;
+    const path = isSynthesis ? `/synthesis/${article.id}` : `/article/${article.id}`;
+    router.push(path);
   }, [router]);
 
   // REF-006: Merge computed filteredArticles into state for consumers

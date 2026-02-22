@@ -1,6 +1,7 @@
 "use client";
 
 import React, { memo, useState } from 'react';
+import Link from 'next/link';
 import { Article } from '../../types/Article';
 import { useTheme } from '../../contexts/ThemeContext';
 
@@ -43,7 +44,10 @@ const SecondaryCard = memo(function SecondaryCard({
   const hasCausal = (article.causal_graph?.edges?.length ?? 0) > 0 ||
                     (article.causal_chain?.length ?? 0) > 0;
 
+  const href = isSynthesis ? `/synthesis/${article.id}` : `/article/${article.id}`;
+
   return (
+    <Link href={href} style={{ display: 'flex', flex: 1, textDecoration: 'none' }}>
     <article
       style={{
         display: 'flex',
@@ -57,7 +61,6 @@ const SecondaryCard = memo(function SecondaryCard({
         transform: isHovered ? 'translateY(-4px)' : 'none',
         boxShadow: isHovered ? '0 12px 40px rgba(0,0,0,0.12)' : '0 1px 3px rgba(0,0,0,0.05)'
       }}
-      onClick={() => onArticleClick(article)}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
@@ -272,6 +275,7 @@ const SecondaryCard = memo(function SecondaryCard({
         transition: 'transform 0.3s ease'
       }} />
     </article>
+    </Link>
   );
 });
 

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { memo } from 'react';
+import Link from 'next/link';
 import { Article } from '../../types/Article';
 import { useTheme } from '../../contexts/ThemeContext';
 import { Badge, BreakingBadge, AIBadge, CategoryBadge } from '../ui/Badge';
@@ -44,7 +45,10 @@ export const HeroArticle = memo(function HeroArticle({
     return text.slice(0, maxLength).trim() + '...';
   };
 
+  const href = isSynthesis ? `/synthesis/${article.id}` : `/article/${article.id}`;
+
   return (
+    <Link href={href} style={{ display: 'block', textDecoration: 'none', marginBottom: '48px' }}>
     <article
       className="img-zoom"
       style={{
@@ -56,9 +60,7 @@ export const HeroArticle = memo(function HeroArticle({
         borderRadius: '16px',
         overflow: 'hidden',
         cursor: 'pointer',
-        marginBottom: '48px',
       }}
-      onClick={() => onArticleClick(article)}
     >
       {/* Background Image with zoom on hover */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -229,6 +231,7 @@ export const HeroArticle = memo(function HeroArticle({
         </div>
       </div>
     </article>
+    </Link>
   );
 });
 
