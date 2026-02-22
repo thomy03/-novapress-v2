@@ -11,9 +11,36 @@ from httpx import AsyncClient, ASGITransport
 # Import app after mocking to prevent heavy model loading
 import sys
 import os
+from unittest.mock import MagicMock
 
 # Add backend to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Pre-mock heavy ML packages unavailable in CI (must happen before any app import)
+_HEAVY_MODULES = [
+    "sentence_transformers",
+    "torch",
+    "torchvision",
+    "torchaudio",
+    "sklearn",
+    "sklearn.preprocessing",
+    "hdbscan",
+    "umap",
+    "umap.umap_",
+    "spacy",
+    "spacy.tokens",
+    "spacy.lang",
+    "spacy.lang.fr",
+    "newspaper",
+    "newspaper.article",
+    "feedparser",
+    "pydub",
+    "telegram",
+    "telegram.ext",
+]
+for _mod in _HEAVY_MODULES:
+    if _mod not in sys.modules:
+        sys.modules[_mod] = MagicMock()
 
 
 @pytest.fixture(scope="session")
