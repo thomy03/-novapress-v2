@@ -149,34 +149,6 @@ export function HeroSynthesis({ synthesis }: HeroSynthesisProps) {
         </span>
       </div>
 
-      {/* CTA Button — stopPropagation because the whole article is already clickable */}
-      <Link
-        href={`/synthesis/${synthesis.id}`}
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '8px',
-          alignSelf: 'flex-start',
-          padding: '14px 24px',
-          backgroundColor: theme.text,
-          color: theme.bg,
-          fontSize: '14px',
-          fontWeight: 600,
-          textDecoration: 'none',
-          borderRadius: '4px',
-          transition: 'all 0.2s ease',
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.opacity = '0.85';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.opacity = '1';
-        }}
-      >
-        Lire la synthèse
-        <span style={{ fontSize: '16px' }}>&rarr;</span>
-      </Link>
     </article>
   );
 }

@@ -22,8 +22,6 @@ const CATEGORY_CONFIG: Record<SynthesisCategory, { emoji: string; color: string 
   'SCIENCES': { emoji: '🔬', color: '#4F46E5' }
 };
 
-const ALL_CATEGORIES = Object.keys(CATEGORY_CONFIG) as SynthesisCategory[];
-
 export default function LivePage() {
   const { theme } = useTheme();
   const [syntheses, setSyntheses] = useState<Synthesis[]>([]);
@@ -31,22 +29,10 @@ export default function LivePage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedHours, setSelectedHours] = useState(24);
-  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [hasMore, setHasMore] = useState(true);
   const [offset, setOffset] = useState(0);
   const abortControllerRef = useRef<AbortController | null>(null);
-
-  // Read initial category from URL param (e.g. /live?category=TECH)
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const cat = params.get('category');
-      if (cat && ALL_CATEGORIES.includes(cat as SynthesisCategory)) {
-        setSelectedCategory(cat);
-      }
-    }
-  }, []);
 
   const fetchLiveSyntheses = useCallback(async (
     currentOffset: number,
@@ -152,13 +138,8 @@ export default function LivePage() {
     return date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
   };
 
-  // Filter by selected category (client-side)
-  const filteredSyntheses = selectedCategory === 'ALL'
-    ? syntheses
-    : syntheses.filter(s => s.category === selectedCategory);
-
-  // Group filtered syntheses by date
-  const groupedSyntheses = filteredSyntheses.reduce((groups, synthesis) => {
+  // Group syntheses by date
+  const groupedSyntheses = syntheses.reduce((groups, synthesis) => {
     const dateKey = formatDate(synthesis.createdAt);
     if (!groups[dateKey]) {
       groups[dateKey] = [];
@@ -260,59 +241,6 @@ export default function LivePage() {
             </div>
           </div>
 
-          {/* Category filter strip */}
-          <div
-            className="mobile-nav-scroll"
-            style={{
-              display: 'flex',
-              gap: '8px',
-              marginTop: '16px',
-              overflowX: 'auto',
-              paddingBottom: '4px',
-            }}
-          >
-            <button
-              onClick={() => setSelectedCategory('ALL')}
-              style={{
-                flexShrink: 0,
-                padding: '6px 14px',
-                borderRadius: '20px',
-                border: selectedCategory === 'ALL' ? 'none' : `1px solid ${theme.border}`,
-                backgroundColor: selectedCategory === 'ALL' ? '#111' : 'transparent',
-                color: selectedCategory === 'ALL' ? '#FFF' : theme.text,
-                fontSize: '12px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              Toutes
-            </button>
-            {ALL_CATEGORIES.map(cat => {
-              const cfg = CATEGORY_CONFIG[cat];
-              const isActive = selectedCategory === cat;
-              return (
-                <button
-                  key={cat}
-                  onClick={() => setSelectedCategory(isActive ? 'ALL' : cat)}
-                  style={{
-                    flexShrink: 0,
-                    padding: '6px 14px',
-                    borderRadius: '20px',
-                    border: isActive ? 'none' : `1px solid ${theme.border}`,
-                    backgroundColor: isActive ? cfg.color : 'transparent',
-                    color: isActive ? '#FFF' : theme.text,
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {cfg.emoji} {cat}
-                </button>
-              );
-            })}
-          </div>
         </div>
 
         {/* Error state */}

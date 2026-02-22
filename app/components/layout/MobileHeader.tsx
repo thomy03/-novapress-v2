@@ -7,13 +7,13 @@ import { useTheme } from '../../contexts/ThemeContext';
 
 const QUICK_LINKS = [
     { label: '⚡ En direct', href: '/live' },
-    { label: '🌍 Monde', href: '/live?category=MONDE' },
-    { label: '💻 Tech', href: '/live?category=TECH' },
-    { label: '📈 Éco', href: '/live?category=ECONOMIE' },
-    { label: '🏛️ Politique', href: '/live?category=POLITIQUE' },
-    { label: '🎭 Culture', href: '/live?category=CULTURE' },
-    { label: '⚽ Sport', href: '/live?category=SPORT' },
-    { label: '🔬 Sciences', href: '/live?category=SCIENCES' },
+    { label: '🌍 Monde', href: '/?category=MONDE' },
+    { label: '💻 Tech', href: '/?category=TECH' },
+    { label: '📈 Éco', href: '/?category=ECONOMIE' },
+    { label: '🏛️ Politique', href: '/?category=POLITIQUE' },
+    { label: '🎭 Culture', href: '/?category=CULTURE' },
+    { label: '⚽ Sport', href: '/?category=SPORT' },
+    { label: '🔬 Sciences', href: '/?category=SCIENCES' },
     { label: '📌 Sauvegardés', href: '/saved' },
 ];
 
@@ -179,7 +179,7 @@ export default function MobileHeader() {
                 }}
             >
                 {QUICK_LINKS.map((link) => {
-                    const isActive = pathname === link.href || (link.href !== '/' && pathname.startsWith(link.href.split('?')[0]));
+                    const isActive = !link.href.includes('?') && (pathname === link.href || (link.href !== '/' && pathname.startsWith(link.href)));
                     return (
                         <Link
                             key={link.href}
