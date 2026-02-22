@@ -71,6 +71,7 @@ export function UpdateNotifier() {
     <div
       role="alert"
       aria-live="polite"
+      className="pwa-toast"
       style={{
         position: 'fixed',
         bottom: '80px', /* above BottomNav (60px) + margin */

@@ -82,7 +82,7 @@ export function NewsTicker() {
         }}>
         <span style={{
           backgroundColor: darkMode ? '#0f172a' : '#334155',
-          padding: '0 20px',
+          padding: '0 16px',
           fontWeight: 'bold',
           zIndex: 1,
           position: 'absolute',
@@ -91,25 +91,26 @@ export function NewsTicker() {
           display: 'flex',
           alignItems: 'center',
           borderRight: '2px solid rgba(255,255,255,0.2)',
-          fontSize: '13px',
-          letterSpacing: '0.5px'
+          fontSize: '11px',
+          letterSpacing: '0.5px',
+          whiteSpace: 'nowrap',
         }}>
-          🔴 DERNIÈRE MINUTE
+          🔴 ACTU
         </span>
 
         {isLoading ? (
           <div style={{
-            paddingLeft: '200px',
+            paddingLeft: '80px',
             fontSize: '14px',
             opacity: 0.8
           }}>
-            Chargement des actualités...
+            Chargement…
           </div>
         ) : (
           <div style={{
             display: 'flex',
             animation: `scroll ${Math.max(30, breakingNews.length * 8)}s linear infinite`,
-            paddingLeft: '200px',
+            paddingLeft: '80px',
             alignItems: 'center',
             height: '100%'
           }}>

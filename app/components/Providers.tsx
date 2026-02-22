@@ -76,7 +76,10 @@ export function Providers({ children }: ProvidersProps) {
               <ReadingProfileProvider>
                 {/* MobileHeader & BottomNav rendered after mount (client-only) */}
                 {mounted && isMobile && <MobileHeader />}
-                {children}
+                {/* Fade-in on mount to hide theme/hydration flash — no pointer-events:none so content stays interactive */}
+                <div style={{ opacity: mounted ? 1 : 0, transition: 'opacity 0.2s ease' }}>
+                  {children}
+                </div>
                 {mounted && isMobile && <BottomNav />}
                 <InstallPrompt />
                 <UpdateNotifier />

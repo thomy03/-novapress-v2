@@ -53,6 +53,7 @@ export function InstallPrompt() {
     <div
       role="banner"
       aria-label="Installer NovaPress"
+      className="pwa-toast"
       style={{
         position: 'fixed',
         bottom: '80px', // above BottomNav (70px) + margin

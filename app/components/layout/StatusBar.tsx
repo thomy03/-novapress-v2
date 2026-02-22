@@ -84,6 +84,7 @@ export function StatusBar() {
 
   return (
     <div
+      className="status-bar-desktop"
       style={{
         backgroundColor: terminalBg,
         borderBottom: `1px solid ${darkMode ? '#1F2937' : '#374151'}`,
