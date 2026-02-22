@@ -86,6 +86,10 @@ body {
   .pwa-toast {
     display: none !important;
   }
+  /* Category filter strip: hidden on mobile (MobileHeader has its own pills) */
+  .desktop-category-filter {
+    display: none !important;
+  }
 }
 
 /* Hide scrollbar on mobile nav pills (keep scrollable but visually clean) */

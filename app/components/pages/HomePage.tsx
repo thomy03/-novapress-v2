@@ -35,6 +35,19 @@ function MainContent() {
   const [offset, setOffset] = useState(0);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [keywordFilter, setKeywordFilter] = useState<string | null>(null);
+  const [trendingEntities, setTrendingEntities] = useState<string[]>([]);
+
+  // Fetch trending entities from backend NER data (key_entities from Qdrant)
+  useEffect(() => {
+    fetch(`${API_URL}/api/trending/entities?hours=168&limit=15`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.data) {
+          setTrendingEntities(data.data.map((e: { entity: string }) => e.entity));
+        }
+      })
+      .catch(() => {}); // Fail silently — not critical
+  }, []);
 
   // Fetch syntheses with pagination
   const fetchSyntheses = useCallback(async (currentOffset: number, append: boolean = false) => {
@@ -108,23 +121,7 @@ function MainContent() {
     return acc;
   }, {} as Record<string, number>), [syntheses]);
 
-  // Trending keywords extracted from synthesis titles (min 2 occurrences)
-  const trendingKeywords = useMemo(() => {
-    const STOP_WORDS = new Set(['le', 'la', 'les', 'de', 'du', 'des', 'en', 'et', 'est', 'au', 'aux', 'un', 'une', 'dans', 'sur', 'par', 'pour', 'avec', 'qui', 'que', 'se', 'si', 'ce', 'son', 'sa', 'ses', 'plus', 'pas', 'ne', 'ni', 'mais', 'leur', 'leurs', 'nous', 'vous', 'ils', 'elles', 'cette', 'sont', 'the', 'and', 'for', 'are', 'was', 'with', 'from', 'that', 'this', 'have', 'will', 'about', 'also', 'its', 'après', 'avant', 'sans', 'sous', 'vers']);
-    const wordCount: Record<string, number> = {};
-    syntheses.forEach(s => {
-      s.title.toLowerCase()
-        .replace(/[^a-zàâäéèêëïîôùûüç0-9\s]/g, ' ')
-        .split(/\s+/)
-        .filter(w => w.length >= 4 && !STOP_WORDS.has(w))
-        .forEach(w => { wordCount[w] = (wordCount[w] || 0) + 1; });
-    });
-    return Object.entries(wordCount)
-      .filter(([, c]) => c >= 2)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 12)
-      .map(([word]) => word.charAt(0).toUpperCase() + word.slice(1));
-  }, [syntheses]);
+  // trendingEntities comes from the backend (key_entities NER, fetched above)
 
   if (!mounted || loading) {
     return (
@@ -172,10 +169,10 @@ function MainContent() {
       {/* Category Filter + Trending Keywords */}
       {syntheses.length > 0 && (
         <div style={{ marginBottom: '24px', paddingBottom: '20px', borderBottom: `1px solid ${theme.border}` }}>
-          {/* Category pills */}
+          {/* Category pills — desktop only, MobileHeader handles mobile */}
           {Object.keys(categoryCounts).length > 1 && (
             <div
-              className="mobile-nav-scroll"
+              className="mobile-nav-scroll desktop-category-filter"
               style={{ display: 'flex', gap: '8px', marginBottom: '12px', overflowX: 'auto', paddingBottom: '4px' }}
             >
               <button
@@ -215,12 +212,12 @@ function MainContent() {
           )}
 
           {/* Trending keywords */}
-          {trendingKeywords.length > 0 && (
+          {trendingEntities.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <span style={{ fontSize: '11px', fontWeight: 700, color: theme.textSecondary, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>
                 🔥 Tendances
               </span>
-              {trendingKeywords.map(kw => {
+              {trendingEntities.map(kw => {
                 const isActive = keywordFilter === kw;
                 return (
                   <button

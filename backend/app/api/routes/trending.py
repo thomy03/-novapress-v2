@@ -84,6 +84,60 @@ async def get_trending_topics(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@router.get("/entities")
+@limiter.limit("60/minute")
+async def get_trending_entities(
+    request: Request,
+    hours: int = Query(168, ge=1, le=720),
+    limit: int = Query(15, ge=5, le=50)
+):
+    """
+    Get trending named entities (people, orgs, places) from recent syntheses.
+
+    Aggregates key_entities from Qdrant synthesis payloads (NER-extracted,
+    no LLM call). Returns the most mentioned entities as clickable topic pills.
+    """
+    try:
+        qdrant = get_qdrant_service()
+        raw_syntheses = qdrant.get_live_syntheses(hours=hours, limit=200)
+
+        entity_counter = Counter()
+
+        for synthesis in raw_syntheses:
+            key_entities_raw = synthesis.get("key_entities", "")
+            if not key_entities_raw:
+                continue
+            # key_entities is stored as "Trump, Ukraine, Macron, OTAN"
+            if isinstance(key_entities_raw, list):
+                entities = [str(e).strip() for e in key_entities_raw if str(e).strip()]
+            else:
+                entities = [e.strip() for e in str(key_entities_raw).split(",") if e.strip()]
+
+            for entity in entities:
+                # Skip very short or numeric-only entities
+                if len(entity) >= 3 and not entity.isdigit():
+                    entity_counter[entity] += 1
+
+        # Return top entities appearing at least twice
+        result = [
+            {"entity": entity, "count": count}
+            for entity, count in entity_counter.most_common(limit)
+            if count >= 2
+        ]
+
+        return {
+            "data": result,
+            "total": len(result),
+            "hours": hours,
+            "type": "entities"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to fetch trending entities: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 @router.get("/categories")
 @limiter.limit("60/minute")
 async def get_categories_stats(
