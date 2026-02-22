@@ -18,12 +18,15 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Pre-mock heavy ML packages unavailable in CI (must happen before any app import)
 _HEAVY_MODULES = [
+    # ML / Deep Learning (trop lourds pour CI)
     "sentence_transformers",
     "torch",
     "torchvision",
     "torchaudio",
     "sklearn",
     "sklearn.preprocessing",
+    "sklearn.cluster",
+    "sklearn.metrics",
     "hdbscan",
     "umap",
     "umap.umap_",
@@ -31,12 +34,19 @@ _HEAVY_MODULES = [
     "spacy.tokens",
     "spacy.lang",
     "spacy.lang.fr",
+    # Scraping / RSS (non installés en CI minimal)
     "newspaper",
     "newspaper.article",
     "feedparser",
+    # Audio / Bot
     "pydub",
     "telegram",
     "telegram.ext",
+    # Stripe (optionnel en prod, mock en test)
+    "stripe",
+    # Push notifications
+    "pywebpush",
+    "py_vapid",
 ]
 for _mod in _HEAVY_MODULES:
     if _mod not in sys.modules:
