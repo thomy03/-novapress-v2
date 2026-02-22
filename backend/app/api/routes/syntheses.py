@@ -5,7 +5,7 @@ AI-generated synthesis from clustered news articles
 IMPORTANT: Route order matters in FastAPI!
 Static routes (/breaking, /live) MUST be defined BEFORE dynamic routes (/{synthesis_id})
 """
-from fastapi import APIRouter, HTTPException, Query, Path, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Path, Request
 from fastapi.responses import JSONResponse
 from typing import List, Optional, Dict, Any
 from loguru import logger
@@ -14,6 +14,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from app.db.qdrant_client import get_qdrant_service
+from app.core.feature_gates import Feature, require_feature
 import re
 import json
 
@@ -900,7 +901,7 @@ async def get_synthesis(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.get("/by-id/{synthesis_id}/persona/{persona_id}")
+@router.get("/by-id/{synthesis_id}/persona/{persona_id}", dependencies=[Depends(require_feature(Feature.PERSONA_SWITCH))])
 @limiter.limit("10/minute")
 async def get_synthesis_with_persona(
     request: Request,
@@ -1128,7 +1129,7 @@ async def get_synthesis_fact_check(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.get("/by-id/{synthesis_id}/audio")
+@router.get("/by-id/{synthesis_id}/audio", dependencies=[Depends(require_feature(Feature.AUDIO_BRIEFING))])
 @limiter.limit("10/minute")
 async def get_synthesis_audio(
     request: Request,

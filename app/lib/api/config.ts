@@ -24,6 +24,14 @@ export const API_CONFIG = {
       LOGOUT: '/api/auth/logout',
       PROFILE: '/api/auth/profile'
     },
+    BILLING: {
+      CHECKOUT: '/api/billing/checkout',
+      PORTAL: '/api/billing/portal',
+      STATUS: '/api/billing/status',
+    },
+    SUBSCRIPTION: {
+      FEATURES: '/api/subscription/features',
+    },
     CATEGORIES: '/api/categories',
     SOURCES: '/api/sources',
     PREFERENCES: '/api/preferences'
@@ -59,5 +67,6 @@ export const QUERY_KEYS = {
   USER: 'user',
   CATEGORIES: 'categories',
   SOURCES: 'sources',
-  PREFERENCES: 'preferences'
+  PREFERENCES: 'preferences',
+  SUBSCRIPTION_FEATURES: 'subscription-features'
 } as const;

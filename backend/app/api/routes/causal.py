@@ -2,7 +2,7 @@
 Causal Graph API Routes
 Nexus Causal - Pre-computed causal relationships (0 LLM calls at display)
 """
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from loguru import logger
@@ -11,6 +11,7 @@ from datetime import datetime
 from app.db.qdrant_client import get_qdrant_service
 from app.ml.causal_extraction import CausalGraph, get_causal_extractor
 from app.ml.keyword_causal_bridge import get_keyword_causal_bridge
+from app.core.feature_gates import Feature, require_feature
 
 
 # ==========================================
@@ -125,7 +126,7 @@ class HistoricalCausalGraphResponse(BaseModel):
 router = APIRouter()
 
 
-@router.get("/syntheses/{synthesis_id}/causal-graph", response_model=CausalGraphResponse)
+@router.get("/syntheses/{synthesis_id}/causal-graph", response_model=CausalGraphResponse, dependencies=[Depends(require_feature(Feature.CAUSAL_GRAPH))])
 async def get_causal_graph(synthesis_id: str):
     """
     Get pre-computed causal graph for a synthesis.

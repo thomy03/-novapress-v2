@@ -1,0 +1,37 @@
+# NovaPress AI v2 - Prometheus Configuration
+# Scrapes metrics from backend, node-exporter, redis, and postgres exporters.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "alerts.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+scrape_configs:
+  # NovaPress FastAPI backend - custom app metrics
+  - job_name: 'novapress-backend'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['backend:5000']
+    scrape_interval: 10s
+
+  # Node Exporter - host-level CPU, memory, disk, network
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+  # Redis Exporter - Redis connections, memory, commands
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+
+  # PostgreSQL Exporter - PG connections, queries, replication
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']

@@ -40,8 +40,8 @@ def validate_secrets():
     elif openrouter_key:
         logger.success(f"✅ OPENROUTER_API_KEY configured (model: {settings.OPENROUTER_MODEL})")
 
-    # Check if we're in production
-    is_production = False  # Simplified for now
+    # Check if we're in production (DEBUG=False means production)
+    is_production = not settings.DEBUG
 
     if errors and is_production:
         error_msg = "Security configuration errors:\n" + "\n".join(f"  - {e}" for e in errors)

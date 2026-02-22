@@ -79,6 +79,9 @@ prometheus-client>=0.21.0
 # Web Push Notifications
 pywebpush>=2.0.0  # VAPID-based Web Push (optional — graceful fallback if not installed)
 
+# Stripe Billing
+stripe>=8.0.0  # Subscription management (optional — graceful fallback if not configured)
+
 # Development
 pytest>=8.3.0
 pytest-asyncio>=0.24.0

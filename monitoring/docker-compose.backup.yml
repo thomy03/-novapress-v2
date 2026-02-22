@@ -1,0 +1,170 @@
+# =============================================================================
+# NovaPress AI v2 - Backup Service (Docker Compose)
+# =============================================================================
+# Automated PostgreSQL and Qdrant backup service.
+#
+# Usage:
+#   # Start backup service alongside main services
+#   docker compose -f backend/docker-compose.yml -f monitoring/docker-compose.backup.yml up -d
+#
+#   # View backup logs
+#   docker compose -f monitoring/docker-compose.backup.yml logs -f backup-postgres
+#   docker compose -f monitoring/docker-compose.backup.yml logs -f backup-qdrant
+#
+#   # Run manual backup
+#   docker compose -f monitoring/docker-compose.backup.yml exec backup-postgres /scripts/backup-db.sh --inside-docker
+#
+#   # List available backups
+#   docker compose -f monitoring/docker-compose.backup.yml exec backup-postgres /scripts/restore-db.sh --list
+#
+#   # Restore from backup
+#   docker compose -f monitoring/docker-compose.backup.yml exec backup-postgres \
+#     /scripts/restore-db.sh --inside-docker --force /backups/postgresql/novapress_backup_YYYYMMDD_HHMMSS.sql.gz
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL Backup Service
+  # ---------------------------------------------------------------------------
+  # Runs pg_dump daily at 3:00 AM (configurable via BACKUP_INTERVAL_SECONDS)
+  backup-postgres:
+    image: postgres:16-alpine
+    container_name: novapress_backup_postgres
+    restart: unless-stopped
+    volumes:
+      - ../scripts:/scripts:ro
+      - backup_postgresql:/backups/postgresql
+      - backup_logs:/var/log/novapress
+    environment:
+      DB_HOST: novapress_postgres
+      DB_PORT: "5432"
+      DB_NAME: novapress_db
+      DB_USER: novapress
+      DB_PASSWORD: password
+      BACKUP_DIR: /backups/postgresql
+      LOG_FILE: /var/log/novapress/backup.log
+      # Optional: S3 upload
+      # AWS_S3_BUCKET: your-bucket-name
+      # AWS_ACCESS_KEY_ID: your-key
+      # AWS_SECRET_ACCESS_KEY: your-secret
+      # AWS_DEFAULT_REGION: eu-west-1
+      # Backup interval in seconds (default: 86400 = 24 hours)
+      BACKUP_INTERVAL_SECONDS: "86400"
+    entrypoint: /bin/sh
+    command: >
+      -c "
+        echo '[backup-postgres] Starting backup scheduler...';
+        chmod +x /scripts/backup-db.sh /scripts/restore-db.sh;
+        while true; do
+          echo '[backup-postgres] Running scheduled backup at '$(date);
+          /scripts/backup-db.sh --inside-docker;
+          echo '[backup-postgres] Next backup in $${BACKUP_INTERVAL_SECONDS}s';
+          sleep $${BACKUP_INTERVAL_SECONDS};
+        done
+      "
+    networks:
+      - novapress_network
+    depends_on:
+      - postgres_ref
+
+  # ---------------------------------------------------------------------------
+  # Qdrant Backup Service
+  # ---------------------------------------------------------------------------
+  # Creates Qdrant snapshots daily at 3:30 AM (30min offset from PostgreSQL)
+  backup-qdrant:
+    image: alpine:3.19
+    container_name: novapress_backup_qdrant
+    restart: unless-stopped
+    volumes:
+      - ../scripts:/scripts:ro
+      - backup_qdrant:/backups/qdrant
+      - backup_logs:/var/log/novapress
+    environment:
+      QDRANT_URL: http://novapress_qdrant:6333
+      QDRANT_COLLECTION: novapress_articles
+      BACKUP_DIR: /backups/qdrant
+      LOG_FILE: /var/log/novapress/backup.log
+      # Optional: S3 upload
+      # AWS_S3_BUCKET: your-bucket-name
+      # AWS_ACCESS_KEY_ID: your-key
+      # AWS_SECRET_ACCESS_KEY: your-secret
+      # AWS_DEFAULT_REGION: eu-west-1
+      # Backup interval in seconds (default: 86400 = 24 hours)
+      BACKUP_INTERVAL_SECONDS: "86400"
+      # Offset from PostgreSQL backup (default: 1800 = 30 minutes)
+      INITIAL_DELAY_SECONDS: "1800"
+    entrypoint: /bin/sh
+    command: >
+      -c "
+        apk add --no-cache bash curl bc;
+        chmod +x /scripts/backup-qdrant.sh;
+        echo '[backup-qdrant] Waiting $${INITIAL_DELAY_SECONDS}s before first backup...';
+        sleep $${INITIAL_DELAY_SECONDS};
+        while true; do
+          echo '[backup-qdrant] Running scheduled backup at '$(date);
+          /scripts/backup-qdrant.sh;
+          echo '[backup-qdrant] Next backup in $${BACKUP_INTERVAL_SECONDS}s';
+          sleep $${BACKUP_INTERVAL_SECONDS};
+        done
+      "
+    networks:
+      - novapress_network
+    depends_on:
+      - qdrant_ref
+
+  # ---------------------------------------------------------------------------
+  # Service references (to connect to main docker-compose network)
+  # ---------------------------------------------------------------------------
+  # These are placeholder references. When running with the main
+  # docker-compose.yml, the actual services are used.
+  # If running standalone, ensure the main services are on the same network.
+  postgres_ref:
+    image: postgres:16-alpine
+    container_name: novapress_postgres
+    profiles:
+      - standalone
+    environment:
+      POSTGRES_USER: novapress
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: novapress_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data_ref:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U novapress"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - novapress_network
+
+  qdrant_ref:
+    image: qdrant/qdrant:latest
+    container_name: novapress_qdrant
+    profiles:
+      - standalone
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data_ref:/qdrant/storage
+    networks:
+      - novapress_network
+
+volumes:
+  backup_postgresql:
+    driver: local
+  backup_qdrant:
+    driver: local
+  backup_logs:
+    driver: local
+  # Only used in standalone profile
+  postgres_data_ref:
+    driver: local
+  qdrant_data_ref:
+    driver: local
+
+networks:
+  novapress_network:
+    name: novapress_network
+    driver: bridge

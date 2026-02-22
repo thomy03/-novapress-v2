@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { authService } from '@/app/lib/api/services';
+import { useAuth } from '@/app/contexts/AuthContext';
 import { useTheme } from '@/app/contexts/ThemeContext';
 
 interface LoginModalProps {
@@ -13,6 +13,7 @@ interface LoginModalProps {
 
 export function LoginModal({ isOpen, onClose, onSuccess, onSwitchToSignup }: LoginModalProps) {
   const { darkMode } = useTheme();
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -46,18 +47,22 @@ export function LoginModal({ isOpen, onClose, onSuccess, onSwitchToSignup }: Log
     }
   }, [onClose]);
 
-  // REF-010: ARIA - Setup keyboard listeners and initial focus
+  // Initial focus + body scroll — only when isOpen changes
   useEffect(() => {
     if (isOpen) {
-      document.addEventListener('keydown', handleKeyDown);
-      // Focus first input when modal opens
       setTimeout(() => firstFocusableRef.current?.focus(), 0);
-      // Prevent body scroll
       document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
     }
+  }, [isOpen]);
+
+  // Keyboard handler — re-attaches when handler reference changes, without re-focusing
+  useEffect(() => {
+    if (!isOpen) return;
+    document.addEventListener('keydown', handleKeyDown);
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = '';
     };
   }, [isOpen, handleKeyDown]);
 
@@ -69,8 +74,8 @@ export function LoginModal({ isOpen, onClose, onSuccess, onSwitchToSignup }: Log
     setLoading(true);
 
     try {
-      const response = await authService.login({ email, password });
-      onSuccess(response.user);
+      await login(email, password);
+      onSuccess(null);
       onClose();
     } catch (err: any) {
       setError(err.message || 'Échec de la connexion');
@@ -95,7 +100,7 @@ export function LoginModal({ isOpen, onClose, onSuccess, onSwitchToSignup }: Log
         zIndex: 10000
       }}
       onClick={(e) => e.target === e.currentTarget && onClose()}
-      aria-hidden="true"
+      role="presentation"
     >
       {/* REF-010: ARIA - Dialog container with proper attributes */}
       <div

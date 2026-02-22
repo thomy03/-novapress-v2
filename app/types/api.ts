@@ -83,7 +83,7 @@ export interface User {
   createdAt: string;
   lastLogin?: string;
   subscription?: {
-    type: 'free' | 'premium' | 'enterprise';
+    type: 'free' | 'pro' | 'enterprise';
     expiresAt?: string;
   };
 }
@@ -424,4 +424,17 @@ export interface SynthesisBiasResponse {
   is_balanced: boolean;
   sources: SourceBiasInfo[];
   unknown_sources: string[];
+}
+
+// ========== Subscription / Feature Gating Types ==========
+
+export type SubscriptionTier = 'free' | 'pro' | 'enterprise';
+
+export interface SubscriptionFeatures {
+  tier: SubscriptionTier;
+  features: string[];
+  limits: {
+    syntheses_per_day: number;   // -1 = unlimited
+    syntheses_used_today: number;
+  };
 }

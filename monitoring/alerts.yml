@@ -1,0 +1,161 @@
+# NovaPress AI v2 - Prometheus Alert Rules
+# Covers API health, pipeline, LLM costs, and infrastructure.
+
+groups:
+  # =========================================================================
+  # API & APPLICATION ALERTS
+  # =========================================================================
+  - name: novapress_api_alerts
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(novapress_api_requests_total{status_code=~"5.."}[5m]))
+            /
+            sum(rate(novapress_api_requests_total[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High API error rate detected"
+          description: "API error rate is {{ $value | humanizePercentage }} (threshold: 5%) over the last 5 minutes."
+
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(novapress_api_request_duration_seconds_bucket[5m])) by (le))
+          > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API p95 latency"
+          description: "API p95 latency is {{ $value | humanizeDuration }} (threshold: 5s) over the last 5 minutes."
+
+      - alert: ServiceDown
+        expr: up{job="novapress-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "NovaPress backend is down"
+          description: "The NovaPress backend has been unreachable for more than 1 minute."
+
+  # =========================================================================
+  # PIPELINE ALERTS
+  # =========================================================================
+  - name: novapress_pipeline_alerts
+    rules:
+      - alert: PipelineFailed
+        expr: |
+          (time() - max(novapress_pipeline_runs_total{status="success"} > 0) or vector(0))
+          > 7200
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No successful pipeline run in 2 hours"
+          description: "The news pipeline has not completed successfully in over 2 hours. Check backend logs."
+
+      - alert: PipelineStuck
+        expr: novapress_pipeline_status == 1
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pipeline appears stuck"
+          description: "The pipeline has been in 'running' state for over 30 minutes."
+
+  # =========================================================================
+  # LLM COST ALERTS
+  # =========================================================================
+  - name: novapress_llm_alerts
+    rules:
+      - alert: LLMHighCost
+        expr: |
+          sum(increase(novapress_llm_tokens_used_total[24h])) > 500000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "LLM token usage exceeds daily budget"
+          description: "Total LLM token usage in the last 24h is {{ $value }} tokens (threshold: 500,000). Review pipeline frequency or model selection."
+
+      - alert: LLMHighErrorRate
+        expr: |
+          (
+            sum(rate(novapress_llm_errors_total[15m]))
+            /
+            sum(rate(novapress_llm_calls_total[15m]))
+          ) > 0.2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High LLM error rate"
+          description: "LLM error rate is {{ $value | humanizePercentage }} over the last 15 minutes."
+
+  # =========================================================================
+  # INFRASTRUCTURE ALERTS
+  # =========================================================================
+  - name: novapress_infra_alerts
+    rules:
+      - alert: HighMemoryUsage
+        expr: |
+          (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on host"
+          description: "Memory usage is {{ $value | humanizePercentage }} (threshold: 85%) for over 10 minutes."
+
+      - alert: DiskSpaceLow
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.10
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk space critically low"
+          description: "Available disk space is {{ $value | humanizePercentage }} (threshold: 10%)."
+
+      - alert: QdrantDown
+        expr: |
+          up{job="novapress-backend"} == 1
+          and
+          novapress_circuit_breaker_status{service="qdrant"} == 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Qdrant vector database is down"
+          description: "The Qdrant circuit breaker is open, indicating the vector database is unreachable."
+
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis is down"
+          description: "Redis has been unreachable for over 1 minute. Caching and session storage are affected."
+
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL has been unreachable for over 1 minute."
+
+      - alert: HighCPUUsage
+        expr: |
+          100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on host"
+          description: "CPU usage is above 90% for over 10 minutes."

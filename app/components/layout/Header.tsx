@@ -230,9 +230,20 @@ export function Header() {
             {/* Auth Buttons */}
             {isAuthenticated ? (
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.8)' }}>
-                  {user?.name || 'Utilisateur'}
-                </span>
+                <Link
+                  href="/account"
+                  style={{
+                    fontSize: '13px',
+                    color: 'rgba(255,255,255,0.8)',
+                    textDecoration: 'none',
+                    borderBottom: '1px solid rgba(255,255,255,0.3)',
+                    paddingBottom: '1px',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = '#FFFFFF'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(255,255,255,0.8)'; }}
+                >
+                  {user?.name || 'Mon compte'}
+                </Link>
                 <button
                   onClick={logout}
                   style={{

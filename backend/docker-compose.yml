@@ -9,7 +9,7 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: novapress_db
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -84,6 +84,7 @@ services:
     volumes:
       - ./app:/app/app
       - ./models:/app/models
+    # Development: --reload for hot-reloading; Production: remove --reload, use Dockerfile CMD (4 workers)
     command: uvicorn app.main:app --host 0.0.0.0 --port 5000 --reload
 
 volumes:

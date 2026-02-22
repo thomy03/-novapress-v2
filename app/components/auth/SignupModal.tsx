@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { authService } from '@/app/lib/api/services';
+import { useAuth } from '@/app/contexts/AuthContext';
 import { useTheme } from '@/app/contexts/ThemeContext';
 
 interface SignupModalProps {
@@ -13,6 +13,7 @@ interface SignupModalProps {
 
 export function SignupModal({ isOpen, onClose, onSuccess, onSwitchToLogin }: SignupModalProps) {
   const { darkMode } = useTheme();
+  const { signup } = useAuth();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -49,18 +50,22 @@ export function SignupModal({ isOpen, onClose, onSuccess, onSwitchToLogin }: Sig
     }
   }, [onClose]);
 
-  // REF-010: ARIA - Setup keyboard listeners and initial focus
+  // Initial focus + body scroll — only when isOpen changes
   useEffect(() => {
     if (isOpen) {
-      document.addEventListener('keydown', handleKeyDown);
-      // Focus first input when modal opens
       setTimeout(() => firstFocusableRef.current?.focus(), 0);
-      // Prevent body scroll
       document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
     }
+  }, [isOpen]);
+
+  // Keyboard handler — re-attaches when handler reference changes, without re-focusing
+  useEffect(() => {
+    if (!isOpen) return;
+    document.addEventListener('keydown', handleKeyDown);
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = '';
     };
   }, [isOpen, handleKeyDown]);
 
@@ -87,12 +92,8 @@ export function SignupModal({ isOpen, onClose, onSuccess, onSwitchToLogin }: Sig
     setLoading(true);
 
     try {
-      const response = await authService.register({
-        email: formData.email,
-        password: formData.password,
-        name: formData.name
-      });
-      onSuccess(response.user);
+      await signup(formData.name, formData.email, formData.password);
+      onSuccess(null);
       onClose();
     } catch (err: any) {
       setError(err.message || 'Échec de l\'inscription');
@@ -117,7 +118,7 @@ export function SignupModal({ isOpen, onClose, onSuccess, onSwitchToLogin }: Sig
         zIndex: 10000
       }}
       onClick={(e) => e.target === e.currentTarget && onClose()}
-      aria-hidden="true"
+      role="presentation"
     >
       {/* REF-010: ARIA - Dialog container with proper attributes */}
       <div

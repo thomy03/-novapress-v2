@@ -7,7 +7,12 @@ NO GOOGLE/GEMINI - 100% Open Source Stack
 import warnings
 warnings.filterwarnings("ignore", category=SyntaxWarning, module="newspaper")
 
+# Fix asyncpg + Windows + Python 3.13 incompatibility (WinError 64)
+# asyncpg requires SelectorEventLoop; ProactorEventLoop (Windows default) breaks TCP to Docker
 import sys
+import asyncio
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -27,7 +32,7 @@ logger.add(
     format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
     colorize=True
 )
-from app.api.routes import articles, trending, auth, search, websocket, syntheses, time_traveler, causal, admin, intelligence, artifacts, push
+from app.api.routes import articles, trending, auth, search, websocket, syntheses, time_traveler, causal, admin, intelligence, artifacts, push, billing, subscription, waitlist
 from app.core.circuit_breaker import init_circuit_breakers
 from app.core.metrics import generate_metrics, get_content_type, set_app_info
 
@@ -52,6 +57,14 @@ async def lifespan(app: FastAPI):
 
     # Set application info for Prometheus
     set_app_info(version="2.0.0", environment="development" if settings.DEBUG else "production")
+
+    # Initialize PostgreSQL for auth
+    try:
+        logger.info("🔐 Initializing PostgreSQL for authentication...")
+        from app.db.session import init_db
+        await init_db()
+    except Exception as e:
+        logger.warning(f"⚠️ PostgreSQL not available: {e}. Auth endpoints will fail.")
 
     # Initialize Qdrant (optional - auth works without it)
     try:
@@ -102,6 +115,11 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("👋 Shutting down NovaPress AI v2 Backend")
+    try:
+        from app.db.session import close_db
+        await close_db()
+    except Exception:
+        pass
     try:
         from app.services.messaging.telegram_bot import get_telegram_bot
         await get_telegram_bot().shutdown()
@@ -231,6 +249,9 @@ app.include_router(admin.router, prefix=f"{settings.API_V1_PREFIX}/admin", tags=
 app.include_router(intelligence.router, prefix=f"{settings.API_V1_PREFIX}/intelligence", tags=["Intelligence-Hub"])
 app.include_router(artifacts.router, prefix=f"{settings.API_V1_PREFIX}/artifacts", tags=["Artifacts"])
 app.include_router(push.router, prefix=f"{settings.API_V1_PREFIX}/push", tags=["Push-Notifications"])
+app.include_router(billing.router, prefix=f"{settings.API_V1_PREFIX}/billing", tags=["Billing"])
+app.include_router(subscription.router, prefix=f"{settings.API_V1_PREFIX}/subscription", tags=["Subscription"])
+app.include_router(waitlist.router, prefix=f"{settings.API_V1_PREFIX}/waitlist", tags=["Waitlist"])
 
 
 # ─── Telegram Webhook ───
@@ -318,5 +339,8 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=5000,
         reload=settings.DEBUG,
+        workers=1 if settings.DEBUG else 4,
+        timeout_keep_alive=300,
+        limit_max_requests=1000 if not settings.DEBUG else None,
         log_level=settings.LOG_LEVEL.lower()
     )

@@ -1,0 +1,146 @@
+# NovaPress AI v2 - Monitoring Stack
+# Usage: docker compose -f monitoring/docker-compose.monitoring.yml up -d
+#
+# Ports:
+#   Prometheus:   http://localhost:9090
+#   Grafana:      http://localhost:3001  (admin / ${GF_ADMIN_PASSWORD:-novapress})
+#   Alertmanager: http://localhost:9093
+#
+# Prerequisites:
+#   The main backend/docker-compose.yml must be running (backend, redis, postgres, qdrant).
+#   Both compose files share the "novapress_network" bridge network.
+
+services:
+  # ---------------------------------------------------------------------------
+  # Prometheus - metrics collection and alerting engine
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: novapress_prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - monitoring
+      - novapress_network
+
+  # ---------------------------------------------------------------------------
+  # Grafana - dashboards and visualization
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: novapress_grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_ADMIN_PASSWORD:-novapress}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3001
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/novapress.json
+    volumes:
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - monitoring
+
+  # ---------------------------------------------------------------------------
+  # Alertmanager - alert routing and grouping
+  # ---------------------------------------------------------------------------
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: novapress_alertmanager
+    restart: unless-stopped
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    networks:
+      - monitoring
+
+  # ---------------------------------------------------------------------------
+  # Node Exporter - host-level metrics (CPU, memory, disk, network)
+  # ---------------------------------------------------------------------------
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: novapress_node_exporter
+    restart: unless-stopped
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    networks:
+      - monitoring
+
+  # ---------------------------------------------------------------------------
+  # Redis Exporter - Redis metrics
+  # ---------------------------------------------------------------------------
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: novapress_redis_exporter
+    restart: unless-stopped
+    ports:
+      - "9121:9121"
+    environment:
+      - REDIS_ADDR=redis://redis:6379
+    depends_on:
+      - prometheus
+    networks:
+      - monitoring
+      - novapress_network
+
+  # ---------------------------------------------------------------------------
+  # Postgres Exporter - PostgreSQL metrics
+  # ---------------------------------------------------------------------------
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: novapress_postgres_exporter
+    restart: unless-stopped
+    ports:
+      - "9187:9187"
+    environment:
+      - DATA_SOURCE_NAME=postgresql://novapress:password@postgres:5432/novapress_db?sslmode=disable
+    depends_on:
+      - prometheus
+    networks:
+      - monitoring
+      - novapress_network
+
+networks:
+  monitoring:
+    driver: bridge
+  novapress_network:
+    external: true
+    name: backend_default
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  alertmanager_data:

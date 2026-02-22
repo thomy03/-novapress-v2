@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { causalService } from '@/app/lib/api/services/causal';
 import HistoricalCausalGraph from '@/app/components/causal/HistoricalCausalGraph';
+import { FeatureGate } from '@/app/components/ui/FeatureGate';
 import {
   CausalGraphResponse,
   CausalStatsResponse,
@@ -80,6 +81,7 @@ export default function CausalPage() {
   const flowConfig = NARRATIVE_FLOW_CONFIG[data.narrative_flow] || NARRATIVE_FLOW_CONFIG.linear;
 
   return (
+    <FeatureGate feature="causal_graph" featureLabel="Graphe Causal Interactif" mode="block">
     <div style={styles.pageContainer}>
       {/* Header */}
       <header style={styles.header}>
@@ -177,6 +179,7 @@ export default function CausalPage() {
         </div>
       </main>
     </div>
+    </FeatureGate>
   );
 }
 

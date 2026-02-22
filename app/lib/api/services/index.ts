@@ -4,3 +4,5 @@ export { authService } from './auth';
 export { timelineService } from './timeline';
 export { synthesesService } from './syntheses';
 export { intelligenceService } from './intelligence';
+export { billingService } from './billing';
+export { subscriptionService } from './subscription';

@@ -1,0 +1,66 @@
+# NovaPress AI v2 - Alertmanager Configuration
+# Groups alerts by severity and routes critical alerts separately.
+
+global:
+  resolve_timeout: 5m
+
+# Notification templates (optional, extend as needed)
+templates: []
+
+route:
+  # Default receiver for all alerts
+  receiver: 'webhook-default'
+  # Group alerts with the same labels together
+  group_by: ['alertname', 'severity']
+  # Wait before sending the first notification for a new group
+  group_wait: 30s
+  # Wait before sending notifications about new alerts added to a group
+  group_interval: 5m
+  # Wait before re-sending a notification for an alert that has already fired
+  repeat_interval: 4h
+
+  routes:
+    # Critical alerts: shorter wait, faster repeat
+    - match:
+        severity: critical
+      receiver: 'webhook-critical'
+      group_wait: 10s
+      group_interval: 1m
+      repeat_interval: 1h
+
+    # Warning alerts: standard timing
+    - match:
+        severity: warning
+      receiver: 'webhook-default'
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+
+receivers:
+  # Default webhook for warning-level alerts
+  - name: 'webhook-default'
+    webhook_configs:
+      - url: 'http://host.docker.internal:5000/api/webhooks/alerts'
+        send_resolved: true
+        http_config:
+          basic_auth:
+            username: ''
+            password: ''
+
+  # Critical webhook - same endpoint but could be a different channel (e.g., PagerDuty, Slack)
+  - name: 'webhook-critical'
+    webhook_configs:
+      - url: 'http://host.docker.internal:5000/api/webhooks/alerts'
+        send_resolved: true
+        http_config:
+          basic_auth:
+            username: ''
+            password: ''
+
+# Inhibition rules: suppress lower-severity alerts when critical fires
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname']

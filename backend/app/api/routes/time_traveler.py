@@ -2,7 +2,7 @@
 Time-Traveler API Routes
 Historical context and timeline for AI syntheses
 """
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from datetime import datetime
@@ -12,6 +12,7 @@ from app.db.qdrant_client import get_qdrant_service
 from app.ml.temporal_narrative import get_temporal_narrative_engine
 from app.ml.advanced_rag import get_advanced_rag
 from app.ml.embeddings import get_embedding_service
+from app.core.feature_gates import Feature, require_feature
 
 
 # ==========================================
@@ -84,7 +85,7 @@ class TimelinePreviewResponse(BaseModel):
 router = APIRouter()
 
 
-@router.get("/syntheses/{synthesis_id}/timeline", response_model=TimelineResponse)
+@router.get("/syntheses/{synthesis_id}/timeline", response_model=TimelineResponse, dependencies=[Depends(require_feature(Feature.TIMELINE))])
 async def get_synthesis_timeline(synthesis_id: str):
     """
     Get complete historical timeline for a synthesis.

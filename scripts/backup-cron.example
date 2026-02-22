@@ -1,0 +1,44 @@
+# =============================================================================
+# NovaPress AI v2 - Backup Cron Schedule
+# =============================================================================
+# Copy this file and adjust paths to your installation.
+#
+# Install:
+#   crontab -e
+#   # paste the lines below
+#
+# Verify:
+#   crontab -l
+#
+# Monitor logs:
+#   tail -f /var/log/novapress/backup.log
+# =============================================================================
+
+# Environment setup for cron (adjust paths as needed)
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+NOVAPRESS_DIR=/opt/novapress-v2
+
+# ---------------------------------------------------------------------------
+# PostgreSQL Backups
+# ---------------------------------------------------------------------------
+
+# Daily PostgreSQL backup at 3:00 AM
+0 3 * * * ${NOVAPRESS_DIR}/scripts/backup-db.sh >> /var/log/novapress/backup.log 2>&1
+
+# ---------------------------------------------------------------------------
+# Qdrant Vector Database Backups
+# ---------------------------------------------------------------------------
+
+# Daily Qdrant snapshot at 3:30 AM
+30 3 * * * ${NOVAPRESS_DIR}/scripts/backup-qdrant.sh >> /var/log/novapress/backup.log 2>&1
+
+# ---------------------------------------------------------------------------
+# Cleanup & Monitoring
+# ---------------------------------------------------------------------------
+
+# Weekly backup size report (Monday 8:00 AM)
+0 8 * * 1 du -sh /backups/postgresql/ /backups/qdrant/ >> /var/log/novapress/backup.log 2>&1
+
+# Monthly: verify backup integrity by test-listing latest backup (1st of month, 6:00 AM)
+0 6 1 * * ${NOVAPRESS_DIR}/scripts/restore-db.sh --list >> /var/log/novapress/backup.log 2>&1

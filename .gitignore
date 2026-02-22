@@ -75,5 +75,8 @@ verif*.png
 .vscode/
 .idea/
 
+# Windows artifacts
+nul
+
 # Lighthouse / perf reports
 lighthouse-report.html
