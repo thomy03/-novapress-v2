@@ -74,19 +74,12 @@ export function Providers({ children }: ProvidersProps) {
           <AuthProvider>
             <ArticlesProvider>
               <ReadingProfileProvider>
-                <div style={{
-                  opacity: mounted ? 1 : 0,
-                  // Use pointer-events:none instead of visibility:hidden so touch events
-                  // pass through to the document before hydration completes.
-                  // visibility:hidden absorbs pointer events on some mobile WebViews.
-                  pointerEvents: mounted ? undefined : 'none',
-                }}>
-                  {isMobile && <MobileHeader />}
-                  {children}
-                  {isMobile && <BottomNav />}
-                  <InstallPrompt />
-                  <UpdateNotifier />
-                </div>
+                {/* MobileHeader & BottomNav rendered after mount (client-only) */}
+                {mounted && isMobile && <MobileHeader />}
+                {children}
+                {mounted && isMobile && <BottomNav />}
+                <InstallPrompt />
+                <UpdateNotifier />
               </ReadingProfileProvider>
             </ArticlesProvider>
           </AuthProvider>

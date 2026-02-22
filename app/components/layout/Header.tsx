@@ -48,6 +48,8 @@ export function Header() {
 
   return (
     <>
+      {/* Desktop-only header — hidden on mobile (MobileHeader handles mobile) */}
+      <div className="header-desktop">
       {/* Top Bar - Compact info bar */}
       <div
         role="banner"
@@ -375,7 +377,9 @@ export function Header() {
         </div>
       </header>
 
-      {/* Auth Modals */}
+      </div>{/* end .header-desktop */}
+
+      {/* Auth Modals — outside header-desktop so they still work on mobile */}
       <LoginModal
         isOpen={showLoginModal}
         onClose={() => setShowLoginModal(false)}

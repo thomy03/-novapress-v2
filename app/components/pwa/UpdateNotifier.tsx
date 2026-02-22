@@ -73,9 +73,9 @@ export function UpdateNotifier() {
       aria-live="polite"
       style={{
         position: 'fixed',
-        top: '16px',
-        left: '50%',
-        transform: 'translateX(-50%)',
+        bottom: '80px', /* above BottomNav (60px) + margin */
+        left: '16px',
+        right: '16px',
         background: '#111',
         color: '#FFF',
         borderRadius: '10px',
@@ -86,7 +86,6 @@ export function UpdateNotifier() {
         zIndex: 10000,
         boxShadow: '0 4px 24px rgba(0,0,0,0.5)',
         border: '1px solid #333',
-        whiteSpace: 'nowrap',
       }}
     >
       <span style={{ fontSize: '18px' }}>✨</span>

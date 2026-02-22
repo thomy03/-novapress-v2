@@ -68,6 +68,14 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden; /* Prevent horizontal scroll on mobile */
+}
+
+/* Desktop-only header: hidden on mobile (MobileHeader handles mobile) */
+@media (max-width: 767px) {
+  .header-desktop {
+    display: none;
+  }
 }
 
 /* Serif headings */
@@ -551,6 +559,12 @@ code, pre, kbd {
 @media (max-width: 640px) {
   .bento-grid {
     grid-template-columns: 1fr;
+  }
+  /* Reset column spans to 1 on mobile — avoids implicit grid overflow */
+  .bento-span-2,
+  .bento-span-3,
+  .bento-span-4 {
+    grid-column: span 1 !important;
   }
 }
 
