@@ -93,6 +93,39 @@ function MainContent() {
     fetchNextPage: loadMore,
   });
 
+  // ⚠️ useMemo hooks MUST be before any early return (Rules of Hooks)
+  // Apply category + keyword filters to all syntheses
+  const filteredSyntheses = useMemo(() => {
+    let result = syntheses;
+    if (categoryFilter) result = result.filter(s => s.category === categoryFilter);
+    if (keywordFilter) result = result.filter(s => s.title.toLowerCase().includes(keywordFilter.toLowerCase()));
+    return result;
+  }, [syntheses, categoryFilter, keywordFilter]);
+
+  // Count all categories (from unfiltered syntheses, for stable filter button labels)
+  const categoryCounts = useMemo(() => syntheses.reduce((acc, s) => {
+    if (s.category) acc[s.category] = (acc[s.category] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>), [syntheses]);
+
+  // Trending keywords extracted from synthesis titles (min 2 occurrences)
+  const trendingKeywords = useMemo(() => {
+    const STOP_WORDS = new Set(['le', 'la', 'les', 'de', 'du', 'des', 'en', 'et', 'est', 'au', 'aux', 'un', 'une', 'dans', 'sur', 'par', 'pour', 'avec', 'qui', 'que', 'se', 'si', 'ce', 'son', 'sa', 'ses', 'plus', 'pas', 'ne', 'ni', 'mais', 'leur', 'leurs', 'nous', 'vous', 'ils', 'elles', 'cette', 'sont', 'the', 'and', 'for', 'are', 'was', 'with', 'from', 'that', 'this', 'have', 'will', 'about', 'also', 'its', 'après', 'avant', 'sans', 'sous', 'vers']);
+    const wordCount: Record<string, number> = {};
+    syntheses.forEach(s => {
+      s.title.toLowerCase()
+        .replace(/[^a-zàâäéèêëïîôùûüç0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter(w => w.length >= 4 && !STOP_WORDS.has(w))
+        .forEach(w => { wordCount[w] = (wordCount[w] || 0) + 1; });
+    });
+    return Object.entries(wordCount)
+      .filter(([, c]) => c >= 2)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 12)
+      .map(([word]) => word.charAt(0).toUpperCase() + word.slice(1));
+  }, [syntheses]);
+
   if (!mounted || loading) {
     return (
       <main className="max-w-[1400px] mx-auto px-6 py-8">
@@ -124,43 +157,11 @@ function MainContent() {
     });
   };
 
-  // Apply category + keyword filters to all syntheses
-  const filteredSyntheses = useMemo(() => {
-    let result = syntheses;
-    if (categoryFilter) result = result.filter(s => s.category === categoryFilter);
-    if (keywordFilter) result = result.filter(s => s.title.toLowerCase().includes(keywordFilter.toLowerCase()));
-    return result;
-  }, [syntheses, categoryFilter, keywordFilter]);
-
-  // Split into sections
+  // Split into sections (non-hook derived values, safe after early return)
   const heroSynthesis = filteredSyntheses[0];
   const secondarySyntheses = filteredSyntheses.slice(1, 3);
   const allGridSyntheses = filteredSyntheses.slice(3);
   const gridSyntheses = allGridSyntheses;
-
-  // Count all categories (from unfiltered syntheses, for stable filter button labels)
-  const categoryCounts = useMemo(() => syntheses.reduce((acc, s) => {
-    if (s.category) acc[s.category] = (acc[s.category] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>), [syntheses]);
-
-  // Trending keywords extracted from synthesis titles (min 2 occurrences)
-  const trendingKeywords = useMemo(() => {
-    const STOP_WORDS = new Set(['le', 'la', 'les', 'de', 'du', 'des', 'en', 'et', 'est', 'au', 'aux', 'un', 'une', 'dans', 'sur', 'par', 'pour', 'avec', 'qui', 'que', 'se', 'si', 'ce', 'son', 'sa', 'ses', 'plus', 'pas', 'ne', 'ni', 'mais', 'leur', 'leurs', 'nous', 'vous', 'ils', 'elles', 'cette', 'sont', 'the', 'and', 'for', 'are', 'was', 'with', 'from', 'that', 'this', 'have', 'will', 'about', 'also', 'its', 'après', 'avant', 'sans', 'sous', 'vers']);
-    const wordCount: Record<string, number> = {};
-    syntheses.forEach(s => {
-      s.title.toLowerCase()
-        .replace(/[^a-zàâäéèêëïîôùûüç0-9\s]/g, ' ')
-        .split(/\s+/)
-        .filter(w => w.length >= 4 && !STOP_WORDS.has(w))
-        .forEach(w => { wordCount[w] = (wordCount[w] || 0) + 1; });
-    });
-    return Object.entries(wordCount)
-      .filter(([, c]) => c >= 2)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 12)
-      .map(([word]) => word.charAt(0).toUpperCase() + word.slice(1));
-  }, [syntheses]);
 
   return (
     <main
