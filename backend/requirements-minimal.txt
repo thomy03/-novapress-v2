@@ -23,9 +23,19 @@ python-dotenv==1.0.1
 loguru==0.7.3
 pyyaml==6.0.2
 
-# Auth (si besoin)
+# Auth
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+python-multipart>=0.0.12
+email-validator>=2.0.0
+bcrypt>=4.2.0
+
+# Rate limiting (requis par app/main.py)
+slowapi>=0.1.9
 
 # LLM client (pour types d'exceptions dans les tests)
 openai>=1.0.0
+
+# Test utilities
+pytest-asyncio
+httpx

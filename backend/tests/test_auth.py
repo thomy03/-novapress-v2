@@ -115,8 +115,9 @@ class TestAuthTokenRefresh:
         ]
 
 
+@pytest.mark.skip(reason="Auth fully implemented — stubs removed. Use TestAuthRegister/TestAuthLogin.")
 class TestAuthStubs:
-    """Verify stub behaviour — all auth endpoints return 501"""
+    """Stubs obsolètes — l'auth JWT est maintenant implémentée"""
 
     @pytest.mark.unit
     def test_register_returns_501(self, client):
