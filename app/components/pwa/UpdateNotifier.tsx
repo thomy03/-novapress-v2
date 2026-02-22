@@ -1,10 +1,14 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 
 export function UpdateNotifier() {
   const [showToast, setShowToast] = useState(false);
   const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
+  // Track whether the user explicitly requested an update — only reload in that case.
+  // Without this guard, every SW re-registration (e.g. on cold open) would trigger
+  // an infinite reload loop in PWA standalone mode.
+  const userRequestedUpdate = useRef(false);
 
   const registerWaiting = useCallback((worker: ServiceWorker) => {
     setWaitingWorker(worker);
@@ -42,14 +46,19 @@ export function UpdateNotifier() {
 
     bootstrap();
 
-    // Reload when the new SW takes control
-    const onControllerChange = () => window.location.reload();
+    // Only reload when the user explicitly clicked "Mettre à jour"
+    const onControllerChange = () => {
+      if (userRequestedUpdate.current) {
+        window.location.reload();
+      }
+    };
     navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
     return () =>
       navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
   }, [registerWaiting]);
 
   const handleUpdate = () => {
+    userRequestedUpdate.current = true; // Mark as user-initiated before sending SKIP_WAITING
     if (waitingWorker) {
       waitingWorker.postMessage({ type: 'SKIP_WAITING' });
     }

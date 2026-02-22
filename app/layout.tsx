@@ -92,20 +92,12 @@ export default function RootLayout({
           </main>
         </Providers>
 
-        {/* Service Worker: unregister old, clear caches, register new */}
+        {/* Service Worker */}
         <Script id="sw-register" strategy="afterInteractive">{`
           if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.getRegistrations().then(function(regs) {
-              regs.forEach(function(reg) { reg.unregister(); });
-              caches.keys().then(function(names) {
-                names.forEach(function(name) { caches.delete(name); });
-              });
-              setTimeout(function() {
-                navigator.serviceWorker.register('/sw.js')
-                  .then(function(reg) { console.log('SW v2.1 registered:', reg.scope); })
-                  .catch(function(err) { console.warn('SW registration failed:', err); });
-              }, 1000);
-            });
+            navigator.serviceWorker.register('/sw.js')
+              .then(function(reg) { console.log('SW registered:', reg.scope); })
+              .catch(function(err) { console.warn('SW registration failed:', err); });
           }
         `}</Script>
       </body>
