@@ -187,11 +187,10 @@ function MainContent() {
                   border: `1px solid ${theme.border}`,
                   borderRadius: '12px',
                   padding: '20px',
-                  height: idx === 0 ? '210px' : '190px',
+                  minHeight: '160px',
                   display: 'flex',
                   flexDirection: 'column',
                   position: 'relative',
-                  overflow: 'hidden',
                 }}
               >
                 {/* Accent line on hover */}

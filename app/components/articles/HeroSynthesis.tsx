@@ -57,10 +57,10 @@ export function HeroSynthesis({ synthesis }: HeroSynthesisProps) {
         backgroundColor: theme.card,
         border: `1px solid ${theme.border}`,
         borderRadius: '4px',
-        padding: '32px',
+        padding: 'clamp(16px, 4vw, 32px)',
         display: 'flex',
         flexDirection: 'column',
-        gap: '20px',
+        gap: '16px',
       }}
     >
       {/* Category badge */}
@@ -86,7 +86,7 @@ export function HeroSynthesis({ synthesis }: HeroSynthesisProps) {
       <h1
         style={{
           fontFamily: 'Georgia, "Times New Roman", serif',
-          fontSize: '32px',
+          fontSize: 'clamp(22px, 5vw, 32px)',
           fontWeight: 700,
           lineHeight: 1.25,
           color: theme.text,
@@ -112,7 +112,7 @@ export function HeroSynthesis({ synthesis }: HeroSynthesisProps) {
           color: theme.textSecondary,
           margin: 0,
           display: '-webkit-box',
-          WebkitLineClamp: 3,
+          WebkitLineClamp: 4,
           WebkitBoxOrient: 'vertical',
           overflow: 'hidden',
         }}

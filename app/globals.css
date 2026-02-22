@@ -78,6 +78,14 @@ body {
   }
 }
 
+/* Hide scrollbar on mobile nav pills (keep scrollable but visually clean) */
+.mobile-nav-scroll {
+  scrollbar-width: none; /* Firefox */
+}
+.mobile-nav-scroll::-webkit-scrollbar {
+  display: none; /* Chrome/Safari/iOS */
+}
+
 /* Serif headings */
 h1, h2, h3 {
   font-family: var(--font-serif);
