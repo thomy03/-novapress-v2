@@ -33,6 +33,7 @@ function MainContent() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [offset, setOffset] = useState(0);
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
 
   // Fetch syntheses with pagination
   const fetchSyntheses = useCallback(async (currentOffset: number, append: boolean = false) => {
@@ -122,7 +123,18 @@ function MainContent() {
   // Split syntheses: Hero (1), Secondary (2-3), Grid (rest)
   const heroSynthesis = syntheses[0];
   const secondarySyntheses = syntheses.slice(1, 3);
-  const gridSyntheses = syntheses.slice(3);
+  const allGridSyntheses = syntheses.slice(3);
+
+  // Count categories available in grid for filter badges
+  const categoryCounts = allGridSyntheses.reduce((acc, s) => {
+    if (s.category) acc[s.category] = (acc[s.category] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  // Apply category filter
+  const gridSyntheses = categoryFilter
+    ? allGridSyntheses.filter(s => s.category === categoryFilter)
+    : allGridSyntheses;
 
   return (
     <main
@@ -290,16 +302,6 @@ function MainContent() {
             borderBottom: `2px solid ${theme.border}`,
           }}>
             <div>
-              <h2 style={{
-                fontSize: '11px',
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                letterSpacing: '0.15em',
-                color: theme.brand.secondary,
-                marginBottom: '10px',
-              }}>
-                Intelligence
-              </h2>
               <p style={{
                 fontSize: '26px',
                 fontWeight: 700,
@@ -339,6 +341,72 @@ function MainContent() {
               EN DIRECT
             </Link>
           </div>
+
+          {/* Hot Topics / Category Filter Strip */}
+          {Object.keys(categoryCounts).length > 1 && (
+            <div
+              className="mobile-nav-scroll"
+              style={{
+                display: 'flex',
+                gap: '8px',
+                margin: '24px 0 16px',
+                overflowX: 'auto',
+                paddingBottom: '4px',
+              }}
+            >
+              <button
+                onClick={() => setCategoryFilter(null)}
+                style={{
+                  flexShrink: 0,
+                  padding: '6px 14px',
+                  borderRadius: '20px',
+                  border: categoryFilter === null ? 'none' : `1px solid ${theme.border}`,
+                  backgroundColor: categoryFilter === null ? theme.text : 'transparent',
+                  color: categoryFilter === null ? theme.bg : theme.text,
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Tout ({allGridSyntheses.length})
+              </button>
+              {Object.entries(categoryCounts)
+                .sort((a, b) => b[1] - a[1])
+                .map(([cat, count]) => {
+                  const isActive = categoryFilter === cat;
+                  const catColors: Record<string, string> = {
+                    MONDE: '#2563EB', TECH: '#7C3AED', ECONOMIE: '#059669',
+                    POLITIQUE: '#DC2626', CULTURE: '#D97706', SPORT: '#0891B2', SCIENCES: '#4F46E5',
+                  };
+                  const catEmoji: Record<string, string> = {
+                    MONDE: '🌍', TECH: '💻', ECONOMIE: '📈',
+                    POLITIQUE: '🏛️', CULTURE: '🎭', SPORT: '⚽', SCIENCES: '🔬',
+                  };
+                  const color = catColors[cat] || '#6B7280';
+                  return (
+                    <button
+                      key={cat}
+                      onClick={() => setCategoryFilter(isActive ? null : cat)}
+                      style={{
+                        flexShrink: 0,
+                        padding: '6px 14px',
+                        borderRadius: '20px',
+                        border: isActive ? 'none' : `1px solid ${color}40`,
+                        backgroundColor: isActive ? color : `${color}10`,
+                        color: isActive ? '#FFF' : color,
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {catEmoji[cat] || ''} {cat} ({count})
+                    </button>
+                  );
+                })}
+            </div>
+          )}
 
           {/* Bento-style Grid: variable sizes with animations */}
           <div className="bento-grid" style={{ gap: '20px' }}>

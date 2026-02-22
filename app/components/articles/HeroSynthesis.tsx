@@ -7,6 +7,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useTheme } from '@/app/contexts/ThemeContext';
 import { MiniNovaLine } from '@/app/components/novaline/MiniNovaLine';
 
@@ -37,6 +38,7 @@ interface HeroSynthesisProps {
 
 export function HeroSynthesis({ synthesis }: HeroSynthesisProps) {
   const { theme } = useTheme();
+  const router = useRouter();
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -53,6 +55,7 @@ export function HeroSynthesis({ synthesis }: HeroSynthesisProps) {
 
   return (
     <article
+      onClick={() => router.push(`/synthesis/${synthesis.id}`)}
       style={{
         backgroundColor: theme.card,
         border: `1px solid ${theme.border}`,
@@ -61,6 +64,7 @@ export function HeroSynthesis({ synthesis }: HeroSynthesisProps) {
         display: 'flex',
         flexDirection: 'column',
         gap: '16px',
+        cursor: 'pointer',
       }}
     >
       {/* Category badge */}
@@ -145,9 +149,10 @@ export function HeroSynthesis({ synthesis }: HeroSynthesisProps) {
         </span>
       </div>
 
-      {/* CTA Button */}
+      {/* CTA Button — stopPropagation because the whole article is already clickable */}
       <Link
         href={`/synthesis/${synthesis.id}`}
+        onClick={(e) => e.stopPropagation()}
         style={{
           display: 'inline-flex',
           alignItems: 'center',

@@ -14,11 +14,10 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-    { id: 'feed', label: 'Feed', icon: '📰', activeIcon: '🗞️', href: '/' },
-    { id: 'explore', label: 'Explorer', icon: '🔍', activeIcon: '🔎', href: '/topics' },
-    { id: 'cortex', label: 'Cortex', icon: '🧠', activeIcon: '🧠', href: '/cortex' },
-    { id: 'alerts', label: 'Alertes', icon: '🔔', activeIcon: '🔔', href: '/live' },
-    { id: 'profile', label: 'Profil', icon: '👤', activeIcon: '👤', href: '/settings' },
+    { id: 'feed', label: 'Accueil', icon: '📰', activeIcon: '🗞️', href: '/' },
+    { id: 'live', label: 'En direct', icon: '🔴', activeIcon: '🔴', href: '/live' },
+    { id: 'saved', label: 'Sauvegardés', icon: '🔖', activeIcon: '🔖', href: '/saved' },
+    { id: 'settings', label: 'Réglages', icon: '⚙️', activeIcon: '⚙️', href: '/settings' },
 ];
 
 export default function BottomNav() {
