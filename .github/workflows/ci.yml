@@ -38,8 +38,12 @@ jobs:
           SECRET_KEY: "test-secret-key-for-ci-only-not-production"
           DEBUG: "true"
           OPENROUTER_API_KEY: ""
+          API_V1_PREFIX: "/api"
+          DATABASE_URL: "sqlite+aiosqlite:///./test.db"
+          REDIS_URL: "redis://localhost:6379/0"
+          QDRANT_URL: "http://localhost:6333"
         run: |
-          python -m pytest tests/ -v --tb=short
+          python -m pytest tests/ -v --tb=short -x
 
   # Backend Linting
   backend-lint:
