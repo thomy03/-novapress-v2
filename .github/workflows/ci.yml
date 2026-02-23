@@ -31,7 +31,7 @@ jobs:
           grep -v -E "torch|sentence-transformers|transformers==|hdbscan|umap-learn|scikit-learn|newspaper3k|python-telegram-bot|pydub|pywebpush" requirements.txt > /tmp/req-ci.txt || true
           pip install -r /tmp/req-ci.txt --ignore-requires-python || true
           # Ensure test tools are available
-          pip install pytest pytest-asyncio httpx
+          pip install pytest pytest-asyncio httpx aiosqlite
 
       - name: Run tests
         env:
