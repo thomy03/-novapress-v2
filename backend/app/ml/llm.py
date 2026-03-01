@@ -983,7 +983,8 @@ Format JSON (causal_chain + predictions + sentiment + topic_intensity OBLIGATOIR
         self,
         base_synthesis: Dict[str, Any],
         articles: List[Dict[str, Any]],
-        persona_id: str
+        persona_id: str,
+        feedback_context: str | None = None
     ) -> Dict[str, Any]:
         """
         Re-generate a synthesis using a specific persona's voice and style.
@@ -992,6 +993,7 @@ Format JSON (causal_chain + predictions + sentiment + topic_intensity OBLIGATOIR
             base_synthesis: The original neutral synthesis
             articles: Original source articles
             persona_id: ID of the persona to use (le_cynique, l_optimiste, le_conteur, le_satiriste)
+            feedback_context: Optional reader feedback to improve the persona's output
 
         Returns:
             New synthesis with persona's style applied
@@ -1036,7 +1038,8 @@ ANALYSE ORIGINALE:
             persona=persona,
             base_content=base_content,
             sources_text=sources_text,
-            include_signature=True
+            include_signature=True,
+            feedback_context=feedback_context
         )
 
         # Generate with persona's temperature

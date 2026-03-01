@@ -18,7 +18,10 @@ from typing import Dict, Any, List, Optional
 from enum import Enum
 from dataclasses import dataclass
 from datetime import datetime
+import logging
 import random
+
+logger = logging.getLogger(__name__)
 
 
 class PersonaType(str, Enum):
@@ -821,7 +824,8 @@ def build_persona_prompt(
     persona: Persona,
     base_content: str,
     sources_text: str,
-    include_signature: bool = True
+    include_signature: bool = True,
+    feedback_context: Optional[str] = None
 ) -> str:
     """
     Build a complete prompt for persona-based synthesis.
@@ -831,6 +835,7 @@ def build_persona_prompt(
         base_content: The base article content (from neutral synthesis)
         sources_text: Formatted source articles
         include_signature: Whether to include the persona's signature
+        feedback_context: Optional reader feedback to guide improvements
     """
     signature_instruction = f"\n\nTermine l'article avec ta signature: \"{persona.signature}\"" if include_signature and persona.signature else ""
 
@@ -873,6 +878,14 @@ INSTRUCTIONS DE REDACTION
 3. CITE les sources avec [SOURCE:N] (une fois par source)
 4. Redige ENTIEREMENT EN FRANCAIS
 5. Longueur similaire a l'original (400-600 mots pour le body){signature_instruction}
+{f"""
+
+═══════════════════════════════════════
+RETOURS LECTEURS (a prendre en compte)
+═══════════════════════════════════════
+{feedback_context}
+Utilise ces retours pour ameliorer ton style et ton approche.
+""" if feedback_context else ""}
 
 Format JSON strict:
 {{
@@ -1206,6 +1219,101 @@ def _find_dynamic_keyword_persona(title: str) -> Optional[PersonaType]:
     return None
 
 
+def get_persona_reputation(persona_id: str, limit: int = 10) -> Dict[str, Any]:
+    """
+    Get the average persona rating from recent feedback.
+
+    Queries the latest `limit` syntheses that used this persona and
+    returns the aggregated persona-specific ratings.
+
+    Returns:
+        Dict with avg_persona_rating, sample_count, and is_low_quality flag
+    """
+    try:
+        from app.db.qdrant_client import get_qdrant_service
+        qdrant = get_qdrant_service()
+
+        # Search for recent syntheses with this persona
+        from qdrant_client.models import Filter, FieldCondition, MatchValue
+        results = qdrant.client.scroll(
+            collection_name=qdrant.syntheses_collection,
+            scroll_filter=Filter(
+                must=[
+                    FieldCondition(key="persona_id", match=MatchValue(value=persona_id)),
+                ]
+            ),
+            limit=limit,
+            with_payload=["avg_persona_rating", "feedback_count"],
+        )
+
+        points = results[0] if results else []
+        persona_ratings = []
+        for point in points:
+            pr = point.payload.get("avg_persona_rating")
+            if pr is not None and isinstance(pr, (int, float)) and pr > 0:
+                persona_ratings.append(float(pr))
+
+        if not persona_ratings:
+            return {"avg_persona_rating": None, "sample_count": 0, "is_low_quality": False}
+
+        avg = sum(persona_ratings) / len(persona_ratings)
+        return {
+            "avg_persona_rating": round(avg, 2),
+            "sample_count": len(persona_ratings),
+            "is_low_quality": avg < 2.5 and len(persona_ratings) >= 5,
+        }
+    except Exception as e:
+        logger.warning(f"Could not get persona reputation for {persona_id}: {e}")
+        return {"avg_persona_rating": None, "sample_count": 0, "is_low_quality": False}
+
+
+def get_persona_feedback_context(persona_id: str, limit: int = 5) -> Optional[str]:
+    """
+    Gather recent reader feedback comments for a persona to inject into the prompt.
+    Returns a formatted string of reader comments, or None if no feedback available.
+    """
+    try:
+        import json
+        from app.db.qdrant_client import get_qdrant_service
+        qdrant = get_qdrant_service()
+
+        from qdrant_client.models import Filter, FieldCondition, MatchValue
+        results = qdrant.client.scroll(
+            collection_name=qdrant.syntheses_collection,
+            scroll_filter=Filter(
+                must=[
+                    FieldCondition(key="persona_id", match=MatchValue(value=persona_id)),
+                ]
+            ),
+            limit=limit,
+            with_payload=["feedback", "avg_rating"],
+        )
+
+        points = results[0] if results else []
+        comments = []
+        for point in points:
+            feedback_raw = point.payload.get("feedback")
+            if not feedback_raw:
+                continue
+            # Parse feedback JSON (stored as string)
+            feedback_list = json.loads(feedback_raw) if isinstance(feedback_raw, str) else feedback_raw
+            if isinstance(feedback_list, list):
+                for fb in feedback_list:
+                    comment = fb.get("comment", "").strip()
+                    rating = fb.get("rating", 0)
+                    if comment and len(comment) > 10:
+                        comments.append(f"- Note {rating}/5: \"{comment}\"")
+
+        if not comments:
+            return None
+
+        # Return up to 5 most recent comments
+        return "\n".join(comments[:5])
+    except Exception as e:
+        logger.debug(f"Could not get feedback context for {persona_id}: {e}")
+        return None
+
+
 def get_intelligent_persona(
     category: str,
     title: str = "",
@@ -1216,9 +1324,10 @@ def get_intelligent_persona(
     entities: Optional[List[str]] = None,
 ) -> Persona:
     """
-    Intelligent persona selection based on context, keywords, and randomness.
+    Intelligent persona selection based on context, keywords, reputation, and randomness.
 
     Selection logic (in priority order):
+    0. REPUTATION FILTER: Exclude personas with consistently low ratings
     1. KEYWORD TRIGGER: If title contains specific keywords → specialized persona
     2. 30% (randomness): Random persona for variety (from extended pool)
     3. Topic intensity "breaking"/"hot": Dramatic personas (Conteur/Cynique)
@@ -1240,19 +1349,39 @@ def get_intelligent_persona(
         Selected Persona
     """
     # ═══════════════════════════════════════════════════════════════
+    # PRIORITY 0: Reputation-based filtering (feedback loop)
+    # Exclude personas with consistently low reader ratings
+    # ═══════════════════════════════════════════════════════════════
+    excluded_personas: set = set()
+    try:
+        for persona_type in ROTATION_PERSONAS:
+            reputation = get_persona_reputation(persona_type.value, limit=20)
+            if reputation.get("is_low_quality"):
+                excluded_personas.add(persona_type)
+                logger.info(
+                    f"⚠️ Persona '{persona_type.value}' excluded due to low reader ratings "
+                    f"(avg={reputation['avg_persona_rating']}, n={reputation['sample_count']})"
+                )
+    except Exception:
+        pass  # If reputation check fails, proceed without filtering
+    def _is_allowed(persona_type: PersonaType) -> bool:
+        """Check if persona is allowed (not excluded by low reputation)."""
+        return persona_type not in excluded_personas
+
+    # ═══════════════════════════════════════════════════════════════
     # PRIORITY 1: Keyword-based selection (highest priority)
     # ═══════════════════════════════════════════════════════════════
     if title:
         # Check STATIC keywords first (hardcoded)
         keyword_persona = _find_keyword_persona(title, KEYWORD_PERSONA_TRIGGERS)
-        if keyword_persona:
+        if keyword_persona and _is_allowed(keyword_persona):
             # 80% chance to use keyword-triggered persona, 20% for variety
             if random.random() < 0.8:
                 return PERSONAS[keyword_persona]
 
         # Check DYNAMIC keywords (learned from synthesis data)
         dynamic_persona = _find_dynamic_keyword_persona(title)
-        if dynamic_persona:
+        if dynamic_persona and _is_allowed(dynamic_persona):
             # 75% chance to use dynamically learned persona
             if random.random() < 0.75:
                 return PERSONAS[dynamic_persona]
@@ -1278,10 +1407,11 @@ def get_intelligent_persona(
     # PRIORITY 2: Random selection for variety (30%)
     # ═══════════════════════════════════════════════════════════════
     if random.random() < randomness:
-        # Include NEUTRAL in random selection pool
-        all_personas = ROTATION_PERSONAS + [PersonaType.NEUTRAL]
-        random_persona_type = random.choice(all_personas)
-        return PERSONAS[random_persona_type]
+        # Include NEUTRAL in random selection pool, exclude low-rated personas
+        all_personas = [p for p in ROTATION_PERSONAS + [PersonaType.NEUTRAL] if _is_allowed(p)]
+        if all_personas:
+            random_persona_type = random.choice(all_personas)
+            return PERSONAS[random_persona_type]
 
     # ═══════════════════════════════════════════════════════════════
     # PRIORITY 3: Topic intensity-based selection

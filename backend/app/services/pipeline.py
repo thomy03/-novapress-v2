@@ -1021,6 +1021,12 @@ Contenu existant (extrait):
 
                     logger.info(f"🆕 New story created: {synthesis['story_id']}")
 
+                # Calculate avg_fact_density from RAG top_chunks
+                if enhanced_context and enhanced_context.get("top_chunks"):
+                    top_chunks = enhanced_context["top_chunks"]
+                    avg_fact_density = sum(c.get("fact_score", 0.5) for c in top_chunks) / max(len(top_chunks), 1)
+                    enhanced_context["avg_fact_density"] = avg_fact_density
+
                 # === TRANSPARENCY SCORE ===
                 try:
                     rag_data = {
@@ -1118,11 +1124,22 @@ Contenu existant (extrait):
                     if selected_persona.id != "neutral":
                         logger.info(f"🎭 INTELLIGENT PERSONA: Selected '{selected_persona.name}' for category '{category}' (sentiment: {sentiment}, intensity: {topic_intensity})")
 
+                        # Gather reader feedback context to improve persona output
+                        feedback_ctx = None
+                        try:
+                            from app.ml.persona import get_persona_feedback_context
+                            feedback_ctx = get_persona_feedback_context(selected_persona.id, limit=5)
+                            if feedback_ctx:
+                                logger.info(f"📝 Injecting reader feedback into persona prompt for '{selected_persona.id}'")
+                        except Exception:
+                            pass
+
                         try:
                             persona_synthesis = await self.llm_service.synthesize_with_persona(
                                 base_synthesis=synthesis,
                                 articles=articles,
-                                persona_id=selected_persona.id
+                                persona_id=selected_persona.id,
+                                feedback_context=feedback_ctx
                             )
 
                             # === QUALITY EVALUATION ===

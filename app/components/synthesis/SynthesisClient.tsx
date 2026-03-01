@@ -6,36 +6,31 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import SynthesisLayout from '@/app/components/layout/SynthesisLayout';
 import { TimelinePreview } from '@/app/components/timeline';
-import { PredictionExplorer, WhatIfExplorer } from '@/app/components/predictions';
-import { EntityFrequencyChart } from '@/app/components/charts';
 import {
   SynthesisHeader,
   PersonaSection,
-  PersonaSignature,
   SynthesisBody,
   SourcesSection,
-  NovaLineSection,
+  CausalSection,
   HistoricalContext
 } from '@/app/components/synthesis';
-import { BiasIndicator } from '@/app/components/ui/BiasIndicator';
-import { FactCheckIndicator } from '@/app/components/ui/FactCheckIndicator';
+import FeedbackWidget from '@/app/components/synthesis/FeedbackWidget';
 import { AudioPlayer } from '@/app/components/audio';
-import { GamificationToast } from '@/app/components/gamification';
-import { recordSynthesisRead, Badge } from '@/app/lib/gamification';
 import { FollowButton } from '@/app/components/ui/FollowButton';
-import { DebateView } from '@/app/components/ui/DebateView';
-import { FutureScenarios } from '@/app/components/predictions/FutureScenarios';
 import {
   SynthesisData,
-  formatSynthesisDate,
-  RelatedSynthesis
+  formatSynthesisDate
 } from '@/app/types/synthesis-page';
+import { CausalGraphResponse } from '@/app/types/causal';
 import { getSavedPersona, savePersona } from '@/app/components/ui/PersonaSwitcher';
 import NewsXRay from '@/app/components/xray/NewsXRay';
+import { UpgradeModal } from '@/app/components/ui/UpgradeModal';
+import { FeatureLock } from '@/app/components/ui/FeatureLock';
+import { subscriptionService } from '@/app/lib/api/services';
+import { SubscriptionTier } from '@/app/types/api';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
@@ -44,7 +39,6 @@ interface SynthesisClientProps {
 }
 
 export default function SynthesisClient({ initialSynthesis }: SynthesisClientProps) {
-  const router = useRouter();
   const [synthesis, setSynthesis] = useState<SynthesisData>(initialSynthesis);
   const [originalSynthesis] = useState<SynthesisData>(initialSynthesis);
 
@@ -62,60 +56,40 @@ export default function SynthesisClient({ initialSynthesis }: SynthesisClientPro
   const [personaLoading, setPersonaLoading] = useState(false);
   const [initialPersonaLoaded, setInitialPersonaLoaded] = useState(false);
 
-  // Related syntheses state (for sidebar)
-  const [relatedSyntheses, setRelatedSyntheses] = useState<RelatedSynthesis[]>([]);
+  // Causal graph state (for right sidebar)
+  const [causalData, setCausalData] = useState<CausalGraphResponse | null>(null);
+  const [causalLoading, setCausalLoading] = useState(true);
 
-  // Gamification state
-  const [gamificationToast, setGamificationToast] = useState<{
-    id: string;
-    type: 'points' | 'badge' | 'levelUp' | 'streak';
-    pointsEarned?: number;
-    badge?: Badge;
-    newLevel?: number;
-    streak?: number;
-  } | null>(null);
+  // Subscription / feature gating state
+  const [showUpgrade, setShowUpgrade] = useState(false);
+  const [upgradeFeature, setUpgradeFeature] = useState('');
+  const [userTier, setUserTier] = useState<SubscriptionTier>('free');
 
-  // Track synthesis read for gamification
+  // Fetch subscription tier on mount
   useEffect(() => {
-    if (synthesis.id) {
-      const result = recordSynthesisRead(synthesis.id);
+    subscriptionService.getFeatures().then((data) => {
+      setUserTier(data.tier);
+    }).catch(() => {
+      // If the endpoint is unavailable (e.g. backend not running), stay on free tier
+      setUserTier('free');
+    });
+  }, []);
 
-      if (result.pointsEarned > 0) {
-        // Show points toast
-        setGamificationToast({
-          id: `points-${Date.now()}`,
-          type: 'points',
-          pointsEarned: result.pointsEarned,
-        });
+  // Helper: open upgrade modal for a given feature name
+  const openUpgrade = useCallback((featureName: string) => {
+    setUpgradeFeature(featureName);
+    setShowUpgrade(true);
+  }, []);
 
-        // If level up, show that toast after a delay
-        if (result.levelUp) {
-          setTimeout(() => {
-            setGamificationToast({
-              id: `levelup-${Date.now()}`,
-              type: 'levelUp',
-              newLevel: Math.floor(result.pointsEarned / 100) + 1,
-            });
-          }, 4500);
-        }
-
-        // If new badges, show them after
-        if (result.newBadges.length > 0) {
-          setTimeout(() => {
-            setGamificationToast({
-              id: `badge-${Date.now()}`,
-              type: 'badge',
-              badge: result.newBadges[0],
-            });
-          }, result.levelUp ? 9000 : 4500);
-        }
-      }
-    }
-  }, [synthesis.id]);
-
-  // Handle persona change
+  // Handle persona change — gate non-neutral personas for free tier
   const handlePersonaChange = useCallback(async (personaId: string) => {
     if (personaId === currentPersona) return;
+
+    // Free tier: only allow 'neutral' persona
+    if (userTier === 'free' && personaId !== 'neutral') {
+      openUpgrade('Persona Switch');
+      return;
+    }
 
     // If switching back to original persona, restore original
     const originalPersonaId = originalSynthesis.persona?.id || 'neutral';
@@ -160,7 +134,7 @@ export default function SynthesisClient({ initialSynthesis }: SynthesisClientPro
     } finally {
       setPersonaLoading(false);
     }
-  }, [currentPersona, originalSynthesis, synthesis.id]);
+  }, [currentPersona, originalSynthesis, synthesis.id, userTier, openUpgrade]);
 
   // Load saved persona on mount if different from synthesis default
   useEffect(() => {
@@ -182,29 +156,35 @@ export default function SynthesisClient({ initialSynthesis }: SynthesisClientPro
     loadSavedPersona();
   }, [initialSynthesis.persona?.id, initialPersonaLoaded, handlePersonaChange]);
 
-  // Fetch related syntheses for sidebar
+  // Fetch causal graph data for right sidebar
   useEffect(() => {
     const abortController = new AbortController();
 
-    const fetchRelatedSyntheses = async () => {
+    const fetchCausalData = async () => {
+      setCausalLoading(true);
       try {
-        const response = await fetch(`${API_URL}/api/time-traveler/syntheses/${synthesis.id}/preview`, {
-          signal: abortController.signal
-        });
+        const response = await fetch(
+          `${API_URL}/api/causal/syntheses/${synthesis.id}/causal-graph`,
+          { signal: abortController.signal }
+        );
         if (response.ok) {
           const data = await response.json();
-          if (!abortController.signal.aborted && data.related_syntheses) {
-            setRelatedSyntheses(data.related_syntheses.slice(0, 5));
+          if (!abortController.signal.aborted) {
+            setCausalData(data);
           }
         }
       } catch (err) {
         if (!(err instanceof Error && err.name === 'AbortError')) {
-          console.log('Related syntheses not available:', err);
+          console.log('Causal graph not available:', err);
+        }
+      } finally {
+        if (!abortController.signal.aborted) {
+          setCausalLoading(false);
         }
       }
     };
 
-    fetchRelatedSyntheses();
+    fetchCausalData();
 
     return () => {
       abortController.abort();
@@ -228,21 +208,16 @@ export default function SynthesisClient({ initialSynthesis }: SynthesisClientPro
         leftSidebar={
           <TimelinePreview
             synthesisId={synthesis.id}
-            onError={(err) => console.log('Timeline not available:', err.message)}
+            onError={(err: Error) => console.log('Timeline not available:', err.message)}
           />
         }
         rightSidebar={
-          <>
-            <NovaLineSection
-              synthesisId={synthesis.id}
-              category={synthesis.category || 'MONDE'}
-              synthesisTitle={synthesis.title}
-            />
-            {/* Prediction Explorer - moved to sidebar for balanced layout */}
-            <div style={{ marginTop: '24px' }}>
-              <PredictionExplorer synthesisId={synthesis.id} compact={true} />
-            </div>
-          </>
+          <CausalSection
+            synthesisId={synthesis.id}
+            synthesisTitle={synthesis.title}
+            causalData={causalData}
+            causalLoading={causalLoading}
+          />
         }
       >
         {/* Main Content */}
@@ -263,11 +238,58 @@ export default function SynthesisClient({ initialSynthesis }: SynthesisClientPro
             />
           </div>
 
-          {/* Audio Player - Listen to synthesis */}
-          <AudioPlayer
-            synthesisId={synthesis.id}
-            title={synthesis.title}
-          />
+          {/* Audio Player - Listen to synthesis (PRO) */}
+          {userTier === 'free' ? (
+            <div
+              onClick={() => openUpgrade('Briefing Audio')}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  openUpgrade('Briefing Audio');
+                }
+              }}
+              aria-label="Debloquer le briefing audio avec PRO"
+              style={{ cursor: 'pointer' }}
+            >
+              <FeatureLock
+                isLocked={true}
+                featureName="Briefing Audio"
+                onUpgrade={() => openUpgrade('Briefing Audio')}
+              >
+                {/* Placeholder representant le player audio */}
+                <div style={{
+                  backgroundColor: '#F9FAFB',
+                  border: '1px solid #E5E5E5',
+                  borderRadius: '4px',
+                  padding: '16px',
+                  marginBottom: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  minHeight: '64px',
+                }}>
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '50%',
+                    backgroundColor: '#E5E5E5',
+                    flexShrink: 0,
+                  }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ height: '8px', backgroundColor: '#E5E5E5', borderRadius: '2px', marginBottom: '8px', width: '60%' }} />
+                    <div style={{ height: '6px', backgroundColor: '#F3F4F6', borderRadius: '2px', width: '100%' }} />
+                  </div>
+                </div>
+              </FeatureLock>
+            </div>
+          ) : (
+            <AudioPlayer
+              synthesisId={synthesis.id}
+              title={synthesis.title}
+            />
+          )}
 
           {/* Persona Section */}
           <PersonaSection
@@ -292,47 +314,15 @@ export default function SynthesisClient({ initialSynthesis }: SynthesisClientPro
           {/* Body Content */}
           <SynthesisBody synthesis={synthesis} />
 
-          {/* Future Scenarios - Predictions section */}
-          {synthesis.predictions && synthesis.predictions.length > 0 && (
-            <FutureScenarios
-              predictions={synthesis.predictions}
-              sourceCount={synthesis.numSources}
-              relatedCount={synthesis.historicalContext?.relatedSyntheses?.length || 0}
-            />
-          )}
-
-          {/* Persona Signature */}
-          <PersonaSignature
-            signature={synthesis.signature}
-            isPersonaVersion={synthesis.isPersonaVersion}
-            persona={synthesis.persona}
-            author={synthesis.author}
-          />
-
-          {/* Bias Analysis - Ground News style */}
-          <BiasIndicator
-            synthesisId={synthesis.id}
-            showDetails={true}
-          />
-
-          {/* Fact-Check Analysis - Perplexity/Semafor style */}
-          <FactCheckIndicator
-            synthesisId={synthesis.id}
-            showDetails={true}
-          />
-
-          {/* Debate View - PRO/CON arguments for controversial topics */}
-          <DebateView
-            synthesisId={synthesis.id}
-          />
-
-          {/* What-If Scenarios - Counterfactual analysis */}
-          <WhatIfExplorer
-            synthesisId={synthesis.id}
-          />
-
           {/* Sources & Enrichment */}
           <SourcesSection synthesis={synthesis} />
+
+          {/* Reader Feedback */}
+          <FeedbackWidget
+            synthesisId={synthesis.id}
+            initialAvgRating={synthesis.avgRating}
+            initialFeedbackCount={synthesis.feedbackCount}
+          />
 
           {/* News X-Ray - Transparency Analysis */}
           {synthesis.transparencyScore !== undefined && synthesis.transparencyScore > 0 && (
@@ -348,14 +338,6 @@ export default function SynthesisClient({ initialSynthesis }: SynthesisClientPro
             />
           )}
 
-          {/* Entity Frequency Chart - Key entities visualization */}
-          <div style={{ marginTop: '32px' }}>
-            <EntityFrequencyChart
-              synthesisId={synthesis.id}
-              title="Entites Cles"
-            />
-          </div>
-
           {/* Back Link */}
           <div style={styles.backSection}>
             <Link href="/" style={styles.backLinkBottom}>
@@ -366,10 +348,11 @@ export default function SynthesisClient({ initialSynthesis }: SynthesisClientPro
         </main>
       </SynthesisLayout>
 
-      {/* Gamification Toast */}
-      <GamificationToast
-        toast={gamificationToast}
-        onClose={() => setGamificationToast(null)}
+      {/* Upgrade Modal - PRO feature gate */}
+      <UpgradeModal
+        isOpen={showUpgrade}
+        onClose={() => setShowUpgrade(false)}
+        featureName={upgradeFeature}
       />
     </div>
   );

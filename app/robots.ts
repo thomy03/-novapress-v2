@@ -8,7 +8,12 @@ export default function robots(): MetadataRoute.Robots {
         allow: '/',
         disallow: ['/admin/', '/dev/', '/api/'],
       },
+      // Allow AI crawlers explicitly
+      { userAgent: 'GPTBot', allow: '/' },
+      { userAgent: 'ClaudeBot', allow: '/' },
+      { userAgent: 'PerplexityBot', allow: '/' },
+      { userAgent: 'Google-Extended', allow: '/' },
     ],
-    sitemap: 'https://novapress.ai/sitemap.xml',
+    sitemap: 'https://novapressai.com/sitemap.xml',
   };
 }

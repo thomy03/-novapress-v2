@@ -168,10 +168,12 @@ class TransparencyScorer:
     def _get_languages(self, articles: List[Dict[str, Any]]) -> set:
         languages = set()
         for a in articles:
-            lang = a.get("language", "")
-            if lang:
-                languages.add(lang[:2].lower())
+            lang = (a.get("language", "") or "").strip().lower()
+            # Skip non-informative language values
+            if lang and lang not in ("unknown", "und", "un", ""):
+                languages.add(lang[:2])
                 continue
+            # Fallback: detect from domain
             domain = self._extract_domain(a)
             if domain and domain in DOMAIN_LANGUAGE_MAP:
                 languages.add(DOMAIN_LANGUAGE_MAP[domain])
@@ -206,8 +208,8 @@ class TransparencyScorer:
             return 0.9  # Contradictions found and disclosed
         if contradictions_count > 0:
             return 0.7  # Found but maybe not prominently disclosed
-        # No contradictions: neutral - could mean agreement or insufficient analysis
-        return 0.5
+        # No contradictions: neutral-positive - sources agree
+        return 0.65
 
     def _contradiction_detail(
         self,

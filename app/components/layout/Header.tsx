@@ -87,33 +87,33 @@ export function Header() {
               <span style={{ color: theme.success, fontSize: '11px' }}>+1.24%</span>
             </span>
 
-            {/* API Status Indicator */}
-            {mounted && (
+            {/* API Status Indicator — only show when API is connected */}
+            {mounted && state.isApiAvailable && (
               <div
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: '6px',
                   padding: '4px 10px',
-                  background: state.isApiAvailable ? 'rgba(16, 185, 129, 0.15)' : 'rgba(234, 179, 8, 0.15)',
+                  background: 'rgba(16, 185, 129, 0.15)',
                   borderRadius: '4px',
                   fontSize: '10px',
                   fontWeight: 700,
                   letterSpacing: '0.05em',
                 }}
-                title={state.isApiAvailable ? 'Donnees en direct' : 'Mode demo'}
+                title="Donnees en direct"
               >
                 <span
                   style={{
                     width: '6px',
                     height: '6px',
                     borderRadius: '50%',
-                    backgroundColor: state.isApiAvailable ? theme.success : theme.warning,
+                    backgroundColor: theme.success,
                   }}
-                  className={state.isApiAvailable ? 'animate-live-pulse' : ''}
+                  className="animate-live-pulse"
                 />
-                <span style={{ color: state.isApiAvailable ? theme.success : theme.warning }}>
-                  {state.isApiAvailable ? 'LIVE' : 'DEMO'}
+                <span style={{ color: theme.success }}>
+                  LIVE
                 </span>
               </div>
             )}
@@ -172,35 +172,37 @@ export function Header() {
               Intelligence
             </Link>
 
-            <Link
-              href="/admin/pipeline"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '5px 10px',
-                background: 'transparent',
-                border: '1px solid rgba(255,255,255,0.2)',
-                borderRadius: '6px',
-                fontSize: '10px',
-                fontWeight: 600,
-                color: 'rgba(255,255,255,0.7)',
-                textDecoration: 'none',
-                letterSpacing: '0.03em',
-                textTransform: 'uppercase',
-                transition: 'all 150ms ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.4)';
-                e.currentTarget.style.color = '#FFFFFF';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)';
-                e.currentTarget.style.color = 'rgba(255,255,255,0.7)';
-              }}
-            >
-              Admin
-            </Link>
+            {isAuthenticated && (
+              <Link
+                href="/admin/pipeline"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '5px 10px',
+                  background: 'transparent',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: '6px',
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  color: 'rgba(255,255,255,0.7)',
+                  textDecoration: 'none',
+                  letterSpacing: '0.03em',
+                  textTransform: 'uppercase',
+                  transition: 'all 150ms ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.4)';
+                  e.currentTarget.style.color = '#FFFFFF';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)';
+                  e.currentTarget.style.color = 'rgba(255,255,255,0.7)';
+                }}
+              >
+                Admin
+              </Link>
+            )}
           </nav>
 
           {/* Right: Theme & Auth */}

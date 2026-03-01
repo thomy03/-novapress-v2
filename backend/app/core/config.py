@@ -92,6 +92,7 @@ class Settings(BaseSettings):
 
     # Pipeline
     PIPELINE_INTERVAL_MINUTES: int = 15  # Run pipeline every 15 minutes
+    PIPELINE_SCHEDULE_HOURS: int = 4  # Interval between automatic pipeline runs (APScheduler)
     MAX_ARTICLES_PER_SOURCE: int = 20
 
     # RSS Scraping - 100% legal via official RSS feeds
@@ -205,8 +206,6 @@ USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
     # Safari
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
-    # Googlebot (whitelisted by most media sites)
-    "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
 ]
 
 

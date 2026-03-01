@@ -474,6 +474,9 @@ def format_synthesis_for_frontend(synthesis: Dict[str, Any]) -> Dict[str, Any]:
         "transparencyScore": int(synthesis.get("transparency_score", 0)),
         "transparencyLabel": synthesis.get("transparency_label", "N/A"),
         "transparencyBreakdown": synthesis.get("transparency_breakdown", {}),
+        # Feedback
+        "avgRating": float(synthesis.get("avg_rating", 0)),
+        "feedbackCount": int(synthesis.get("feedback_count", 0)),
     }
 
 
@@ -1047,6 +1050,98 @@ async def get_synthesis_with_persona(
         raise
     except Exception as e:
         logger.error(f"Failed to generate persona synthesis: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/by-id/{synthesis_id}/feedback")
+@limiter.limit("10/minute")
+async def submit_feedback(
+    request: Request,
+    synthesis_id: str = Path(..., description="Synthesis UUID"),
+):
+    """
+    Submit reader feedback for a synthesis.
+
+    Payload:
+        rating: int (1-5) - Overall quality rating
+        comment: str (optional) - Free-text comment
+        persona_rating: int (1-5, optional) - Rating for persona style
+
+    Feedback is stored in the Qdrant synthesis payload and aggregated.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    rating = body.get("rating")
+    if not isinstance(rating, int) or rating < 1 or rating > 5:
+        raise HTTPException(status_code=400, detail="rating must be an integer between 1 and 5")
+
+    comment = str(body.get("comment", ""))[:500]  # max 500 chars
+    persona_rating = body.get("persona_rating")
+    if persona_rating is not None:
+        if not isinstance(persona_rating, int) or persona_rating < 1 or persona_rating > 5:
+            persona_rating = None
+
+    try:
+        qdrant = get_qdrant_service()
+        synthesis = qdrant.get_synthesis_by_id(synthesis_id)
+
+        if not synthesis:
+            raise HTTPException(status_code=404, detail="Synthesis not found")
+
+        # Get existing feedback list
+        feedback_list = synthesis.get("feedback", [])
+        if not isinstance(feedback_list, list):
+            try:
+                feedback_list = json.loads(feedback_list) if isinstance(feedback_list, str) else []
+            except (json.JSONDecodeError, TypeError):
+                feedback_list = []
+
+        # Add new feedback entry
+        from datetime import datetime
+        entry = {
+            "rating": rating,
+            "comment": comment,
+            "persona_rating": persona_rating,
+            "created_at": datetime.now().timestamp(),
+        }
+        feedback_list.append(entry)
+
+        # Calculate aggregated scores
+        ratings = [f["rating"] for f in feedback_list if isinstance(f.get("rating"), (int, float))]
+        avg_rating = round(sum(ratings) / len(ratings), 2) if ratings else 0
+        feedback_count = len(ratings)
+
+        persona_ratings = [
+            f["persona_rating"] for f in feedback_list
+            if isinstance(f.get("persona_rating"), (int, float))
+        ]
+        avg_persona_rating = round(sum(persona_ratings) / len(persona_ratings), 2) if persona_ratings else None
+
+        # Update Qdrant payload
+        qdrant.update_synthesis_feedback(
+            synthesis_id=synthesis_id,
+            feedback=feedback_list,
+            avg_rating=avg_rating,
+            feedback_count=feedback_count,
+            avg_persona_rating=avg_persona_rating,
+        )
+
+        logger.info(f"📝 Feedback for {synthesis_id[:8]}: rating={rating}, avg={avg_rating}, count={feedback_count}")
+
+        return {
+            "success": True,
+            "avgRating": avg_rating,
+            "feedbackCount": feedback_count,
+            "avgPersonaRating": avg_persona_rating,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to store feedback for {synthesis_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 

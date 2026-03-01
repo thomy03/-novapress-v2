@@ -1202,6 +1202,49 @@ class QdrantService:
             logger.error(f"Failed to retrieve synthesis {synthesis_id}: {e}")
             return None
 
+    def update_synthesis_feedback(
+        self,
+        synthesis_id: str,
+        feedback: list,
+        avg_rating: float,
+        feedback_count: int,
+        avg_persona_rating: float | None = None,
+    ) -> bool:
+        """
+        Update the feedback fields on a synthesis point in Qdrant.
+
+        Args:
+            synthesis_id: The UUID of the synthesis
+            feedback: List of feedback dicts
+            avg_rating: Aggregated average rating
+            feedback_count: Total number of ratings
+            avg_persona_rating: Optional average persona-specific rating
+        """
+        if not self.client:
+            raise RuntimeError("Qdrant not initialized")
+
+        import json
+        from qdrant_client.models import SetPayload
+
+        payload_update: dict = {
+            "feedback": json.dumps(feedback),
+            "avg_rating": avg_rating,
+            "feedback_count": feedback_count,
+        }
+        if avg_persona_rating is not None:
+            payload_update["avg_persona_rating"] = avg_persona_rating
+
+        try:
+            self.client.set_payload(
+                collection_name=self.syntheses_collection,
+                payload=payload_update,
+                points=[synthesis_id],
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to update feedback for {synthesis_id}: {e}")
+            return False
+
     def find_duplicate_synthesis(
         self,
         article_urls: List[str],

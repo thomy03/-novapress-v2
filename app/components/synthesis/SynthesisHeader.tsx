@@ -71,6 +71,14 @@ export function SynthesisHeader({ synthesis, formatDate }: SynthesisHeaderProps)
           />
           {synthesis.complianceScore}% accuracy
         </span>
+        {synthesis.avgRating !== undefined && synthesis.avgRating > 0 && (
+          <>
+            <span style={styles.separator}>|</span>
+            <span style={{ color: '#F59E0B' }}>&#9733;</span>
+            <span> {synthesis.avgRating.toFixed(1)}/5</span>
+            <span style={{ color: '#9CA3AF', fontSize: '12px' }}> ({synthesis.feedbackCount})</span>
+          </>
+        )}
       </div>
     </>
   );

@@ -1,0 +1,22 @@
+# NovaPress AI
+> Syntheses d'actualite francaises generees par IA avec Transparency Score
+
+NovaPress AI est une plateforme d'intelligence journalistique qui synthetise l'actualite a partir de 53+ sources internationales. Chaque synthese inclut un Transparency Score (0-100), des sources verifiables, et un graphe causal.
+
+## Syntheses recentes
+- [Dernieres syntheses](https://novapressai.com/api/syntheses/live?hours=24)
+- [Breaking News](https://novapressai.com/api/syntheses/breaking)
+
+## Categories
+- MONDE, TECH, ECONOMIE, POLITIQUE, CULTURE, SPORT, SCIENCES
+
+## API
+- [Documentation API](https://novapressai.com/api/docs)
+- [Par categorie](https://novapressai.com/api/syntheses/category/{cat})
+
+## A propos
+- 53+ sources de news internationales (10 langues)
+- Syntheses IA avec anti-plagiat (reformulation obligatoire)
+- Transparency Score base sur 5 criteres (sources, langues, contradictions, faits, geographie)
+- Graphe causal pre-calcule pour chaque synthese
+- Timeline narrative historique

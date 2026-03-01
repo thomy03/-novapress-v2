@@ -4,11 +4,11 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticRoutes: MetadataRoute.Sitemap = [
-    { url: 'https://novapress.ai', lastModified: new Date(), changeFrequency: 'hourly', priority: 1 },
-    { url: 'https://novapress.ai/brief', lastModified: new Date(), changeFrequency: 'daily', priority: 0.9 },
-    { url: 'https://novapress.ai/live', lastModified: new Date(), changeFrequency: 'always', priority: 0.8 },
-    { url: 'https://novapress.ai/cortex', lastModified: new Date(), changeFrequency: 'daily', priority: 0.7 },
-    { url: 'https://novapress.ai/landing', lastModified: new Date(), changeFrequency: 'weekly', priority: 0.6 },
+    { url: 'https://novapressai.com', lastModified: new Date(), changeFrequency: 'hourly', priority: 1 },
+    { url: 'https://novapressai.com/brief', lastModified: new Date(), changeFrequency: 'daily', priority: 0.9 },
+    { url: 'https://novapressai.com/live', lastModified: new Date(), changeFrequency: 'always', priority: 0.8 },
+    { url: 'https://novapressai.com/cortex', lastModified: new Date(), changeFrequency: 'daily', priority: 0.7 },
+    { url: 'https://novapressai.com/landing', lastModified: new Date(), changeFrequency: 'weekly', priority: 0.6 },
   ];
 
   let synthesesRoutes: MetadataRoute.Sitemap = [];
@@ -17,7 +17,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     if (res.ok) {
       const data = await res.json();
       synthesesRoutes = (data.data || []).map((s: { id: string; createdAt?: string }) => ({
-        url: `https://novapress.ai/synthesis/${s.id}`,
+        url: `https://novapressai.com/synthesis/${s.id}`,
         lastModified: s.createdAt ? new Date(s.createdAt) : new Date(),
         changeFrequency: 'weekly' as const,
         priority: 0.8,

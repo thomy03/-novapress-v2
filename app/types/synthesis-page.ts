@@ -81,6 +81,9 @@ export interface SynthesisData {
   transparencyScore?: number;
   transparencyLabel?: string;
   transparencyBreakdown?: Record<string, { score: number; weight: number; detail: string }>;
+  // Feedback
+  avgRating?: number;
+  feedbackCount?: number;
 }
 
 // ========== Related Synthesis Type ==========

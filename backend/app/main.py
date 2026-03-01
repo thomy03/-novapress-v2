@@ -109,12 +109,49 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("ℹ️ Telegram Bot disabled (no TELEGRAM_BOT_TOKEN)")
 
+    # Initialize APScheduler for automatic pipeline execution
+    scheduler = None
+    try:
+        from apscheduler.schedulers.asyncio import AsyncIOScheduler
+        from apscheduler.triggers.interval import IntervalTrigger
+
+        async def scheduled_pipeline_run():
+            """Run the news pipeline on a schedule."""
+            logger.info("⏰ Scheduled pipeline run starting...")
+            try:
+                from app.services.pipeline_manager import get_pipeline_manager
+                manager = get_pipeline_manager()
+                await manager.start(mode="SCRAPE")
+                logger.success("✅ Scheduled pipeline run completed successfully")
+            except Exception as e:
+                logger.error(f"❌ Scheduled pipeline run failed: {e}")
+
+        scheduler = AsyncIOScheduler()
+        scheduler.add_job(
+            scheduled_pipeline_run,
+            trigger=IntervalTrigger(hours=settings.PIPELINE_SCHEDULE_HOURS),
+            id="pipeline_scheduled_run",
+            name="NovaPress Pipeline Auto-Run",
+            misfire_grace_time=3600,
+            max_instances=1,
+        )
+        scheduler.start()
+        logger.success(f"✅ APScheduler started — pipeline every {settings.PIPELINE_SCHEDULE_HOURS}h")
+    except Exception as e:
+        logger.warning(f"⚠️ APScheduler not available: {e}. Automatic pipeline disabled.")
+
     logger.success("✅ Backend ready!")
 
     yield
 
     # Shutdown
     logger.info("👋 Shutting down NovaPress AI v2 Backend")
+    if scheduler is not None:
+        try:
+            scheduler.shutdown(wait=False)
+            logger.info("🛑 APScheduler shut down")
+        except Exception:
+            pass
     try:
         from app.db.session import close_db
         await close_db()

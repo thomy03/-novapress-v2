@@ -122,6 +122,9 @@ async function getSynthesis(id: string): Promise<SynthesisData | null> {
       transparencyScore: data.transparencyScore || 0,
       transparencyLabel: data.transparencyLabel || 'N/A',
       transparencyBreakdown: data.transparencyBreakdown || {},
+      // Feedback
+      avgRating: data.avgRating || 0,
+      feedbackCount: data.feedbackCount || 0,
     };
 
     return synthesis;
@@ -167,10 +170,49 @@ export default async function SynthesisPage({ params }: PageProps) {
     notFound();
   }
 
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'NewsArticle',
+    headline: synthesis.title,
+    datePublished: synthesis.createdAt,
+    dateModified: synthesis.lastUpdatedAt || synthesis.createdAt,
+    author: {
+      '@type': 'Organization',
+      name: 'NovaPress AI',
+      url: 'https://novapressai.com',
+    },
+    publisher: {
+      '@type': 'Organization',
+      name: 'NovaPress AI',
+      url: 'https://novapressai.com',
+    },
+    description: synthesis.summary?.substring(0, 200) || '',
+    isBasedOn: (synthesis.sourceArticles || []).map((sa: { url?: string; name?: string }) => ({
+      '@type': 'Article',
+      url: sa.url || '',
+      name: sa.name || '',
+    })),
+    ...(synthesis.transparencyScore ? {
+      reviewRating: {
+        '@type': 'Rating',
+        ratingValue: String(synthesis.transparencyScore),
+        bestRating: '100',
+        worstRating: '0',
+        ratingExplanation: `Transparency Score: ${synthesis.transparencyLabel}`,
+      },
+    } : {}),
+  };
+
   return (
-    <Suspense fallback={<SynthesisLoading />}>
-      <SynthesisClient initialSynthesis={synthesis} />
-    </Suspense>
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <Suspense fallback={<SynthesisLoading />}>
+        <SynthesisClient initialSynthesis={synthesis} />
+      </Suspense>
+    </>
   );
 }
 

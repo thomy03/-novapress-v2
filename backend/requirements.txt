@@ -58,6 +58,9 @@ slowapi>=0.1.9  # Rate limiting
 # WebSocket
 websockets>=13.0
 
+# Scheduler
+apscheduler>=3.10.0
+
 # Text-to-Speech
 edge-tts>=6.1.0  # Microsoft Edge TTS for audio summaries
 pydub>=0.25.1    # Audio concatenation for podcast generator (requires ffmpeg)

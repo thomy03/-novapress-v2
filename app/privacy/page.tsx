@@ -346,9 +346,32 @@ export default function PrivacyPage() {
           </ul>
         </section>
 
-        {/* Section 10 */}
+        {/* Section 10 - Sous-traitants */}
         <section style={styles.section}>
-          <h2 style={styles.sectionTitle}>10. Modifications de cette politique</h2>
+          <h2 style={styles.sectionTitle}>10. Sous-traitants</h2>
+          <p style={styles.paragraph}>
+            NovaPress AI fait appel aux sous-traitants suivants pour le traitement des donnees :
+          </p>
+          <ul style={styles.list}>
+            <li style={styles.listItem}>
+              <strong>OpenRouter</strong> (LLM) - Generation des syntheses par intelligence artificielle.
+              Les textes des articles (contenus publics) sont transmis pour synthese. Aucune donnee
+              personnelle n'est envoyee.
+            </li>
+            <li style={styles.listItem}>
+              <strong>Cloudflare</strong> (CDN/Tunnel) - Hebergement et distribution du contenu.
+              Adresses IP traitees pour la securite et la performance.
+            </li>
+            <li style={styles.listItem}>
+              <strong>Microsoft Edge TTS</strong> - Synthese vocale pour les briefings audio.
+              Le texte des syntheses est transmis pour conversion en audio.
+            </li>
+          </ul>
+        </section>
+
+        {/* Section 11 */}
+        <section style={styles.section}>
+          <h2 style={styles.sectionTitle}>11. Modifications de cette politique</h2>
 
           <p style={styles.paragraph}>
             NovaPress se reserve le droit de modifier la presente politique de
