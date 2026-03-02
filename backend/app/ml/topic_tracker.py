@@ -3,7 +3,7 @@ Topic Tracker
 Phase 7: Detects and manages recurring topics across syntheses.
 A topic is considered "recurring" when it appears in 3+ syntheses.
 """
-from typing import List, Dict, Optional, Tuple, Union
+from typing import List, Dict, Optional, Union
 from datetime import datetime, timedelta
 from collections import defaultdict
 import json
@@ -26,6 +26,20 @@ def _safe_date_str(created_at: Union[str, float, int, None]) -> str:
             return ''
     # Assume it's a string
     return str(created_at)[:10]
+
+
+def _safe_timestamp(created_at) -> float:
+    """Convert created_at to a float timestamp, regardless of format."""
+    if not created_at:
+        return 0.0
+    if isinstance(created_at, (int, float)):
+        return float(created_at)
+    # Try ISO string
+    try:
+        dt = datetime.fromisoformat(str(created_at).replace('Z', '+00:00'))
+        return dt.timestamp()
+    except (ValueError, TypeError):
+        return 0.0
 
 
 class TopicTracker:
@@ -64,11 +78,8 @@ class TopicTracker:
             return []
 
         try:
-            # Get recent syntheses
-            syntheses = self.qdrant.get_live_syntheses(
-                hours=days * 24,
-                limit=500  # Get many to find patterns
-            )
+            # Get ALL recent syntheses (no limit) via full scroll
+            syntheses = self._get_all_syntheses(days=days)
 
             if not syntheses:
                 return []
@@ -143,6 +154,10 @@ class TopicTracker:
             syntheses = await self._search_syntheses_by_topic(topic_name)
 
             if not syntheses or len(syntheses) < self.RECURRENCE_THRESHOLD:
+                logger.warning(
+                    f"Topic dashboard '{topic_name}': found {len(syntheses) if syntheses else 0} syntheses "
+                    f"(need {self.RECURRENCE_THRESHOLD}+)"
+                )
                 return None
 
             # Sort by date
@@ -329,53 +344,144 @@ class TopicTracker:
             ],
             "key_entities": self._aggregate_key_entities(syntheses)[:5],
             "narrative_arc": self._determine_narrative_arc(syntheses),
+            "is_active": self._is_topic_active(syntheses),
             "is_hot": self._is_topic_active(syntheses),
             "last_update": syntheses[0].get('created_at', '') if syntheses else ''
         }
+
+    def _get_all_syntheses(self, days: int = 90) -> List[Dict]:
+        """
+        Get ALL syntheses from the last N days using Qdrant scroll pagination.
+        Unlike get_live_syntheses (limited to ~200), this fetches everything.
+        """
+        if not self.qdrant or not self.qdrant.client:
+            return []
+
+        try:
+            from qdrant_client.models import Filter, FieldCondition, Range
+
+            cutoff_time = (datetime.now() - timedelta(days=days)).timestamp()
+            query_filter = Filter(
+                must=[
+                    FieldCondition(
+                        key="created_at",
+                        range=Range(gte=cutoff_time)
+                    )
+                ]
+            )
+
+            all_points = []
+            offset = None
+            batch_size = 256
+
+            while True:
+                points, next_offset = self.qdrant.client.scroll(
+                    collection_name=self.qdrant.syntheses_collection,
+                    scroll_filter=query_filter,
+                    limit=batch_size,
+                    offset=offset,
+                    with_payload=True,
+                    with_vectors=False
+                )
+
+                for point in points:
+                    synthesis = dict(point.payload or {})
+                    synthesis["id"] = str(point.id)
+                    # Parse key_points
+                    kp_str = synthesis.get("key_points", "")
+                    if kp_str and isinstance(kp_str, str):
+                        synthesis["keyPoints"] = [k.strip() for k in kp_str.split("|") if k.strip()]
+                    else:
+                        synthesis["keyPoints"] = []
+                    all_points.append(synthesis)
+
+                if next_offset is None or len(points) < batch_size:
+                    break
+                offset = next_offset
+
+            logger.info(f"TopicTracker: fetched {len(all_points)} syntheses from last {days} days")
+            return all_points
+
+        except Exception as e:
+            logger.error(f"TopicTracker: failed to fetch all syntheses: {e}")
+            return []
+
+    def _topic_matches(self, topic_lower: str, text: str) -> bool:
+        """
+        Check if topic matches text using word-boundary aware matching.
+        Handles both substring and word-level matching.
+        """
+        text_lower = text.lower()
+
+        # Direct substring match (handles "iran" in "l'iran", "iranien", etc.)
+        if topic_lower in text_lower:
+            return True
+
+        # For multi-word topics, check if ALL words appear in the text
+        topic_words = topic_lower.split()
+        if len(topic_words) > 1:
+            return all(w in text_lower for w in topic_words)
+
+        return False
 
     async def _search_syntheses_by_topic(
         self,
         topic_name: str
     ) -> List[Dict]:
-        """Search for syntheses related to a topic."""
+        """
+        Search for syntheses related to a topic.
+        Uses full Qdrant scroll (no limit) + multi-field matching.
+        """
         if not self.qdrant:
             return []
 
-        # Get recent syntheses and filter by topic name
-        all_syntheses = []
-        topic_lower = topic_name.lower()
+        topic_lower = topic_name.lower().strip()
+        if not topic_lower:
+            return []
 
-        # Get syntheses from last 30 days
-        recent = self.qdrant.get_live_syntheses(hours=30*24, limit=200)
+        # Get ALL syntheses from last 90 days (no 200 limit)
+        recent = self._get_all_syntheses(days=90)
+        logger.info(f"TopicTracker: searching '{topic_name}' across {len(recent)} syntheses")
+
+        seen_ids = set()
+        matched = []
 
         for s in recent:
-            # Check if topic appears in title
-            title = s.get('title', '').lower()
-            if topic_lower in title:
-                all_syntheses.append(s)
+            sid = s.get('id', s.get('synthesis_id', ''))
+            if not sid or sid in seen_ids:
                 continue
 
-            # Check if topic matches central entity
+            # Check title
+            title = s.get('title', '')
+            if self._topic_matches(topic_lower, title):
+                seen_ids.add(sid)
+                matched.append(s)
+                continue
+
+            # Check summary (first 500 chars)
+            summary = s.get('summary', '')[:500]
+            if self._topic_matches(topic_lower, summary):
+                seen_ids.add(sid)
+                matched.append(s)
+                continue
+
+            # Check central entity
             central = self._get_central_topic(s)
-            if central and topic_lower in central.lower():
-                all_syntheses.append(s)
+            if central and self._topic_matches(topic_lower, central):
+                seen_ids.add(sid)
+                matched.append(s)
                 continue
 
-            # Check if topic is in key entities
+            # Check key entities
             key_entities = self._extract_key_entities(s)
             for entity in key_entities:
-                if topic_lower in entity.lower():
-                    all_syntheses.append(s)
+                if self._topic_matches(topic_lower, entity):
+                    seen_ids.add(sid)
+                    matched.append(s)
                     break
 
-        # Deduplicate by ID
-        unique = {}
-        for s in all_syntheses:
-            sid = s.get('id', s.get('synthesis_id', ''))
-            if sid and sid not in unique:
-                unique[sid] = s
-
-        return list(unique.values())
+        logger.info(f"TopicTracker: found {len(matched)} syntheses matching '{topic_name}'")
+        return matched
 
     def _aggregate_causal_graphs(self, syntheses: List[Dict]) -> Dict:
         """Aggregate causal graphs from multiple syntheses."""
@@ -537,7 +643,6 @@ class TopicTracker:
         syntheses.sort(key=lambda x: x.get('created_at', ''))
 
         count = len(syntheses)
-        now = datetime.now()
 
         # Check recency of syntheses
         recent = sum(
@@ -563,14 +668,16 @@ class TopicTracker:
                 return True
         return False
 
-    def _is_recent(self, date_str: str, days: int = 7) -> bool:
-        """Check if date is within N days."""
-        if not date_str:
+    def _is_recent(self, created_at, days: int = 7) -> bool:
+        """Check if date is within N days. Handles Unix timestamps and ISO strings."""
+        if not created_at:
             return False
         try:
-            date = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-            cutoff = datetime.now(date.tzinfo) - timedelta(days=days)
-            return date > cutoff
+            ts = _safe_timestamp(created_at)
+            if ts <= 0:
+                return False
+            cutoff = (datetime.now() - timedelta(days=days)).timestamp()
+            return ts > cutoff
         except (ValueError, TypeError, OSError):
             return False
 
