@@ -50,9 +50,13 @@ class Settings(BaseSettings):
     # xAI Grok - https://docs.x.ai/
     XAI_API_KEY: str = ""
 
-    # Image Generation (Optional) - fal.ai
+    # Image Generation (Optional) - fal.ai multi-model
     FAL_API_KEY: str = ""  # https://fal.ai/dashboard/keys
-    FAL_MODEL: str = "fal-ai/flux/schnell"  # Fast & cheap (~$0.003/image)
+    FAL_MODEL: str = "fal-ai/flux/schnell"  # Legacy single-model fallback
+    FAL_MODEL_DEFAULT: str = "fal-ai/flux-2-flex"  # ~$0.03 (TECH, CULTURE)
+    FAL_MODEL_PHOTOREALISTIC: str = "fal-ai/nano-banana-pro"  # ~$0.04 (SPORT)
+    FAL_MODEL_DESIGN: str = "fal-ai/recraft/v4/text-to-image"  # ~$0.04 (MONDE, POLITIQUE, ECO, SCIENCES)
+    FAL_MODEL_FAST: str = "fal-ai/flux/schnell"  # ~$0.003 (fallback)
 
     # BGE-M3 Embeddings (Open Source)
     EMBEDDING_MODEL: str = "BAAI/bge-m3"

@@ -47,6 +47,14 @@ export interface AuthorDisplay {
   signature: string;
 }
 
+// ========== Key Metrics (Axios/Bloomberg callouts) ==========
+
+export interface KeyMetric {
+  value: string;
+  label: string;
+  source?: string;
+}
+
 // ========== Synthesis Core Type ==========
 
 export interface SynthesisData {
@@ -86,6 +94,8 @@ export interface SynthesisData {
   feedbackCount?: number;
   // Image (fal.ai generated)
   imageUrl?: string;
+  // Key Metrics (Axios/Bloomberg-style callouts)
+  keyMetrics?: KeyMetric[];
 }
 
 // ========== Related Synthesis Type ==========

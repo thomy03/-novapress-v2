@@ -479,6 +479,8 @@ def format_synthesis_for_frontend(synthesis: Dict[str, Any]) -> Dict[str, Any]:
         "feedbackCount": int(synthesis.get("feedback_count", 0)),
         # Image (fal.ai generated)
         "imageUrl": synthesis.get("image_url") or None,
+        # Key Metrics (Axios/Bloomberg-style callouts)
+        "keyMetrics": synthesis.get("key_metrics", []),
     }
 
 

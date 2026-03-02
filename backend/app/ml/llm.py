@@ -941,7 +941,13 @@ INSTRUCTIONS SPÉCIALES
    - "developing": histoire en cours, nouveaux développements
    - "standard": actualité normale, information de fond
 
-Format JSON (causal_chain + predictions + sentiment + topic_intensity OBLIGATOIRES):
+11. 📊 CHIFFRES CLES (key_metrics): OBLIGATOIRE - 3 métriques factuelles
+   Extrais les 3 chiffres les plus marquants des sources.
+   NE JAMAIS INVENTER de chiffres — n'utilise QUE des données présentes dans les articles.
+   Si aucun chiffre factuel n'est disponible, retourne une liste vide [].
+   Format: {{"value": "15%", "label": "hausse du PIB en 2025", "source": "Les Echos"}}
+
+Format JSON (causal_chain + predictions + sentiment + topic_intensity + key_metrics OBLIGATOIRES):
 {{
   "title": "...",
   "introduction": "...",
@@ -997,7 +1003,12 @@ Format JSON (causal_chain + predictions + sentiment + topic_intensity OBLIGATOIR
     }}
   ],
   "sentiment": "negative",
-  "topic_intensity": "hot"
+  "topic_intensity": "hot",
+  "key_metrics": [
+    {{"value": "-15%", "label": "Chute de la devise locale en 24h", "source": "Les Echos"}},
+    {{"value": "3", "label": "Pays concernés par les sanctions", "source": "Reuters"}},
+    {{"value": "48h", "label": "Délai avant prochaine réunion du Conseil", "source": "Le Monde"}}
+  ]
 }}
 """
 
@@ -1024,7 +1035,8 @@ Format JSON (causal_chain + predictions + sentiment + topic_intensity OBLIGATOIR
             "generation_cost_usd": self.get_last_generation_cost(),  # Phase 2.5: Cost Tracker
             "predictions": result.get("predictions", []),  # Future predictions for Nexus Causal
             "sentiment": result.get("sentiment", "neutral"),  # Tone for persona selection
-            "topic_intensity": result.get("topic_intensity", "standard")  # Urgency level
+            "topic_intensity": result.get("topic_intensity", "standard"),  # Urgency level
+            "key_metrics": result.get("key_metrics", []),  # Axios/Bloomberg-style callouts
         }
 
     async def synthesize_with_persona(

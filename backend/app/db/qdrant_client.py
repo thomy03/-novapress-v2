@@ -1049,6 +1049,10 @@ class QdrantService:
                 "transparency_score": int(synthesis.get("transparency_score", 0)),
                 "transparency_label": str(synthesis.get("transparency_label", "N/A"))[:20],
                 "transparency_breakdown": synthesis.get("transparency_breakdown", {}),
+                # Image (fal.ai generated) — was missing, causing image_url loss
+                "image_url": str(synthesis.get("image_url", ""))[:500] if synthesis.get("image_url") else "",
+                # Key Metrics (Axios/Bloomberg-style callouts)
+                "key_metrics": synthesis.get("key_metrics", []),
             }
         )
 

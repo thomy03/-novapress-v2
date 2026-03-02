@@ -1,12 +1,17 @@
 'use client';
 
 import React from 'react';
+import dynamic from 'next/dynamic';
 import {
   SynthesisData,
   SourceArticle,
   sharedStyles,
   getParagraphs,
 } from '@/app/types/synthesis-page';
+
+const KeyMetricCallout = dynamic(() => import('./KeyMetricCallout'), { ssr: false });
+const MiniGeoWidget = dynamic(() => import('./MiniGeoWidget'), { ssr: false });
+const MiniSparkline = dynamic(() => import('./MiniSparkline'), { ssr: false });
 
 /**
  * REF-012c: SynthesisBody Component
@@ -112,6 +117,11 @@ export default function SynthesisBody({ synthesis }: SynthesisBodyProps) {
         </p>
       )}
 
+      {/* Key Metrics Callouts (Axios/Bloomberg style) */}
+      {synthesis.keyMetrics && synthesis.keyMetrics.length > 0 && (
+        <KeyMetricCallout metrics={synthesis.keyMetrics} />
+      )}
+
       {/* Body */}
       <div style={styles.body}>
         {paragraphs.map((paragraph, idx) => (
@@ -120,6 +130,14 @@ export default function SynthesisBody({ synthesis }: SynthesisBodyProps) {
           </p>
         ))}
       </div>
+
+      {/* Category-specific widgets */}
+      {synthesis.category === 'MONDE' && (
+        <MiniGeoWidget synthesis={synthesis} />
+      )}
+      {synthesis.category === 'ECONOMIE' && synthesis.keyMetrics && (
+        <MiniSparkline metrics={synthesis.keyMetrics} category={synthesis.category} />
+      )}
 
       {/* Analysis Section */}
       {synthesis.analysis && (
