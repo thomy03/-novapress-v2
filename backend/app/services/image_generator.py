@@ -41,15 +41,9 @@ class FalImageGenerator:
         if not self.enabled:
             return None
 
-        try:
-            self.circuit_breaker.check()
-        except CircuitOpenError:
-            logger.warning("fal.ai circuit breaker is open, skipping image generation")
-            return None
-
         prompt = self._build_prompt(synthesis)
 
-        try:
+        async def _call_fal() -> Optional[str]:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
                     f"{self.base_url}/{self.model}",
@@ -72,21 +66,20 @@ class FalImageGenerator:
                     if images:
                         url = images[0].get("url", "")
                         if url:
-                            self.circuit_breaker.record_success()
                             logger.info(f"Generated image for: {synthesis.get('title', '')[:50]}...")
                             return url
 
-                    logger.warning(f"fal.ai returned no images: {data}")
-                    self.circuit_breaker.record_failure()
-                    return None
+                    raise ValueError(f"fal.ai returned no images: {data}")
                 else:
-                    logger.error(f"fal.ai error {response.status_code}: {response.text[:200]}")
-                    self.circuit_breaker.record_failure()
-                    return None
+                    raise ValueError(f"fal.ai error {response.status_code}: {response.text[:200]}")
 
+        try:
+            return await self.circuit_breaker.call(_call_fal)
+        except CircuitOpenError:
+            logger.warning("fal.ai circuit breaker is open, skipping image generation")
+            return None
         except Exception as e:
             logger.error(f"fal.ai image generation failed: {e}")
-            self.circuit_breaker.record_failure()
             return None
 
     def _build_prompt(self, synthesis: Dict[str, Any]) -> str:
