@@ -992,7 +992,6 @@ Contenu existant (extrait):
 
                 # === GENERATE BASE SYNTHESIS ID ===
                 import uuid
-                from datetime import datetime
 
                 # In UPDATE MODE: Reuse existing synthesis ID (this will UPDATE in Qdrant via upsert)
                 if is_update_mode and existing_synthesis:
