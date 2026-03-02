@@ -375,16 +375,18 @@ export function Header() {
             </h1>
           </Link>
 
-          {/* Search Bar */}
-          <div style={{ flex: 1, maxWidth: '500px' }}>
+          {/* Search Bar — fixed width, doesn't steal space from nav */}
+          <div style={{ width: '220px', flexShrink: 1, minWidth: '140px' }}>
             <SearchBar />
           </div>
 
-          {/* Navigation */}
-          <Navigation
-            selectedCategory={state.selectedCategory}
-            onCategoryChange={setCategory}
-          />
+          {/* Navigation — takes remaining space, scrolls if needed */}
+          <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+            <Navigation
+              selectedCategory={state.selectedCategory}
+              onCategoryChange={setCategory}
+            />
+          </div>
         </div>
       </header>
 
