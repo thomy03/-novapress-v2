@@ -33,7 +33,10 @@ export default function SourcesSection({ synthesis }: SourcesSectionProps) {
             {hasSourceArticles ? (
               synthesis.sourceArticles!.map((source: SourceArticle, index: number) => (
                 <div key={index} style={styles.sourceCard}>
-                  <div style={styles.sourceName}>{source.name}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <span style={styles.sourceBadge}>[{index + 1}]</span>
+                    <div style={styles.sourceName}>{source.name}</div>
+                  </div>
                   {source.title && (
                     <div style={styles.sourceTitle}>{source.title}</div>
                   )}
@@ -131,11 +134,24 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: '12px 16px',
     borderLeft: '3px solid #2563EB',
   },
+  sourceBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2563EB',
+    color: '#FFFFFF',
+    fontSize: '11px',
+    fontWeight: '700',
+    minWidth: '24px',
+    height: '20px',
+    borderRadius: '2px',
+    padding: '0 4px',
+    flexShrink: 0,
+  },
   sourceName: {
     fontSize: '14px',
     fontWeight: '600',
     color: '#1F2937',
-    marginBottom: '4px',
   },
   sourceTitle: {
     fontSize: '13px',

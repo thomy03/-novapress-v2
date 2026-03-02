@@ -49,23 +49,15 @@ function renderTextWithCitations(
     const source = sourceArticles?.[sourceIndex];
 
     if (source && source.url) {
-      // FIX-005: Footnote-style citation as superscript number
+      // Direct link to source — tooltip shows name + title on hover
       parts.push(
         <a
           key={`source-${match.index}`}
-          href={`#source-${sourceNum}`}
-          onClick={(e) => {
-            e.preventDefault();
-            // Scroll to sources section
-            const sourcesSection = document.getElementById('sources-section');
-            if (sourcesSection) {
-              sourcesSection.scrollIntoView({ behavior: 'smooth' });
-            }
-            // Also open source in new tab
-            window.open(source.url, '_blank', 'noopener,noreferrer');
-          }}
+          href={source.url}
+          target="_blank"
+          rel="noopener noreferrer"
           style={{
-            color: sharedStyles.accentBlue,
+            color: '#2563EB',
             textDecoration: 'none',
             fontSize: '0.75em',
             fontWeight: '600',
@@ -74,7 +66,7 @@ function renderTextWithCitations(
             marginLeft: '1px',
             marginRight: '2px',
           }}
-          title={`Source: ${source.name}${source.title ? ` - ${source.title}` : ''}\n(Cliquez pour ouvrir)`}
+          title={`${source.name}${source.title ? ` — ${source.title}` : ''}`}
         >
           [{sourceNum}]
         </a>

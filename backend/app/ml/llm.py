@@ -769,8 +769,11 @@ Format JSON strict:
 ═══════════════════════════════════════
 {search_context_text}
 
-⚠️ UTILISE CES INFORMATIONS: Les faits vérifiés et le contexte social ci-dessus
-doivent être INTÉGRÉS dans ton article pour enrichir l'analyse.
+⚠️ OBLIGATOIRE — INTÈGRE CES INFORMATIONS dans ton article:
+- Les faits vérifiés par Perplexity doivent être CITÉS avec leur source
+- Le contexte social (Reddit, X/Twitter, HN) doit être MENTIONNÉ explicitement:
+  "sur les réseaux sociaux", "selon un thread Reddit", "le sentiment sur X/Twitter"
+- Ne les ignore JAMAIS — elles enrichissent l'analyse et la crédibilité
 """
 
         prompt = f"""Tu es le RÉDACTEUR EN CHEF d'un grand quotidien de référence (Le Monde, NYT).
@@ -821,9 +824,14 @@ INSTRUCTIONS SPÉCIALES
 1. INTÈGRE le contexte historique: mentionne l'évolution, les faits précédents
 2. MONTRE la progression: "Après X survenu [date], aujourd'hui Y..."
 3. REFORMULE tout avec tes propres mots (anti-plagiat)
-4. CITE les sources: [SOURCE:N] après chaque fait (une seule fois par source)
+4. CITE les sources: [SOURCE:N] après chaque fait (une seule fois par source).
+   Si des sources SOCIALES sont présentes (Reddit, Hacker News, ArXiv, Bluesky, Wikipedia),
+   CITE-LES EXPLICITEMENT par nom: "selon une discussion sur Reddit", "un thread Hacker News",
+   "une étude publiée sur ArXiv", etc.
 5. Si contradictions: présente les deux versions objectivement
 6. PLUS de sources/chunks/historique = article BEAUCOUP PLUS LONG et DÉTAILLÉ
+7. DIVERSITÉ DES SOURCES: utilise un MIX de sources traditionnelles ET alternatives/sociales.
+   Ne te limite pas aux médias classiques — intègre les perspectives Reddit, HN, ArXiv si disponibles.
 
 📊 STRUCTURE ENRICHIE:
 

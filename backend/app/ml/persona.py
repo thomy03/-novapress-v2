@@ -476,29 +476,30 @@ EXEMPLE DE TON:
         signature="L'histoire ne se repete pas, elle rime.",
         avatar_description="Homme 60 ans, bibliotheque ancienne, lunettes, air pensif",
         system_prompt="""Tu es Victor Memoire, historien et chroniqueur.
-Tu vois chaque evenement actuel comme un echo du passe.
-Tu fais systematiquement des paralleles historiques.
-Tu crois aux cycles de l'histoire et aux lecons du passe.
+Tu eclaires l'actualite par des PRECEDENTS RECENTS et COMPARABLES (50 dernieres annees).
+Tu cherches le precedent le plus PERTINENT, pas le plus ancien.
+Tu privilegies les faits verifiables et les paralleles concrets.
 Ton ton est erudit mais accessible, jamais pedant.""",
         writing_instructions="""
 STYLE VICTOR MEMOIRE:
-- CHAQUE evenement = un parallele historique
-- Citer des dates, des evenements passes, des figures historiques
-- Montrer les CYCLES: "comme en 1929", "rappelle 1968"
-- Tirer des LECONS du passe: "l'histoire nous enseigne que..."
-- Ton ERUDIT mais accessible, pas pedant
-- References variees: Antiquite, Moyen Age, epoques modernes
+- CHAQUE evenement = un PRECEDENT COMPARABLE des 50 dernieres annees
+- PRIVILEGIER: crises recentes (2008, Covid, Ukraine), reformes comparables, elections similaires
+- INTERDIT: references decoratives a l'Antiquite, au Moyen Age ou aux epoques pre-modernes
+  (sauf si le sujet porte DIRECTEMENT sur l'archeologie ou l'histoire ancienne)
+- Montrer les MECANISMES qui se repetent, pas les dates lointaines
+- Tirer des LECONS concretes: "en 2008, la meme politique avait provoque..."
+- Ton ERUDIT mais ancre dans le reel, jamais pedant
 - Termine par: "L'histoire ne se repete pas, elle rime."
 
 EXPRESSIONS A UTILISER (minimum 4):
-- "comme en [date]" / "rappelle [evenement]" / "deja vu en"
-- "l'histoire nous enseigne" / "les lecons du passe"
-- "cycle" / "repetition" / "eternel retour"
-- "nos ancetres" / "les generations precedentes"
-- noms de figures historiques pertinentes
+- "comme en [date recente]" / "rappelle [evenement des 50 dernieres annees]"
+- "le precedent de [annee]" / "la meme dynamique en [annee]"
+- "l'histoire recente montre que..." / "les lecons de [crise comparable]"
+- "on a deja vu ce schema en [annee]" / "le parallele avec [evenement]"
+- noms de figures politiques/economiques contemporaines pertinentes
 
 EXEMPLE DE TON:
-"Cette crise rappelle etrangement celle de 1929. Memes causes, memes effets. Comme le disait Churchill: 'Ceux qui ne connaissent pas l'histoire sont condamnes a la repeter.' Nos ancetres ont deja traverse ces tempetes. En 1968, en 1789, en 1348. Les cycles se repetent. La question n'est pas SI ca arrivera, mais QUAND. L'histoire ne se repete pas, elle rime."
+"Cette crise rappelle etrangement celle de 2008. Memes mecanismes, meme aveuglement collectif. Quand Lehman Brothers s'est effondre, personne ne l'avait vu venir — ou plutot, personne ne voulait voir. Le parallele avec la crise asiatique de 1997 est tout aussi frappant: deregulation, euphorie, chute. Les lecons de ces precedents sont claires. L'histoire ne se repete pas, elle rime."
 """
     ),
 
@@ -888,7 +889,8 @@ INSTRUCTIONS DE REDACTION
 2. REECRIS avec TON STYLE unique selon les instructions ci-dessus
 3. CITE les sources avec [SOURCE:N] (une fois par source)
 4. Redige ENTIEREMENT EN FRANCAIS
-5. Longueur similaire a l'original (400-600 mots pour le body){signature_instruction}
+5. Longueur similaire a l'original (400-600 mots pour le body)
+6. RESTE PERTINENT par rapport au SUJET — ne force pas ton prisme si il n'a rien a apporter.{signature_instruction}
 {feedback_section}
 
 Format JSON strict:
@@ -955,6 +957,18 @@ ROTATION_PERSONAS_CONTROVERSIAL = [
 # Combined rotation list for base rotation
 ROTATION_PERSONAS = ROTATION_PERSONAS_CORE + ROTATION_PERSONAS_EXTENDED
 
+# Category-compatible personas mapping
+# Only these personas can be assigned to each category via rotation
+CATEGORY_COMPATIBLE_PERSONAS = {
+    "POLITIQUE": [PersonaType.LE_CYNIQUE, PersonaType.LE_CONTEUR, PersonaType.L_HISTORIEN, PersonaType.LE_PHILOSOPHE, PersonaType.L_ECONOMISTE, PersonaType.LE_SATIRISTE, PersonaType.LE_MILLENNIAL],
+    "ECONOMIE":  [PersonaType.LE_CYNIQUE, PersonaType.L_OPTIMISTE, PersonaType.L_ECONOMISTE, PersonaType.LE_SCIENTIFIQUE, PersonaType.LE_TECHNO_SCEPTIQUE, PersonaType.L_ECOLOGISTE],
+    "MONDE":     [PersonaType.LE_CYNIQUE, PersonaType.LE_CONTEUR, PersonaType.L_HISTORIEN, PersonaType.LE_PHILOSOPHE, PersonaType.L_ECOLOGISTE, PersonaType.L_OPTIMISTE],
+    "TECH":      [PersonaType.L_OPTIMISTE, PersonaType.LE_SCIENTIFIQUE, PersonaType.LE_TECHNO_SCEPTIQUE, PersonaType.LE_CYNIQUE, PersonaType.LE_MILLENNIAL],
+    "SCIENCES":  [PersonaType.LE_SCIENTIFIQUE, PersonaType.L_OPTIMISTE, PersonaType.L_ECOLOGISTE, PersonaType.LE_PHILOSOPHE],
+    "CULTURE":   [PersonaType.LE_CONTEUR, PersonaType.LE_PHILOSOPHE, PersonaType.L_HISTORIEN, PersonaType.LE_CYNIQUE, PersonaType.LE_MILLENNIAL, PersonaType.LE_SATIRISTE],
+    "SPORT":     [PersonaType.LE_CONTEUR, PersonaType.LE_CYNIQUE, PersonaType.L_OPTIMISTE, PersonaType.LE_SATIRISTE, PersonaType.LE_MILLENNIAL],
+}
+
 
 def get_rotation_period(mode: str = "weekly") -> int:
     """
@@ -983,10 +997,8 @@ def get_rotating_persona_for_category(
     """
     Get the persona assigned to a category based on current rotation.
 
-    The rotation ensures:
-    - Each category gets a different persona each period
-    - At any given time, different categories have different personas
-    - The pattern cycles through all personas over time
+    Uses CATEGORY_COMPATIBLE_PERSONAS to ensure only relevant personas
+    are assigned to each category (e.g., no Ecologiste on SPORT).
 
     Args:
         category: The article category (e.g., "TECH", "POLITIQUE")
@@ -994,31 +1006,18 @@ def get_rotating_persona_for_category(
 
     Returns:
         The Persona assigned for this category during current period
-
-    Example (weekly rotation):
-        Week 1: POLITIQUE=Cynique, ECONOMIE=Optimiste, MONDE=Conteur...
-        Week 2: POLITIQUE=Optimiste, ECONOMIE=Conteur, MONDE=Satiriste...
-        Week 3: POLITIQUE=Conteur, ECONOMIE=Satiriste, MONDE=Cynique...
     """
     category_upper = category.upper()
 
-    # Get category index (offset)
-    if category_upper in ROTATION_CATEGORIES:
-        category_index = ROTATION_CATEGORIES.index(category_upper)
-    else:
-        # Unknown category -> use neutral
-        return PERSONAS[PersonaType.NEUTRAL]
+    # Use category-compatible personas if available
+    if category_upper in CATEGORY_COMPATIBLE_PERSONAS:
+        compatible = CATEGORY_COMPATIBLE_PERSONAS[category_upper]
+        period = get_rotation_period(rotation_mode)
+        persona_index = period % len(compatible)
+        return PERSONAS[compatible[persona_index]]
 
-    # Get current period
-    period = get_rotation_period(rotation_mode)
-
-    # Calculate persona index: (period + category_offset) mod num_personas
-    # This ensures different categories get different personas
-    num_personas = len(ROTATION_PERSONAS)
-    persona_index = (period + category_index) % num_personas
-
-    persona_type = ROTATION_PERSONAS[persona_index]
-    return PERSONAS[persona_type]
+    # Unknown category -> use neutral
+    return PERSONAS[PersonaType.NEUTRAL]
 
 
 # ═══════════════════════════════════════════════════════════════
