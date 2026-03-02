@@ -57,7 +57,20 @@ export function Navigation({ selectedCategory, onCategoryChange }: NavigationPro
   }, [fetchStats]);
 
   return (
-    <nav role="navigation" aria-label="Navigation principale" style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+    <nav
+      role="navigation"
+      aria-label="Navigation principale"
+      className="mobile-nav-scroll"
+      style={{
+        display: 'flex',
+        gap: '8px',
+        alignItems: 'center',
+        overflowX: 'auto',
+        flexShrink: 1,
+        minWidth: 0,
+        scrollbarWidth: 'none',
+      }}
+    >
       {CATEGORIES.map(item => {
         const isSelected = selectedCategory === item.id;
         const count = item.apiCategory ? categoryStats[item.apiCategory] || 0 : 0;
@@ -75,7 +88,7 @@ export function Navigation({ selectedCategory, onCategoryChange }: NavigationPro
               fontWeight: 'bold',
               color: isSelected ? '#DC2626' : theme.text,
               textDecoration: 'none',
-              padding: '8px 14px',
+              padding: '8px 12px',
               borderRadius: '20px',
               backgroundColor: isSelected ? (theme.bgTertiary || '#f3f4f6') : 'transparent',
               border: 'none',
@@ -84,6 +97,8 @@ export function Navigation({ selectedCategory, onCategoryChange }: NavigationPro
               alignItems: 'center',
               gap: '6px',
               position: 'relative',
+              flexShrink: 0,
+              whiteSpace: 'nowrap',
               ['--nav-hover-bg' as string]: theme.bgTertiary || '#f3f4f6'
             }}
           >
@@ -125,7 +140,9 @@ export function Navigation({ selectedCategory, onCategoryChange }: NavigationPro
           display: 'flex',
           alignItems: 'center',
           gap: '6px',
-          textDecoration: 'none'
+          textDecoration: 'none',
+          flexShrink: 0,
+          whiteSpace: 'nowrap',
         }}
       >
         <span

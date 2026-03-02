@@ -76,15 +76,13 @@ export function Header() {
           {/* Left: Location & Time */}
           <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
             <span style={{ fontWeight: 600, letterSpacing: '0.05em' }}>PARIS</span>
+            <span style={{ color: 'rgba(255,255,255,0.5)', margin: '0 2px' }}>|</span>
             <span style={{ color: 'rgba(255,255,255,0.7)', fontFamily: 'var(--font-mono)' }}>
               {currentTime ? currentTime.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '--:--'}
             </span>
-
-            {/* Stock Ticker */}
-            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ color: 'rgba(255,255,255,0.7)' }}>CAC 40:</span>
-              <span style={{ fontFamily: 'var(--font-mono)' }}>7,543</span>
-              <span style={{ color: theme.success, fontSize: '11px' }}>+1.24%</span>
+            <span style={{ color: 'rgba(255,255,255,0.5)', margin: '0 2px' }}>|</span>
+            <span style={{ color: 'rgba(255,255,255,0.7)', textTransform: 'capitalize' }}>
+              {currentTime ? currentTime.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : ''}
             </span>
 
             {/* API Status Indicator — only show when API is connected */}

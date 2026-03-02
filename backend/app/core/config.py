@@ -149,9 +149,9 @@ class Settings(BaseSettings):
     # Prevent creating duplicate syntheses when pipeline runs frequently
     ENABLE_SYNTHESIS_DEDUP: bool = True  # Enable deduplication checks
     ENABLE_SYNTHESIS_UPDATE: bool = True  # Update existing syntheses with new articles instead of skipping
-    DEDUP_HOURS_LOOKBACK: int = 24  # Check for duplicates in last N hours
-    DEDUP_URL_OVERLAP_THRESHOLD: float = 0.7  # 70% URL overlap = duplicate
-    DEDUP_EMBEDDING_THRESHOLD: float = 0.92  # 92% embedding similarity = duplicate
+    DEDUP_HOURS_LOOKBACK: int = 72  # Check for duplicates in last N hours (3 days — stories evolve over days)
+    DEDUP_URL_OVERLAP_THRESHOLD: float = 0.5  # 50% URL overlap = duplicate (lower to catch topic overlap)
+    DEDUP_EMBEDDING_THRESHOLD: float = 0.85  # 85% embedding similarity = duplicate (lower to catch same-topic rewrites)
 
     # Search Enrichment Configuration (Perplexity + Grok)
     # Enable systematic enrichment of all syntheses with web context and social sentiment
