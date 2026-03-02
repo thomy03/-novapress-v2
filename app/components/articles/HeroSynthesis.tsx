@@ -30,6 +30,7 @@ export interface SynthesisBrief {
   numSources: number;
   readingTime: number;
   createdAt: string;
+  complianceScore?: number;
 }
 
 interface HeroSynthesisProps {

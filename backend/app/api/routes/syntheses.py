@@ -751,7 +751,8 @@ async def get_live_syntheses(
     request: Request,
     hours: int = Query(24, ge=1, le=168),
     limit: int = Query(50, ge=1, le=100),
-    offset: int = Query(0, ge=0, description="Number of items to skip for pagination")
+    offset: int = Query(0, ge=0, description="Number of items to skip for pagination"),
+    category: Optional[str] = Query(None, description="Filter by category (e.g. MONDE, TECH)")
 ):
     """
     Get syntheses from the last X hours (for EN DIRECT page) with pagination.
@@ -760,11 +761,17 @@ async def get_live_syntheses(
         hours: Number of hours to look back (default 24, max 168 = 1 week)
         limit: Maximum number of syntheses to return (default 50)
         offset: Number of items to skip (for pagination, default 0)
+        category: Optional category filter (MONDE, TECH, ECONOMIE, POLITIQUE, CULTURE, SPORT, SCIENCES)
     """
+    valid_categories = ["MONDE", "TECH", "ECONOMIE", "POLITIQUE", "CULTURE", "SPORT", "SCIENCES"]
+    validated_category = None
+    if category and category.upper() in valid_categories:
+        validated_category = category.upper()
+
     try:
         qdrant = get_qdrant_service()
         # Get more than needed to calculate hasMore
-        raw_syntheses = qdrant.get_live_syntheses(hours=hours, limit=limit + 1, offset=offset)
+        raw_syntheses = qdrant.get_live_syntheses(hours=hours, limit=limit + 1, offset=offset, category=validated_category)
 
         # Check if there are more items
         has_more = len(raw_syntheses) > limit

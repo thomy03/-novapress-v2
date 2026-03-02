@@ -65,10 +65,9 @@ export function Navigation({ selectedCategory, onCategoryChange }: NavigationPro
         display: 'flex',
         gap: '8px',
         alignItems: 'center',
-        overflowX: 'auto',
-        flexShrink: 1,
-        minWidth: 0,
-        scrollbarWidth: 'none',
+        justifyContent: 'center',
+        padding: '8px 0',
+        flexWrap: 'wrap',
       }}
     >
       {CATEGORIES.map(item => {
@@ -97,7 +96,6 @@ export function Navigation({ selectedCategory, onCategoryChange }: NavigationPro
               alignItems: 'center',
               gap: '6px',
               position: 'relative',
-              flexShrink: 0,
               whiteSpace: 'nowrap',
               ['--nav-hover-bg' as string]: theme.bgTertiary || '#f3f4f6'
             }}
@@ -141,7 +139,6 @@ export function Navigation({ selectedCategory, onCategoryChange }: NavigationPro
           alignItems: 'center',
           gap: '6px',
           textDecoration: 'none',
-          flexShrink: 0,
           whiteSpace: 'nowrap',
         }}
       >

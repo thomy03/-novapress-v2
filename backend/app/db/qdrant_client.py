@@ -1735,7 +1735,8 @@ class QdrantService:
         self,
         hours: int = 24,
         limit: int = 50,
-        offset: int = 0
+        offset: int = 0,
+        category: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
         Get syntheses from the last X hours (for EN DIRECT page) with pagination.
@@ -1757,14 +1758,17 @@ class QdrantService:
 
             cutoff_time = (datetime.now() - timedelta(hours=hours)).timestamp()
 
-            query_filter = Filter(
-                must=[
-                    FieldCondition(
-                        key="created_at",
-                        range=Range(gte=cutoff_time)
-                    )
-                ]
-            )
+            filter_conditions = [
+                FieldCondition(
+                    key="created_at",
+                    range=Range(gte=cutoff_time)
+                )
+            ]
+            if category:
+                filter_conditions.append(
+                    FieldCondition(key="category", match=MatchValue(value=category.upper()))
+                )
+            query_filter = Filter(must=filter_conditions)
 
             # Fetch more to handle pagination (we need all to sort, then slice)
             # For efficiency with large datasets, fetch a reasonable batch

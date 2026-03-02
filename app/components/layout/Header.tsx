@@ -318,22 +318,20 @@ export function Header() {
           position: 'sticky',
           top: 0,
           zIndex: 50,
-          borderBottom: scrolled ? 'none' : `2px solid ${theme.border}`,
           backgroundColor: scrolled ? 'transparent' : theme.bg,
-          padding: '16px 0',
           transition: 'all 300ms ease',
           ...glassStyles,
         }}
       >
+        {/* Line 1: Masthead — Logo + SearchBar */}
         <div
           style={{
             maxWidth: '1400px',
             margin: '0 auto',
-            padding: '0 20px',
+            padding: '16px 20px 12px',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            gap: '32px',
           }}
         >
           {/* Logo */}
@@ -375,13 +373,26 @@ export function Header() {
             </h1>
           </Link>
 
-          {/* Search Bar — fixed width, doesn't steal space from nav */}
-          <div style={{ width: '220px', flexShrink: 1, minWidth: '140px' }}>
+          {/* Search Bar */}
+          <div style={{ width: '280px', flexShrink: 1, minWidth: '160px' }}>
             <SearchBar />
           </div>
+        </div>
 
-          {/* Navigation — takes remaining space, scrolls if needed */}
-          <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+        {/* Line 2: Navigation — full width, centered */}
+        <div
+          style={{
+            borderTop: `1px solid ${theme.border}`,
+            borderBottom: scrolled ? 'none' : `2px solid ${theme.border}`,
+          }}
+        >
+          <div
+            style={{
+              maxWidth: '1400px',
+              margin: '0 auto',
+              padding: '0 20px',
+            }}
+          >
             <Navigation
               selectedCategory={state.selectedCategory}
               onCategoryChange={setCategory}

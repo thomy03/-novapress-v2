@@ -19,13 +19,110 @@ import { Footer } from '../layout/Footer';
 import { OfflineNotification } from '../ui/OfflineNotification';
 import { TrendingTopics } from '../trending';
 import { HeroSynthesis, SynthesisBrief } from '../articles/HeroSynthesis';
-import { RecurringTopicBadge } from '../topics';
 import { useInfiniteScroll } from '../../hooks/useInfiniteScroll';
 import { SkeletonCard, SkeletonHero } from '../ui/Skeleton';
 import { Badge, CategoryBadge, AIBadge } from '../ui/Badge';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 const PAGE_SIZE = 10;
+
+// Compact card for category grids — newspaper-strict style
+function CompactCard({ synthesis: s, theme, formatDate }: {
+  synthesis: SynthesisBrief;
+  theme: Record<string, any>;
+  formatDate: (d: string) => string;
+}) {
+  return (
+    <Link href={`/synthesis/${s.id}`} style={{ textDecoration: 'none' }}>
+      <article
+        className="card-hover-lift"
+        style={{
+          height: '100%',
+          backgroundColor: theme.card,
+          border: `1px solid ${theme.border}`,
+          borderRadius: '4px',
+          padding: '16px 20px',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        {/* Title — 2 lines max */}
+        <h3 style={{
+          fontFamily: 'var(--font-serif)',
+          fontSize: '15px',
+          fontWeight: 600,
+          lineHeight: 1.35,
+          color: theme.text,
+          margin: 0,
+          marginBottom: '8px',
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+        }}>
+          {s.title}
+        </h3>
+
+        {/* Summary — 2 lines max */}
+        <p style={{
+          fontSize: '13px',
+          lineHeight: 1.5,
+          color: theme.textSecondary,
+          margin: 0,
+          marginBottom: '12px',
+          flex: 1,
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+        }}>
+          {s.summary}
+        </p>
+
+        {/* Meta footer */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          fontSize: '11px',
+          color: theme.textSecondary,
+          borderTop: `1px solid ${theme.border}`,
+          paddingTop: '8px',
+          marginTop: 'auto',
+        }}>
+          <span style={{ fontFamily: 'var(--font-mono)' }}>{s.numSources} sources</span>
+          <span>{formatDate(s.createdAt)}</span>
+        </div>
+      </article>
+    </Link>
+  );
+}
+
+// Loading spinner for infinite scroll
+function LoadingSpinner({ theme }: { theme: Record<string, any> }) {
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: '14px',
+      color: theme.textSecondary,
+      fontSize: '14px',
+      fontWeight: 500,
+    }}>
+      <div
+        className="animate-spin"
+        style={{
+          width: '24px',
+          height: '24px',
+          border: `2px solid ${theme.border}`,
+          borderTopColor: theme.brand?.secondary || '#2563EB',
+          borderRadius: '50%',
+        }}
+      />
+      Chargement des synthèses...
+    </div>
+  );
+}
 
 function MainContent() {
   const { theme } = useTheme();
@@ -102,8 +199,12 @@ function MainContent() {
     fetchNextPage: loadMore,
   });
 
-  // Syntheses are already filtered server-side by category
-  const filteredSyntheses = syntheses;
+  // Sort by complianceScore (best first), then by date
+  const sortedSyntheses = [...syntheses].sort((a, b) => {
+    const scoreDiff = (b.complianceScore ?? 0) - (a.complianceScore ?? 0);
+    if (scoreDiff !== 0) return scoreDiff;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
 
   if (!mounted || loading) {
     return (
@@ -137,10 +238,34 @@ function MainContent() {
   };
 
   // Split into sections (non-hook derived values, safe after early return)
-  const heroSynthesis = filteredSyntheses[0];
-  const secondarySyntheses = filteredSyntheses.slice(1, 3);
-  const allGridSyntheses = filteredSyntheses.slice(3);
-  const gridSyntheses = allGridSyntheses;
+  const heroSynthesis = sortedSyntheses[0];
+  const secondarySyntheses = sortedSyntheses.slice(1, 3);
+  const restSyntheses = sortedSyntheses.slice(3);
+
+  // Group remaining syntheses by category (for ACCUEIL view)
+  const CATEGORY_ORDER = ['MONDE', 'TECH', 'ECONOMIE', 'POLITIQUE', 'CULTURE', 'SPORT', 'SCIENCES'];
+  const CATEGORY_COLORS: Record<string, string> = {
+    MONDE: '#DC2626',
+    POLITIQUE: '#DC2626',
+    ECONOMIE: '#F59E0B',
+    TECH: '#2563EB',
+    CULTURE: '#8B5CF6',
+    SPORT: '#10B981',
+    SCIENCES: '#06B6D4',
+  };
+  const MAX_PER_CATEGORY = 6;
+
+  const categoryGroups: Record<string, SynthesisBrief[]> = {};
+  if (!apiCategory) {
+    // ACCUEIL: group by category
+    for (const s of restSyntheses) {
+      const cat = s.category || 'AUTRES';
+      if (!categoryGroups[cat]) categoryGroups[cat] = [];
+      if (categoryGroups[cat].length < MAX_PER_CATEGORY) {
+        categoryGroups[cat].push(s);
+      }
+    }
+  }
 
   return (
     <main
@@ -296,214 +421,100 @@ function MainContent() {
         </div>
       </section>
 
-      {/* Recent Syntheses Grid */}
-      {gridSyntheses.length > 0 && (
+      {/* Syntheses Grid — Category blocks (ACCUEIL) or flat list (filtered) */}
+      {restSyntheses.length > 0 && (
         <section style={{ marginBottom: '48px' }}>
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'flex-end',
-            marginBottom: '32px',
-            paddingBottom: '20px',
-            borderBottom: `2px solid ${theme.border}`,
-          }}>
-            <div>
-              <p style={{
-                fontSize: '26px',
-                fontWeight: 700,
-                color: theme.text,
-                fontFamily: 'var(--font-serif)',
-                letterSpacing: '-0.02em',
-              }}>
-                Les dernières analyses
-              </p>
-            </div>
-            <Link
-              href="/live"
-              className="btn-hover-danger"
-              style={{
-                color: theme.brand.primary,
-                fontSize: '13px',
-                fontWeight: 600,
-                textDecoration: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '10px 18px',
-                border: `1px solid ${theme.brand.primary}30`,
-                borderRadius: '8px',
-                transition: 'all 200ms ease',
-              }}
-            >
-              <span
-                className="animate-live-pulse"
+          {apiCategory ? (
+            /* Filtered view: flat grid, no sub-headers */
+            <>
+              <div className="category-grid">
+                {restSyntheses.map((s) => (
+                  <CompactCard key={s.id} synthesis={s} theme={theme} formatDate={formatDate} />
+                ))}
+              </div>
+
+              {/* Infinite Scroll Trigger */}
+              <div
+                ref={loadingRef}
                 style={{
-                  width: '6px',
-                  height: '6px',
-                  backgroundColor: theme.brand.primary,
-                  borderRadius: '50%',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  padding: '40px 0',
+                  minHeight: '100px',
                 }}
-              />
-              EN DIRECT
-            </Link>
-          </div>
-
-          {/* Bento-style Grid: variable sizes with animations */}
-          <div className="bento-grid" style={{ gap: '20px' }}>
-            {gridSyntheses.map((s, index) => {
-              // Bento layout: first item spans 2 cols on lg, every 4th item spans 2
-              const isLarge = index === 0 || (index > 0 && index % 5 === 0);
-
-              return (
-                <Link
-                  key={s.id}
-                  href={`/synthesis/${s.id}`}
-                  style={{ textDecoration: 'none' }}
-                  className={isLarge ? 'bento-span-2' : ''}
-                >
-                  <article
-                    className="card-interactive"
-                    style={{
-                      height: '100%',
-                      minHeight: isLarge ? '280px' : '220px',
-                      backgroundColor: theme.card,
-                      border: `1px solid ${theme.border}`,
-                      borderRadius: '12px',
-                      padding: '24px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      position: 'relative',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    {/* Accent line on hover */}
-                    <div
-                      className="accent-line-reveal"
-                      style={{
-                        position: 'absolute',
-                        bottom: 0,
-                        left: 0,
-                        right: 0,
-                        height: '3px',
-                        background: `linear-gradient(90deg, ${theme.brand.primary}, ${theme.brand.secondary})`,
-                      }}
-                    />
-
-                    {/* Badges row: Category + Recurring Topic */}
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      marginBottom: '14px',
-                      flexWrap: 'wrap',
-                    }}>
-                      {s.category && (
-                        <CategoryBadge category={s.category} size="sm" />
-                      )}
-                      <RecurringTopicBadge synthesisId={s.id} />
-                    </div>
-
-                    {/* Title */}
-                    <h3 style={{
-                      fontFamily: 'var(--font-serif)',
-                      fontSize: isLarge ? '20px' : '16px',
-                      fontWeight: 600,
-                      lineHeight: 1.35,
-                      color: theme.text,
-                      marginBottom: '14px',
-                      display: '-webkit-box',
-                      WebkitLineClamp: isLarge ? 3 : 2,
-                      WebkitBoxOrient: 'vertical',
-                      overflow: 'hidden',
-                    }}>
-                      {s.title}
-                    </h3>
-
-                    {/* Summary preview */}
-                    <p style={{
-                      fontSize: '14px',
-                      lineHeight: 1.6,
-                      color: theme.textSecondary,
-                      marginBottom: '16px',
-                      flex: 1,
-                      display: '-webkit-box',
-                      WebkitLineClamp: isLarge ? 3 : 2,
-                      WebkitBoxOrient: 'vertical',
-                      overflow: 'hidden',
-                    }}>
-                      {s.summary}
-                    </p>
-
-                    {/* Meta */}
+              >
+                {loadingMore && <LoadingSpinner theme={theme} />}
+                {!hasMore && syntheses.length > 7 && (
+                  <p style={{ color: theme.textSecondary, fontSize: '14px' }}>
+                    Toutes les synthèses sont chargées
+                  </p>
+                )}
+              </div>
+            </>
+          ) : (
+            /* ACCUEIL view: grouped by category */
+            <>
+              {CATEGORY_ORDER
+                .filter(cat => categoryGroups[cat] && categoryGroups[cat].length > 0)
+                .map(cat => (
+                  <div key={cat} style={{ marginBottom: '40px' }}>
+                    {/* Category Section Header */}
                     <div style={{
                       display: 'flex',
                       justifyContent: 'space-between',
-                      alignItems: 'center',
-                      fontSize: '12px',
-                      color: theme.textSecondary,
-                      borderTop: `1px solid ${theme.border}`,
-                      paddingTop: '14px',
-                      marginTop: 'auto',
+                      alignItems: 'baseline',
+                      marginBottom: '20px',
+                      paddingBottom: '10px',
+                      borderBottom: `3px solid ${CATEGORY_COLORS[cat] || theme.border}`,
                     }}>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 500 }}>
-                        {s.numSources} sources
+                      <h2 style={{
+                        fontFamily: 'var(--font-serif)',
+                        fontSize: '20px',
+                        fontWeight: 700,
+                        color: theme.text,
+                        letterSpacing: '0.02em',
+                        margin: 0,
+                      }}>
+                        {cat}
+                      </h2>
+                      <span style={{
+                        fontSize: '13px',
+                        color: theme.textSecondary,
+                      }}>
+                        {categoryGroups[cat].length} analyse{categoryGroups[cat].length > 1 ? 's' : ''}
                       </span>
-                      <span>{formatDate(s.createdAt)}</span>
                     </div>
-                  </article>
-                </Link>
-              );
-            })}
-          </div>
 
-          {/* Infinite Scroll Trigger & Loading Indicator */}
-          <div
-            ref={loadingRef}
-            style={{
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              padding: '40px 0',
-              minHeight: '100px',
-            }}
-          >
-            {loadingMore && (
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '14px',
-                color: theme.textSecondary,
-                fontSize: '14px',
-                fontWeight: 500,
-              }}>
-                <div
-                  className="animate-spin"
-                  style={{
-                    width: '24px',
-                    height: '24px',
-                    border: `2px solid ${theme.border}`,
-                    borderTopColor: theme.brand.secondary,
-                    borderRadius: '50%',
-                  }}
-                />
-                Chargement des synthèses...
-              </div>
-            )}
-            {!hasMore && syntheses.length > 7 && (
+                    {/* Category Grid */}
+                    <div className="category-grid">
+                      {categoryGroups[cat].map((s) => (
+                        <CompactCard key={s.id} synthesis={s} theme={theme} formatDate={formatDate} />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+              {/* Infinite Scroll Trigger */}
               <div
-                className="glass-subtle"
+                ref={loadingRef}
                 style={{
-                  padding: '12px 24px',
-                  borderRadius: '20px',
-                  color: theme.textSecondary,
-                  fontSize: '14px',
-                  fontWeight: 500,
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  padding: '40px 0',
+                  minHeight: '100px',
                 }}
               >
-                Toutes les synthèses sont chargées
+                {loadingMore && <LoadingSpinner theme={theme} />}
+                {!hasMore && syntheses.length > 7 && (
+                  <p style={{ color: theme.textSecondary, fontSize: '14px' }}>
+                    Toutes les synthèses sont chargées
+                  </p>
+                )}
               </div>
-            )}
-          </div>
+            </>
+          )}
         </section>
       )}
 
