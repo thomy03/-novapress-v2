@@ -1,7 +1,7 @@
 'use client';
 
 import React, { memo } from 'react';
-import { Handle, Position, NodeProps } from 'reactflow';
+import { Handle, Position, NodeProps } from '@xyflow/react';
 
 export interface NeuralNodeData {
   label: string;
@@ -28,7 +28,8 @@ function getCascadeColor(depth: number): string {
   return CASCADE_COLORS[Math.min(depth, CASCADE_COLORS.length - 1)];
 }
 
-function NeuralNodeComponent({ data, selected }: NodeProps<NeuralNodeData>) {
+function NeuralNodeComponent({ data: rawData, selected }: NodeProps) {
+  const data = rawData as unknown as NeuralNodeData;
   const isActive = selected || data.isActivated;
   const isSource = data.isSource;
   const activationLevel = data.activationLevel || 0;

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { memo } from 'react';
-import { Handle, Position, NodeProps } from 'reactflow';
+import { Handle, Position, NodeProps } from '@xyflow/react';
 import { NodeType } from '@/app/types/causal';
 
 export interface TangleNodeData {
@@ -21,7 +21,8 @@ const NODE_COLORS: Record<NodeType, { bg: string; border: string; text: string }
   keyword: { bg: '#FEF3C7', border: '#D97706', text: '#D97706' },  // Yellow/amber for keywords
 };
 
-function TangleNodeComponent({ data, selected }: NodeProps<TangleNodeData>) {
+function TangleNodeComponent({ data, selected }: NodeProps) {
+  const d = data as unknown as TangleNodeData;
   const {
     label,
     nodeType = 'entity',
@@ -29,7 +30,7 @@ function TangleNodeComponent({ data, selected }: NodeProps<TangleNodeData>) {
     isHighlighted = false,
     isSource = false,
     connectionsCount = 0,
-  } = data;
+  } = d;
 
   const colors = NODE_COLORS[nodeType] || NODE_COLORS.entity;
 

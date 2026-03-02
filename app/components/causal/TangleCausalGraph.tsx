@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
-import ReactFlow, {
+import {
+  ReactFlow,
   Node,
   Edge,
   Background,
@@ -13,8 +14,8 @@ import ReactFlow, {
   ReactFlowProvider,
   useReactFlow,
   Panel,
-} from 'reactflow';
-import 'reactflow/dist/style.css';
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
 import Link from 'next/link';
 
 import TangleNodeComponent, { TangleNodeData } from './TangleNode';
@@ -237,7 +238,7 @@ function TangleCausalGraphInner({
   }, [effectiveNodes, causalEdges, isFullScreen]);
 
   // Convert to React Flow nodes using effectiveNodes
-  const initialNodes: Node<TangleNodeData>[] = useMemo(() => {
+  const initialNodes: Node[] = useMemo(() => {
     const maxConnections = Math.max(...Object.values(connectionCounts), 1);
 
     return effectiveNodes.map((node) => ({
@@ -256,7 +257,7 @@ function TangleCausalGraphInner({
   }, [effectiveNodes, positions, connectionCounts, highlightedNodeId]);
 
   // Convert to React Flow edges using effectiveNodes
-  const initialEdges: Edge<TangleEdgeData>[] = useMemo(() => {
+  const initialEdges: Edge[] = useMemo(() => {
     return causalEdges.map((edge, idx) => {
       // Find nodes with flexible matching (exact or partial)
       const sourceNode = effectiveNodes.find(n =>
@@ -460,7 +461,7 @@ function TangleCausalGraphInner({
           {isFullScreen && (
             <MiniMap
               nodeColor={(node) => {
-                const data = node.data as TangleNodeData;
+                const data = node.data as unknown as TangleNodeData;
                 if (data?.isHighlighted) return '#1E40AF';
                 if (data?.nodeType === 'event') return '#DC2626';
                 if (data?.nodeType === 'decision') return '#059669';

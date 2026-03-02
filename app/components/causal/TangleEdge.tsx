@@ -1,7 +1,7 @@
 'use client';
 
 import React, { memo, useMemo } from 'react';
-import { EdgeProps, getBezierPath, EdgeLabelRenderer } from 'reactflow';
+import { EdgeProps, getBezierPath, EdgeLabelRenderer } from '@xyflow/react';
 import { RELATION_CONFIG } from '@/app/types/causal';
 
 export interface TangleEdgeData {
@@ -32,11 +32,12 @@ function TangleEdgeComponent({
   data,
   markerEnd,
   style,
-}: EdgeProps<TangleEdgeData>) {
-  const relationType = data?.relationType || 'causes';
-  const confidence = data?.confidence || 0.5;
-  const sourcesCount = data?.sourceArticlesCount || 1;
-  const isHighlighted = data?.isHighlighted || false;
+}: EdgeProps) {
+  const d = data as unknown as TangleEdgeData | undefined;
+  const relationType = d?.relationType || 'causes';
+  const confidence = d?.confidence || 0.5;
+  const sourcesCount = d?.sourceArticlesCount || 1;
+  const isHighlighted = d?.isHighlighted || false;
 
   // Calculate curved path with organic curvature
   const curvature = useMemo(() => {
@@ -110,7 +111,7 @@ function TangleEdgeComponent({
       />
 
       {/* Confidence label on hover - positioned along the edge */}
-      {isHighlighted && data?.label && (
+      {isHighlighted && d?.label && (
         <EdgeLabelRenderer>
           <div
             style={{
@@ -127,7 +128,7 @@ function TangleEdgeComponent({
               whiteSpace: 'nowrap',
             }}
           >
-            {data.label}
+            {d.label}
           </div>
         </EdgeLabelRenderer>
       )}

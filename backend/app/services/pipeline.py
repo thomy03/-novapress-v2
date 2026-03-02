@@ -692,15 +692,22 @@ class PipelineEngine:
                         search_enriched_data = await self.search_enrichment.enrich_cluster(
                             cluster_topic=search_topic[:200],  # Limit topic length
                             key_entities=current_entities,
-                            claims_to_verify=claims_to_verify
+                            claims_to_verify=claims_to_verify,
+                            category=cluster.get("predicted_category", ""),
                         )
 
                         if search_enriched_data:
-                            if search_enriched_data.perplexity_context or search_enriched_data.grok_context:
+                            has_data = (
+                                search_enriched_data.perplexity_context
+                                or search_enriched_data.grok_context
+                                or search_enriched_data.reddit_discussions
+                            )
+                            if has_data:
                                 search_context_text = self.search_enrichment.format_for_llm_prompt(search_enriched_data)
                                 enrichment_status = "complete"
                                 logger.success(f"🌐 Enrichment COMPLETE: Perplexity={bool(search_enriched_data.perplexity_context)}, "
                                            f"Grok={bool(search_enriched_data.grok_context)}, "
+                                           f"Reddit={len(search_enriched_data.reddit_discussions)}, "
                                            f"Sentiment={search_enriched_data.social_sentiment or 'N/A'}, "
                                            f"Facts={len(search_enriched_data.fact_check_notes)}")
                             else:
@@ -887,6 +894,16 @@ Contenu existant (extrait):
                     synthesis["fact_check_notes"] = search_enriched_data.fact_check_notes[:5] if search_enriched_data.fact_check_notes else []
                     # Store trending reactions
                     synthesis["trending_reactions"] = search_enriched_data.trending_reactions[:5] if search_enriched_data.trending_reactions else []
+                    # Store detailed social intelligence (X/Twitter)
+                    synthesis["social_tweets"] = getattr(search_enriched_data, 'social_tweets', [])[:5]
+                    synthesis["social_influencers"] = getattr(search_enriched_data, 'social_influencers', [])[:5]
+                    synthesis["social_engagement"] = getattr(search_enriched_data, 'social_engagement', {})
+                    synthesis["social_narrative_threads"] = getattr(search_enriched_data, 'social_narrative_threads', [])[:3]
+                    # Store Reddit social intelligence
+                    synthesis["reddit_discussions"] = getattr(search_enriched_data, 'reddit_discussions', [])[:5]
+                    synthesis["reddit_sentiment"] = getattr(search_enriched_data, 'reddit_sentiment', "")
+                    synthesis["reddit_context"] = (getattr(search_enriched_data, 'reddit_context', "") or "")[:1500]
+                    synthesis["has_reddit"] = bool(getattr(search_enriched_data, 'reddit_discussions', []))
                     # Store web sources with full metadata
                     synthesis["web_sources"] = [s.get('url', '') for s in search_enriched_data.perplexity_sources[:5]] if search_enriched_data.perplexity_sources else []
                     synthesis["web_sources_full"] = search_enriched_data.perplexity_sources[:10] if search_enriched_data.perplexity_sources else []
@@ -1048,6 +1065,23 @@ Contenu existant (extrait):
                     synthesis["transparency_label"] = "N/A"
                     synthesis["transparency_breakdown"] = {}
 
+                # === IMAGE GENERATION (fal.ai) ===
+                try:
+                    from app.services.image_generator import get_image_generator
+                    img_gen = get_image_generator()
+                    if img_gen.enabled:
+                        image_url = await img_gen.generate_for_synthesis(synthesis)
+                        if image_url:
+                            synthesis["image_url"] = image_url
+                            logger.info(f"🖼️ Image generated for synthesis {base_synthesis_id[:8]}")
+                        else:
+                            synthesis["image_url"] = None
+                    else:
+                        synthesis["image_url"] = None
+                except Exception as img_error:
+                    logger.warning(f"⚠️ Image generation failed: {img_error}")
+                    synthesis["image_url"] = None
+
                 # Add the neutral/base synthesis
                 syntheses.append(synthesis)
                 logger.info(f"📝 Base synthesis generated: {base_synthesis_id[:8]}...")
@@ -1073,6 +1107,22 @@ Contenu existant (extrait):
 
                 # === INTELLIGENCE HUB: Entity Resolution + Topic Assignment ===
                 await self._process_intelligence_hub(synthesis, articles, cluster_embeddings)
+
+                # === RECURRING THEME AGENT: Deep enrichment for recurring topics ===
+                related_count = synthesis.get("related_synthesis_count", 0)
+                if related_count >= 2:
+                    try:
+                        from app.services.recurring_theme_agent import get_recurring_theme_agent
+                        theme_agent = get_recurring_theme_agent()
+                        asyncio.create_task(
+                            theme_agent.maybe_enrich(
+                                synthesis=synthesis,
+                                topic_id=synthesis.get("topic_id"),
+                                related_count=related_count,
+                            )
+                        )
+                    except Exception as e:
+                        logger.warning(f"⚠️ RecurringThemeAgent trigger failed: {e}")
 
                 # === KEYWORD LEARNING: Extract entities for dynamic persona selection ===
                 if self.keyword_learner:

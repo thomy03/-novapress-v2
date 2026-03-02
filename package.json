@@ -17,13 +17,13 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.16",
+    "@xyflow/react": "^12.10.1",
     "next": "15.4.6",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-force-graph-2d": "^1.29.0",
     "react-is": "^19.2.3",
     "react-simple-maps": "^3.0.0",
-    "reactflow": "^11.11.4",
     "recharts": "^3.6.0"
   },
   "devDependencies": {

@@ -166,22 +166,74 @@ class TopicTracker:
                 reverse=True
             )
 
+            # Compute extra KPIs
+            # Duration in days since first synthesis
+            timestamps = []
+            for s in syntheses:
+                ts = s.get('created_at')
+                if isinstance(ts, (int, float)) and ts > 0:
+                    timestamps.append(ts)
+            duration_days = 0
+            first_date_iso = ""
+            if timestamps:
+                from datetime import datetime as dt
+                earliest = min(timestamps)
+                latest = max(timestamps)
+                duration_days = max(1, int((latest - earliest) / 86400))
+                try:
+                    first_date_iso = dt.fromtimestamp(earliest).isoformat()
+                except (ValueError, TypeError, OSError):
+                    first_date_iso = ""
+
+            # Average transparency score
+            transparency_scores = [
+                s.get('transparency_score', 0) for s in syntheses
+                if s.get('transparency_score') is not None and s.get('transparency_score', 0) > 0
+            ]
+            transparency_avg = round(sum(transparency_scores) / len(transparency_scores), 1) if transparency_scores else 0
+
+            # Total unique sources across all syntheses
+            all_source_names = set()
+            for s in syntheses:
+                src_articles = s.get('source_articles', [])
+                if isinstance(src_articles, list):
+                    for src in src_articles:
+                        if isinstance(src, dict) and src.get('name'):
+                            all_source_names.add(src['name'])
+                # Also count from num_sources field
+                sources_list = s.get('sources', [])
+                if isinstance(sources_list, list):
+                    for sn in sources_list:
+                        if isinstance(sn, str) and sn:
+                            all_source_names.add(sn)
+            sources_total = len(all_source_names)
+
+            # Sentiment evolution for enriched KPIs
+            sentiment_evolution = self._build_sentiment_evolution(syntheses)
+
             # Aggregate data
             dashboard = {
                 "topic": topic_name,
                 "synthesis_count": len(syntheses),
+                "duration_days": duration_days,
+                "first_date": first_date_iso,
+                "transparency_avg": transparency_avg,
+                "sources_total": sources_total,
                 "syntheses": [
                     {
                         "id": s.get('id', s.get('synthesis_id', '')),
                         "title": s.get('title', ''),
                         "date": _safe_date_str(s.get('created_at')),
                         "category": s.get('category', 'MONDE'),
-                        "summary": s.get('summary', '')[:200] + '...' if len(s.get('summary', '')) > 200 else s.get('summary', '')
+                        "summary": s.get('summary', '')[:200] + '...' if len(s.get('summary', '')) > 200 else s.get('summary', ''),
+                        "sentiment": s.get('sentiment', 'neutral'),
+                        "num_sources": s.get('num_sources', 0),
+                        "transparency_score": s.get('transparency_score', 0),
                     }
                     for s in syntheses
                 ],
                 "aggregated_causal_graph": self._aggregate_causal_graphs(syntheses),
-                "sentiment_evolution": self._build_sentiment_evolution(syntheses),
+                "sentiment_evolution": sentiment_evolution,
                 "key_entities": self._aggregate_key_entities(syntheses),
                 "predictions_summary": self._aggregate_predictions(syntheses),
                 "geo_focus": self._aggregate_geo_mentions(syntheses),

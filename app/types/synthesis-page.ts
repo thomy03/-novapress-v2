@@ -84,6 +84,8 @@ export interface SynthesisData {
   // Feedback
   avgRating?: number;
   feedbackCount?: number;
+  // Image (fal.ai generated)
+  imageUrl?: string;
 }
 
 // ========== Related Synthesis Type ==========

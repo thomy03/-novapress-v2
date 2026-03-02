@@ -25,7 +25,9 @@ def calculate_target_length(
     num_sources: int,
     num_chunks: int = 0,
     has_history: bool = False,
-    is_update: bool = False
+    is_update: bool = False,
+    related_count: int = 0,
+    narrative_arc: str = "emerging"
 ) -> tuple[int, int, int]:
     """
     Calculate dynamic target length for synthesis based on available context.
@@ -35,6 +37,8 @@ def calculate_target_length(
         num_chunks: Number of RAG chunks (if using advanced RAG)
         has_history: Whether historical context is available (TNA)
         is_update: Whether this is an update to an existing synthesis
+        related_count: Number of related past syntheses (scales depth progressively)
+        narrative_arc: Current story phase (emerging/developing/peak/declining/resolved)
 
     Returns:
         Tuple of (min_words, max_words, max_tokens)
@@ -43,7 +47,8 @@ def calculate_target_length(
         - Base: 450 mots (garantit minimum 600 mots)
         - +80 mots par source au-dela de 3
         - +40 mots par chunk RAG
-        - +200 mots si contexte historique
+        - +progressive history bonus based on related_count (0→600 cap)
+        - +arc bonus (peak/developing get more depth)
         - +300 mots si mise a jour (UPDATE)
         - min: 600 mots, PAS DE LIMITE MAX (syntheses peuvent grandir)
         - max_tokens: adapte a la longueur cible
@@ -51,19 +56,34 @@ def calculate_target_length(
     base = 450
 
     # Bonus for additional sources (beyond the first 3)
-    source_bonus = max(0, num_sources - 3) * 80  # Augmente de 50 a 80
+    source_bonus = max(0, num_sources - 3) * 80
 
     # Bonus for RAG chunks
-    chunk_bonus = num_chunks * 40  # Augmente de 30 a 40
+    chunk_bonus = num_chunks * 40
 
-    # Bonus for historical context
-    history_bonus = 200 if has_history else 0  # Augmente de 150 a 200
+    # Progressive history bonus based on related syntheses count
+    # 0 related = 0, 1 = 150, 2 = 300, 3 = 450, 4+ = 600 (capped)
+    # Falls back to binary +200 if related_count not provided but has_history is True
+    if related_count > 0:
+        history_bonus = min(related_count * 150, 600)
+    else:
+        history_bonus = 200 if has_history else 0
+
+    # Arc-based bonus: peak/developing stories deserve more depth
+    arc_bonuses = {
+        "emerging": 0,
+        "developing": 100,
+        "peak": 200,
+        "declining": 50,
+        "resolved": 0
+    }
+    arc_bonus = arc_bonuses.get(narrative_arc, 0)
 
     # Bonus for updates (syntheses qui s'enrichissent)
     update_bonus = 300 if is_update else 0
 
     # Calculate word counts
-    min_words = base + source_bonus + chunk_bonus + history_bonus + update_bonus
+    min_words = base + source_bonus + chunk_bonus + history_bonus + arc_bonus + update_bonus
 
     # MINIMUM 600 MOTS - PAS DE LIMITE MAXIMUM
     min_words = max(600, min_words)
@@ -683,11 +703,31 @@ Format JSON strict:
         num_chunks = len(enhanced_context.get('top_chunks', []))
         has_history = bool(historical_context_text and len(historical_context_text) > 50)
 
+        # Count related syntheses from historical context header
+        related_count = 0
+        if historical_context_text:
+            # Parse RELATED_SYNTHESIS_COUNT header if present
+            for line in historical_context_text.split('\n'):
+                if line.strip().startswith("RELATED_SYNTHESIS_COUNT:"):
+                    try:
+                        related_count = int(line.strip().split(":")[1])
+                    except (ValueError, IndexError):
+                        pass
+                    break
+            # Fallback: count "[N]" entries under "ANALYSES PRÉCÉDENTES"
+            if related_count == 0 and has_history:
+                related_count = sum(
+                    1 for line in historical_context_text.split('\n')
+                    if line.strip().startswith('[') and ']' in line and line.strip()[1].isdigit()
+                )
+
         # Calculate dynamic length based on context richness
         min_words, max_words, max_tokens = calculate_target_length(
             num_sources=num_sources,
             num_chunks=num_chunks,
-            has_history=has_history
+            has_history=has_history,
+            related_count=related_count,
+            narrative_arc=narrative_arc
         )
 
         # Format chunks

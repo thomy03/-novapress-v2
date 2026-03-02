@@ -80,6 +80,19 @@ export function SynthesisHeader({ synthesis, formatDate }: SynthesisHeaderProps)
           </>
         )}
       </div>
+
+      {/* Editorial Image (fal.ai generated) */}
+      {synthesis.imageUrl && (
+        <div style={styles.imageContainer}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={synthesis.imageUrl}
+            alt={`Illustration: ${synthesis.title}`}
+            style={styles.editorialImage}
+          />
+          <span style={styles.imageCaption}>Illustration generee par IA</span>
+        </div>
+      )}
     </>
   );
 }
@@ -166,6 +179,25 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: '8px',
     height: '8px',
     borderRadius: '50%',
+  },
+  imageContainer: {
+    marginBottom: '32px',
+    position: 'relative',
+  },
+  editorialImage: {
+    width: '100%',
+    height: 'auto',
+    maxHeight: '400px',
+    objectFit: 'cover' as const,
+    display: 'block',
+  },
+  imageCaption: {
+    display: 'block',
+    fontSize: '11px',
+    color: '#9CA3AF',
+    fontStyle: 'italic',
+    marginTop: '6px',
+    textAlign: 'right' as const,
   },
 };
 

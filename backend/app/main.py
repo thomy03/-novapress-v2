@@ -35,7 +35,7 @@ logger.add(
     format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
     colorize=True
 )
-from app.api.routes import articles, trending, auth, search, websocket, syntheses, time_traveler, causal, admin, intelligence, artifacts, push, billing, subscription, waitlist
+from app.api.routes import articles, trending, auth, search, websocket, syntheses, time_traveler, causal, admin, intelligence, artifacts, push, billing, subscription, waitlist, chat
 from app.core.circuit_breaker import init_circuit_breakers
 from app.core.metrics import generate_metrics, get_content_type, set_app_info
 
@@ -294,6 +294,7 @@ app.include_router(push.router, prefix=f"{settings.API_V1_PREFIX}/push", tags=["
 app.include_router(billing.router, prefix=f"{settings.API_V1_PREFIX}/billing", tags=["Billing"])
 app.include_router(subscription.router, prefix=f"{settings.API_V1_PREFIX}/subscription", tags=["Subscription"])
 app.include_router(waitlist.router, prefix=f"{settings.API_V1_PREFIX}/waitlist", tags=["Waitlist"])
+app.include_router(chat.router, prefix="/ws", tags=["Chat"])
 
 
 # ─── Telegram Webhook ───

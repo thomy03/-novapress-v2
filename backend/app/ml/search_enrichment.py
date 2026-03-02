@@ -91,6 +91,17 @@ class EnrichedContext:
     social_sentiment: str = ""  # positive, negative, neutral, mixed
     trending_reactions: List[str] = field(default_factory=list)
 
+    # Detailed social intelligence (X/Twitter via Grok)
+    social_tweets: List[Dict[str, Any]] = field(default_factory=list)
+    social_influencers: List[Dict[str, Any]] = field(default_factory=list)
+    social_engagement: Dict[str, Any] = field(default_factory=dict)
+    social_narrative_threads: List[str] = field(default_factory=list)
+
+    # Reddit social intelligence
+    reddit_discussions: List[Dict[str, Any]] = field(default_factory=list)
+    reddit_sentiment: str = ""
+    reddit_context: str = ""
+
     # Combined
     fact_check_notes: List[str] = field(default_factory=list)
     additional_context: str = ""
@@ -103,6 +114,9 @@ class EnrichedContext:
             "grok_context": self.grok_context,
             "social_sentiment": self.social_sentiment,
             "trending_reactions": self.trending_reactions,
+            "reddit_discussions": self.reddit_discussions,
+            "reddit_sentiment": self.reddit_sentiment,
+            "reddit_context": self.reddit_context,
             "fact_check_notes": self.fact_check_notes,
             "additional_context": self.additional_context,
             "enrichment_timestamp": self.enrichment_timestamp
@@ -412,16 +426,231 @@ Respond in JSON format:
             logger.error(f"Grok breaking context failed after retries: {e}")
             return ""
 
+    async def get_detailed_social_context(
+        self,
+        topic: str,
+        max_tokens: int = 600
+    ) -> Dict[str, Any]:
+        """
+        Get detailed social context including specific tweets, influential accounts,
+        and engagement metrics for a topic.
+
+        Args:
+            topic: Topic to analyze
+            max_tokens: Max response tokens
+
+        Returns:
+            Dict with detailed social intelligence
+        """
+        if not self.api_key:
+            return {"tweets": [], "influencers": [], "engagement": {}}
+
+        async def _make_request():
+            async with httpx.AsyncClient(timeout=45.0) as client:
+                response = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": self.model,
+                        "messages": [
+                            {
+                                "role": "system",
+                                "content": """You are an expert social media intelligence analyst with access to X/Twitter.
+For the given topic, provide a DETAILED analysis in strict JSON format:
+{
+    "top_tweets": [
+        {"author": "@username", "text": "tweet text", "engagement": "high|medium|low", "url": "https://x.com/..."},
+    ],
+    "influential_accounts": [
+        {"handle": "@username", "role": "journalist|politician|expert|influencer", "stance": "for|against|neutral"}
+    ],
+    "engagement_summary": {
+        "volume": "high|medium|low",
+        "trending_hashtags": ["#tag1", "#tag2"],
+        "dominant_sentiment": "positive|negative|neutral|mixed",
+        "controversy_level": "high|medium|low|none"
+    },
+    "narrative_threads": ["thread1 description", "thread2 description"]
+}
+Include 3-5 top tweets and 3-5 influential accounts. Be factual and specific."""
+                            },
+                            {
+                                "role": "user",
+                                "content": f"Analyse détaillée du contexte social sur X/Twitter pour: {topic}"
+                            }
+                        ],
+                        "max_tokens": max_tokens
+                    }
+                )
+                response.raise_for_status()
+                return response.json()
+
+        try:
+            data = await self.circuit_breaker.call(
+                retry_with_backoff, _make_request, max_retries=2, base_delay=2.0
+            )
+            content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+
+            try:
+                import json
+                parsed = json.loads(content)
+                logger.success(f"Grok detailed social: {len(parsed.get('top_tweets', []))} tweets, "
+                              f"{len(parsed.get('influential_accounts', []))} influencers")
+                return {
+                    "tweets": parsed.get("top_tweets", [])[:5],
+                    "influencers": parsed.get("influential_accounts", [])[:5],
+                    "engagement": parsed.get("engagement_summary", {}),
+                    "narrative_threads": parsed.get("narrative_threads", []),
+                }
+            except json.JSONDecodeError:
+                return {"tweets": [], "influencers": [], "engagement": {}, "raw_context": content}
+
+        except CircuitOpenError:
+            logger.warning("Grok circuit breaker open for detailed social context")
+            return {"tweets": [], "influencers": [], "engagement": {}}
+        except Exception as e:
+            logger.error(f"Grok detailed social context failed: {e}")
+            return {"tweets": [], "influencers": [], "engagement": {}}
+
+
+class RedditClient:
+    """
+    Reddit public API client for topic-specific discussion enrichment.
+    Uses Reddit's search JSON API (no OAuth required for read-only).
+    """
+
+    SEARCH_URL = "https://www.reddit.com/search.json"
+    HEADERS = {
+        "User-Agent": "NovaPress/2.0 (news-intelligence; +https://novapressai.duckdns.org)"
+    }
+    # Subreddits to prioritize by category
+    CATEGORY_SUBREDDITS: Dict[str, List[str]] = {
+        "TECH": ["technology", "programming", "artificialintelligence", "MachineLearning"],
+        "ECONOMIE": ["economics", "finance", "wallstreetbets", "investing"],
+        "POLITIQUE": ["politics", "geopolitics", "europe", "france"],
+        "MONDE": ["worldnews", "news", "europe", "geopolitics"],
+        "SCIENCES": ["science", "space", "environment", "Futurology"],
+        "SPORT": ["sports", "soccer", "football", "nba"],
+        "CULTURE": ["movies", "books", "Music", "entertainment"],
+    }
+
+    async def search_discussions(
+        self,
+        topic: str,
+        category: str = "",
+        limit: int = 5,
+        time_filter: str = "week",
+    ) -> Dict[str, Any]:
+        """
+        Search Reddit for discussions about a topic.
+
+        Returns dict with:
+            discussions: list of {title, subreddit, url, score, num_comments, selftext_preview}
+            sentiment_summary: overall tone
+            context: formatted text for LLM
+        """
+        result: Dict[str, Any] = {"discussions": [], "sentiment_summary": "", "context": ""}
+
+        try:
+            async with httpx.AsyncClient(timeout=15.0, headers=self.HEADERS) as client:
+                # Broad search across Reddit
+                params = {
+                    "q": topic[:100],
+                    "sort": "relevance",
+                    "t": time_filter,
+                    "limit": limit,
+                    "type": "link",
+                }
+
+                # If category has known subreddits, restrict search
+                cat_subs = self.CATEGORY_SUBREDDITS.get(category.upper(), [])
+                if cat_subs:
+                    # Search within category subreddits first
+                    sub_str = "+".join(cat_subs[:4])
+                    sub_url = f"https://www.reddit.com/r/{sub_str}/search.json"
+                    params["restrict_sr"] = "on"
+                    response = await client.get(sub_url, params=params)
+                else:
+                    response = await client.get(self.SEARCH_URL, params=params)
+
+                if response.status_code != 200:
+                    logger.warning(f"Reddit search HTTP {response.status_code}")
+                    return result
+
+                data = response.json()
+                posts = data.get("data", {}).get("children", [])
+
+                discussions = []
+                positive = 0
+                negative = 0
+                for post in posts:
+                    pd = post.get("data", {})
+                    title = pd.get("title", "")
+                    if len(title) < 15:
+                        continue
+
+                    score = pd.get("score", 0)
+                    selftext = pd.get("selftext", "")[:300]
+                    num_comments = pd.get("num_comments", 0)
+
+                    discussions.append({
+                        "title": title,
+                        "subreddit": pd.get("subreddit", ""),
+                        "url": f"https://reddit.com{pd.get('permalink', '')}",
+                        "score": score,
+                        "num_comments": num_comments,
+                        "selftext_preview": selftext,
+                        "upvote_ratio": pd.get("upvote_ratio", 0.5),
+                    })
+
+                    # Simple sentiment heuristic from upvote_ratio
+                    ratio = pd.get("upvote_ratio", 0.5)
+                    if ratio > 0.75:
+                        positive += 1
+                    elif ratio < 0.45:
+                        negative += 1
+
+                result["discussions"] = discussions
+
+                # Derive sentiment
+                total = len(discussions)
+                if total > 0:
+                    if positive > total * 0.6:
+                        result["sentiment_summary"] = "positive"
+                    elif negative > total * 0.4:
+                        result["sentiment_summary"] = "negative"
+                    else:
+                        result["sentiment_summary"] = "mixed"
+
+                # Format context for LLM
+                if discussions:
+                    ctx_parts = []
+                    for d in discussions[:3]:
+                        engagement = f"score {d['score']}, {d['num_comments']} commentaires"
+                        ctx_parts.append(
+                            f"  r/{d['subreddit']}: \"{d['title']}\" [{engagement}]"
+                        )
+                    result["context"] = "\n".join(ctx_parts)
+
+        except Exception as e:
+            logger.warning(f"Reddit search failed: {e}")
+
+        return result
+
 
 class SearchEnrichmentEngine:
     """
     Main engine for search-based synthesis enrichment.
-    Combines Perplexity and Grok for comprehensive context.
+    Combines Perplexity, Grok, and Reddit for comprehensive context.
     """
 
     def __init__(self):
         self.perplexity = PerplexityClient()
         self.grok = GrokClient()
+        self.reddit = RedditClient()
 
     def set_api_keys(self, perplexity_key: str = None, xai_key: str = None):
         """Set API keys after initialization"""
@@ -436,7 +665,9 @@ class SearchEnrichmentEngine:
         key_entities: List[str] = None,
         claims_to_verify: List[str] = None,
         use_perplexity: bool = True,
-        use_grok: bool = True
+        use_grok: bool = True,
+        use_reddit: bool = True,
+        category: str = "",
     ) -> EnrichedContext:
         """
         Enrich a cluster with search-based context.
@@ -447,6 +678,8 @@ class SearchEnrichmentEngine:
             claims_to_verify: Specific claims for fact-checking
             use_perplexity: Enable Perplexity search
             use_grok: Enable Grok social context
+            use_reddit: Enable Reddit discussion search
+            category: Synthesis category (TECH, MONDE, etc.)
 
         Returns:
             EnrichedContext with all gathered information
@@ -464,6 +697,10 @@ class SearchEnrichmentEngine:
         # Grok: Social sentiment + breaking news
         if use_grok and self.grok.api_key:
             tasks.append(self._get_grok_context(cluster_topic))
+
+        # Reddit: Discussion context (free, no API key needed)
+        if use_reddit:
+            tasks.append(self._get_reddit_context(cluster_topic, category))
 
         if not tasks:
             logger.warning("No search APIs configured for enrichment")
@@ -488,11 +725,23 @@ class SearchEnrichmentEngine:
                     context.grok_context = result["grok_context"]
                     context.social_sentiment = result.get("social_sentiment", "")
                     context.trending_reactions = result.get("trending_reactions", [])
+                    context.social_tweets = result.get("social_tweets", [])
+                    context.social_influencers = result.get("social_influencers", [])
+                    context.social_engagement = result.get("social_engagement", {})
+                    context.social_narrative_threads = result.get("social_narrative_threads", [])
+
+                if "reddit_discussions" in result:
+                    context.reddit_discussions = result.get("reddit_discussions", [])
+                    context.reddit_sentiment = result.get("reddit_sentiment", "")
+                    context.reddit_context = result.get("reddit_context", "")
 
         # Combine into additional context
         context.additional_context = self._format_combined_context(context)
 
-        logger.success(f"Enrichment complete: Perplexity={bool(context.perplexity_context)}, Grok={bool(context.grok_context)}")
+        logger.success(
+            f"Enrichment complete: Perplexity={bool(context.perplexity_context)}, "
+            f"Grok={bool(context.grok_context)}, Reddit={bool(context.reddit_discussions)}"
+        )
         return context
 
     async def _get_perplexity_context(
@@ -522,20 +771,70 @@ class SearchEnrichmentEngine:
 
         return result
 
+    async def _get_reddit_context(self, topic: str, category: str = "") -> Dict[str, Any]:
+        """Get Reddit discussion context for a topic"""
+        result: Dict[str, Any] = {
+            "reddit_discussions": [],
+            "reddit_sentiment": "",
+            "reddit_context": "",
+        }
+
+        try:
+            reddit_data = await self.reddit.search_discussions(
+                topic=topic, category=category, limit=5, time_filter="week"
+            )
+            result["reddit_discussions"] = reddit_data.get("discussions", [])
+            result["reddit_sentiment"] = reddit_data.get("sentiment_summary", "")
+            result["reddit_context"] = reddit_data.get("context", "")
+        except Exception as e:
+            logger.warning(f"Reddit enrichment failed (non-critical): {e}")
+
+        return result
+
     async def _get_grok_context(self, topic: str) -> Dict[str, Any]:
-        """Get Grok social context and breaking news"""
+        """Get Grok social context, breaking news, and detailed social intelligence"""
         result = {
             "grok_context": "",
             "social_sentiment": "",
             "trending_reactions": [],
-            "has_breaking": False
+            "has_breaking": False,
+            "social_tweets": [],
+            "social_influencers": [],
+            "social_engagement": {},
+            "social_narrative_threads": [],
         }
 
-        # Social sentiment analysis
+        # Social sentiment analysis (basic)
         social = await self.grok.get_social_context(topic)
         result["grok_context"] = social.get("content", "")
         result["social_sentiment"] = social.get("sentiment", "")
         result["trending_reactions"] = social.get("reactions", [])
+
+        # Detailed social intelligence (tweets, influencers, engagement)
+        try:
+            detailed = await self.grok.get_detailed_social_context(topic)
+            result["social_tweets"] = detailed.get("tweets", [])
+            result["social_influencers"] = detailed.get("influencers", [])
+            result["social_engagement"] = detailed.get("engagement", {})
+            result["social_narrative_threads"] = detailed.get("narrative_threads", [])
+
+            # Enrich grok_context with detailed findings
+            if detailed.get("tweets"):
+                tweets_text = "\n".join([
+                    f"  {t.get('author', '?')}: \"{t.get('text', '')[:120]}\" [{t.get('engagement', '?')}]"
+                    for t in detailed["tweets"][:3]
+                ])
+                result["grok_context"] += f"\n\n📱 TWEETS MARQUANTS:\n{tweets_text}"
+
+            if detailed.get("influencers"):
+                influencers_text = ", ".join([
+                    f"{i.get('handle', '?')} ({i.get('role', '?')}, {i.get('stance', '?')})"
+                    for i in detailed["influencers"][:3]
+                ])
+                result["grok_context"] += f"\n\n👥 VOIX INFLUENTES: {influencers_text}"
+
+        except Exception as e:
+            logger.warning(f"Detailed social context failed (non-critical): {e}")
 
         # Breaking news (enabled via config)
         if getattr(settings, 'ENABLE_BREAKING_NEWS', False):
@@ -585,6 +884,13 @@ Sentiment: {context.social_sentiment.upper() if context.social_sentiment else 'N
             if context.trending_reactions:
                 reactions = ", ".join(context.trending_reactions[:5])
                 sections.append(f"Réactions tendance: {reactions}")
+
+        if context.reddit_context:
+            sections.append(f"""
+🔴 DISCUSSIONS REDDIT:
+Sentiment: {context.reddit_sentiment.upper() if context.reddit_sentiment else 'N/A'}
+{context.reddit_context}
+""")
 
         return "\n".join(sections) if sections else ""
 

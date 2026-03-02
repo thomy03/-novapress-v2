@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useCallback, useState, useEffect, useMemo } from 'react';
-import ReactFlow, {
+import {
+  ReactFlow,
   Node,
   Edge,
   Background,
@@ -13,8 +14,8 @@ import ReactFlow, {
   Position,
   ConnectionMode,
   ReactFlowProvider,
-} from 'reactflow';
-import 'reactflow/dist/style.css';
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
 
 import NeuralNodeComponent, { NeuralNodeData } from './NeuralNode';
 import AnimatedEdgeComponent, { AnimatedEdgeData } from './AnimatedEdge';
@@ -149,7 +150,7 @@ function NeuralCausalGraphInner({
   );
 
   // Convert causal data to React Flow format
-  const initialNodes: Node<NeuralNodeData>[] = useMemo(() => {
+  const initialNodes: Node[] = useMemo(() => {
     const positions = calculateNeuralLayout(causalNodes, causalEdges, centralEntity);
 
     return causalNodes.map((node) => ({
@@ -168,7 +169,7 @@ function NeuralCausalGraphInner({
     }));
   }, [causalNodes, causalEdges, centralEntity, complexity.dendritesPerNode]);
 
-  const initialEdges: Edge<AnimatedEdgeData>[] = useMemo(() => {
+  const initialEdges: Edge[] = useMemo(() => {
     return causalEdges.map((edge, idx) => {
       const sourceNode = causalNodes.find(n => n.label === edge.cause_text);
       const targetNode = causalNodes.find(n => n.label === edge.effect_text);
@@ -259,7 +260,7 @@ function NeuralCausalGraphInner({
         const outgoingEdges = edges.filter((e) => e.source === nodeId);
 
         outgoingEdges.forEach((edge, index) => {
-          const edgeDelay = 200 + (1 - (edge.data?.confidence || 0.5)) * 300;
+          const edgeDelay = 200 + (1 - (Number(edge.data?.confidence) || 0.5)) * 300;
 
           setTimeout(() => {
             // Animate the edge

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { memo } from 'react';
-import { EdgeProps, getBezierPath, EdgeLabelRenderer } from 'reactflow';
+import { EdgeProps, getBezierPath, EdgeLabelRenderer } from '@xyflow/react';
 import { RelationType, RELATION_CONFIG } from '@/app/types/causal';
 
 export interface AnimatedEdgeData {
@@ -42,12 +42,13 @@ function AnimatedEdgeComponent({
   data,
   markerEnd,
   style,
-}: EdgeProps<AnimatedEdgeData>) {
-  const relationType = data?.relationType || 'causes';
-  const confidence = data?.confidence || 0.5;
-  const sourcesCount = data?.sourceArticlesCount || 1;
-  const isAnimated = data?.isAnimated || false;
-  const cascadeLevel = data?.cascadeLevel || 0;
+}: EdgeProps) {
+  const d = data as unknown as AnimatedEdgeData | undefined;
+  const relationType = d?.relationType || 'causes';
+  const confidence = d?.confidence || 0.5;
+  const sourcesCount = d?.sourceArticlesCount || 1;
+  const isAnimated = d?.isAnimated || false;
+  const cascadeLevel = d?.cascadeLevel || 0;
 
   // Dynamic thickness based on confidence and sources count (2-5px) - MORE VISIBLE
   const strokeWidth = Math.min(5, Math.max(2, 2 + confidence * 2 + sourcesCount * 0.3));

@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     # xAI Grok - https://docs.x.ai/
     XAI_API_KEY: str = ""
 
+    # Image Generation (Optional) - fal.ai
+    FAL_API_KEY: str = ""  # https://fal.ai/dashboard/keys
+    FAL_MODEL: str = "fal-ai/flux/schnell"  # Fast & cheap (~$0.003/image)
+
     # BGE-M3 Embeddings (Open Source)
     EMBEDDING_MODEL: str = "BAAI/bge-m3"
     EMBEDDING_DEVICE: str = "cpu"  # or "cuda" if GPU available

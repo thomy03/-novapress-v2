@@ -79,6 +79,11 @@ class User(Base):
         nullable=True,
         default=None,
     )
+    is_admin: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+    )
     is_active: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,

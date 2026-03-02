@@ -1,17 +1,23 @@
 """
 Admin API Routes - Pipeline Management
-Protected by simple API key authentication
+Protected by API key authentication OR JWT admin user
 """
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, HTTPException, Header, Depends, Query
+from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
 from loguru import logger
 import os
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.services.pipeline_manager import get_pipeline_manager
 from app.core.circuit_breaker import get_all_circuit_statuses
 from app.core.config import settings
+from app.db.session import get_db
+from app.models.user import User
 
 router = APIRouter()
 
@@ -52,6 +58,31 @@ def verify_admin_key(x_admin_key: str = Header(None, alias="x-admin-key")):
             detail="Invalid or missing admin API key"
         )
     return True
+
+
+@router.post("/promote")
+async def promote_to_admin(
+    email: str = Query(..., description="Email of the user to promote"),
+    x_admin_key: str = Header(None, alias="x-admin-key"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Promote a user to admin and set their subscription to enterprise.
+    Requires x-admin-key header (bootstrap operation).
+    """
+    verify_admin_key(x_admin_key)
+
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.is_admin = True
+    user.subscription_tier = "enterprise"
+    await db.commit()
+
+    logger.info(f"User {email} promoted to admin")
+    return {"ok": True, "email": email, "is_admin": True, "subscription_tier": "enterprise"}
 
 
 @router.get("/status")

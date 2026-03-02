@@ -2,4 +2,8 @@ export { default as RecurringTopicBadge } from './RecurringTopicBadge';
 export { default as FilsRougesSection } from './FilsRougesSection';
 export { NarrativeArcIndicator, NarrativeArcProgress, NARRATIVE_ARC_CONFIG } from './NarrativeArcIndicator';
 export { TopicMiniTimeline, TopicMiniTimelineInline } from './TopicMiniTimeline';
+export { default as TopicKPIBar } from './TopicKPIBar';
+export { default as TopicTimeline } from './TopicTimeline';
+export { default as SynthesisTable } from './SynthesisTable';
+export { default as PredictionTracker } from './PredictionTracker';
 export type { NarrativeArc } from './NarrativeArcIndicator';

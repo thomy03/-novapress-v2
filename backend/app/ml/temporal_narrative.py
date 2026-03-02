@@ -536,6 +536,9 @@ class TemporalNarrativeEngine:
         sections = []
         num_related = len(historical_context.related_syntheses)
 
+        # Machine-readable header for calculate_target_length() to parse
+        sections.append(f"RELATED_SYNTHESIS_COUNT:{num_related}")
+
         # Header
         sections.append(f"""
 ╔══════════════════════════════════════════════════════════════╗

@@ -13,6 +13,9 @@ import dynamic from 'next/dynamic';
 const BottomNav = dynamic(() => import('./layout/BottomNav'), { ssr: false });
 const MobileHeader = dynamic(() => import('./layout/MobileHeader'), { ssr: false });
 
+// Lazy-load chat widget (client-only, non-blocking)
+const ChatWidget = dynamic(() => import('./chat/ChatWidget'), { ssr: false });
+
 // Lazy-load PWA components (client-only, non-blocking)
 const InstallPrompt = dynamic(
   () => import('./pwa/InstallPrompt').then((m) => ({ default: m.InstallPrompt })),
@@ -81,6 +84,7 @@ export function Providers({ children }: ProvidersProps) {
                   {children}
                 </div>
                 {mounted && isMobile && <BottomNav />}
+                <ChatWidget />
                 <InstallPrompt />
                 <UpdateNotifier />
               </ReadingProfileProvider>

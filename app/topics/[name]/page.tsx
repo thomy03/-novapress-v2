@@ -3,8 +3,21 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { EntityFrequencyChart, SentimentChart } from '@/app/components/charts';
-import { NarrativeArcIndicator } from '@/app/components/topics';
+import {
+  NarrativeArcIndicator,
+  TopicKPIBar,
+  TopicTimeline,
+  SynthesisTable,
+  PredictionTracker,
+} from '@/app/components/topics';
+
+// Lazy-load the causal graph (heavy dependency: reactflow)
+const NeuralCausalGraph = dynamic(
+  () => import('@/app/components/causal/NeuralCausalGraph'),
+  { ssr: false, loading: () => <div style={{ height: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF', fontSize: '14px' }}>Chargement du graphe causal...</div> }
+);
 
 interface SynthesisSummary {
   id: string;
@@ -12,6 +25,9 @@ interface SynthesisSummary {
   date: string;
   category: string;
   summary: string;
+  sentiment: string;
+  num_sources: number;
+  transparency_score: number;
 }
 
 interface KeyEntity {
@@ -36,7 +52,7 @@ interface GeoFocus {
 
 interface CausalGraph {
   nodes: { id: string; label: string; type: string }[];
-  edges: { source: string; target: string; type: string }[];
+  edges: { source: string; target: string; type: string; confidence?: number }[];
   total_nodes: number;
   total_edges: number;
 }
@@ -50,6 +66,10 @@ interface SentimentPoint {
 interface TopicDashboard {
   topic: string;
   synthesis_count: number;
+  duration_days: number;
+  first_date: string;
+  transparency_avg: number;
+  sources_total: number;
   syntheses: SynthesisSummary[];
   aggregated_causal_graph: CausalGraph;
   sentiment_evolution: SentimentPoint[];
@@ -70,6 +90,8 @@ const NARRATIVE_ARC_CONFIG: Record<string, { label: string; color: string; descr
   resolved: { label: 'Resolu', color: '#6B7280', description: 'Sujet clos ou resolu' }
 };
 
+type TabId = 'overview' | 'timeline' | 'table' | 'causal' | 'predictions';
+
 export default function TopicDashboardPage() {
   const params = useParams();
   const topicName = decodeURIComponent(params.name as string);
@@ -77,6 +99,7 @@ export default function TopicDashboardPage() {
   const [dashboard, setDashboard] = useState<TopicDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<TabId>('overview');
 
   useEffect(() => {
     const fetchDashboard = async () => {
@@ -129,7 +152,7 @@ export default function TopicDashboardPage() {
           </h1>
           <p style={{ color: '#6B7280', marginBottom: '24px', fontSize: '14px' }}>{error}</p>
           <Link href="/" style={{ color: '#2563EB', textDecoration: 'none', fontSize: '14px' }}>
-            &larr; Retour a l'accueil
+            &larr; Retour a l&apos;accueil
           </Link>
         </div>
       </div>
@@ -138,17 +161,31 @@ export default function TopicDashboardPage() {
 
   const arcConfig = NARRATIVE_ARC_CONFIG[dashboard.narrative_arc] || NARRATIVE_ARC_CONFIG.developing;
 
-  const formatDate = (dateStr: string) => {
-    try {
-      return new Date(dateStr).toLocaleDateString('fr-FR', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric'
-      });
-    } catch {
-      return dateStr;
-    }
-  };
+  const tabs: { id: TabId; label: string; count?: number }[] = [
+    { id: 'overview', label: 'Vue d\'ensemble' },
+    { id: 'timeline', label: 'Chronologie', count: dashboard.synthesis_count },
+    { id: 'table', label: 'Comparatif', count: dashboard.synthesis_count },
+    { id: 'causal', label: 'Graphe causal', count: dashboard.aggregated_causal_graph.total_nodes },
+    { id: 'predictions', label: 'Predictions', count: dashboard.predictions_summary.length },
+  ];
+
+  // Transform causal graph data for NeuralCausalGraph
+  const causalNodes = dashboard.aggregated_causal_graph.nodes.map(n => ({
+    id: n.id,
+    label: n.label,
+    node_type: (n.type || 'event') as 'event' | 'entity' | 'decision' | 'keyword',
+    fact_density: 0.5,
+  }));
+  const nodeLabelsById = Object.fromEntries(causalNodes.map(n => [n.id, n.label]));
+  const causalEdges = dashboard.aggregated_causal_graph.edges.map(e => ({
+    cause_text: nodeLabelsById[e.source] || e.source,
+    effect_text: nodeLabelsById[e.target] || e.target,
+    relation_type: (e.type || 'causes') as 'causes' | 'triggers' | 'enables' | 'prevents' | 'relates_to',
+    confidence: e.confidence || 0.7,
+    evidence: [] as string[],
+    source_articles: [] as string[],
+  }));
+  const hasCausalData = causalNodes.length > 0;
 
   return (
     <div style={styles.page}>
@@ -165,7 +202,6 @@ export default function TopicDashboardPage() {
 
       {/* Hero Section */}
       <div style={styles.hero}>
-        {/* Badges Row */}
         <div style={styles.badgeRow}>
           <span style={styles.dossieBadge}>DOSSIER</span>
           <NarrativeArcIndicator arc={dashboard.narrative_arc as 'emerging' | 'developing' | 'peak' | 'declining' | 'resolved'} size="medium" />
@@ -174,159 +210,204 @@ export default function TopicDashboardPage() {
           )}
         </div>
 
-        {/* Topic Title */}
         <h1 style={styles.title}>{dashboard.topic}</h1>
 
-        {/* Stats Line */}
-        <div style={styles.statsLine}>
-          <span>{dashboard.synthesis_count} syntheses</span>
-          <span style={styles.separator}>|</span>
-          <span>{dashboard.key_entities.length} entites cles</span>
-          <span style={styles.separator}>|</span>
-          <span>{dashboard.aggregated_causal_graph.total_nodes} noeuds causaux</span>
-          {dashboard.geo_focus.length > 0 && (
-            <>
-              <span style={styles.separator}>|</span>
-              <span>{dashboard.geo_focus.length} pays</span>
-            </>
-          )}
-        </div>
-
-        {/* Arc Description */}
         <p style={styles.arcDescription}>
           <span style={{ color: arcConfig.color, fontWeight: 600 }}>{arcConfig.label}</span>
-          {' — '}{arcConfig.description}
+          {' \u2014 '}{arcConfig.description}
         </p>
+
+        {/* KPI Bar */}
+        <TopicKPIBar
+          synthesisCount={dashboard.synthesis_count}
+          durationDays={dashboard.duration_days || 0}
+          transparencyAvg={dashboard.transparency_avg || 0}
+          sourcesTotal={dashboard.sources_total || 0}
+          entitiesCount={dashboard.key_entities.length}
+          causalNodes={dashboard.aggregated_causal_graph.total_nodes}
+        />
+      </div>
+
+      {/* Tab Navigation */}
+      <div style={styles.tabBar}>
+        <div style={styles.tabBarInner}>
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                ...styles.tab,
+                ...(activeTab === tab.id ? styles.tabActive : {}),
+              }}
+            >
+              {tab.label}
+              {tab.count !== undefined && tab.count > 0 && (
+                <span style={styles.tabCount}>{tab.count}</span>
+              )}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Main Content */}
       <div style={styles.content}>
-        {/* Key Entities Section */}
-        {dashboard.key_entities.length > 0 && (
-          <section style={styles.section}>
-            <h2 style={styles.sectionTitle}>Entites Cles</h2>
-            <div style={styles.entityGrid}>
-              {dashboard.key_entities.slice(0, 12).map((entity, index) => (
-                <div key={index} style={styles.entityCard}>
-                  <span style={styles.entityType}>{entity.type}</span>
-                  <span style={styles.entityName}>{entity.name}</span>
-                  <span style={styles.entityCount}>{entity.count} mentions</span>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
 
-        {/* Charts Row */}
-        {(dashboard.sentiment_evolution.length > 0 || dashboard.key_entities.length > 0) && (
-          <div style={styles.chartsRow}>
-            {dashboard.sentiment_evolution.length > 0 && (
-              <section style={styles.chartCard}>
-                <SentimentChart
-                  synthesisId=""
-                  data={dashboard.sentiment_evolution}
-                  title="Evolution du Sentiment"
-                />
-              </section>
-            )}
-
+        {/* === TAB: Overview === */}
+        {activeTab === 'overview' && (
+          <>
+            {/* Key Entities */}
             {dashboard.key_entities.length > 0 && (
-              <section style={styles.chartCard}>
-                <EntityFrequencyChart
-                  synthesisId=""
-                  entities={dashboard.key_entities.map(e => ({
-                    name: e.name,
-                    count: e.count,
-                    type: e.type
-                  }))}
-                  title="Frequence des Entites"
-                />
+              <section style={styles.section}>
+                <h2 style={styles.sectionTitle}>Entites Cles</h2>
+                <div style={styles.entityGrid}>
+                  {dashboard.key_entities.slice(0, 12).map((entity, index) => (
+                    <div key={index} style={styles.entityCard}>
+                      <span style={styles.entityType}>{entity.type}</span>
+                      <span style={styles.entityName}>{entity.name}</span>
+                      <span style={styles.entityCount}>{entity.count} mentions</span>
+                    </div>
+                  ))}
+                </div>
               </section>
             )}
-          </div>
-        )}
 
-        {/* Geographic Focus */}
-        {dashboard.geo_focus.length > 0 && (
-          <section style={styles.section}>
-            <h2 style={styles.sectionTitle}>Focus Geographique</h2>
-            <div style={styles.geoGrid}>
-              {dashboard.geo_focus.map((g, index) => (
-                <div key={index} style={styles.geoCard}>
-                  <span style={styles.geoCountry}>{g.country}</span>
-                  <span style={styles.geoCount}>{g.count} mentions</span>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Predictions */}
-        {dashboard.predictions_summary.length > 0 && (
-          <section style={styles.section}>
-            <h2 style={styles.sectionTitle}>Predictions</h2>
-            <div style={styles.predictionsGrid}>
-              {dashboard.predictions_summary.slice(0, 6).map((pred, index) => (
-                <div key={index} style={styles.predictionCard}>
-                  <div style={styles.predictionHeader}>
-                    <span style={styles.predictionType}>{pred.type}</span>
-                    <span style={{
-                      ...styles.predictionProb,
-                      color: pred.probability >= 0.7 ? '#10B981' : pred.probability >= 0.4 ? '#F59E0B' : '#6B7280'
-                    }}>
-                      {Math.round(pred.probability * 100)}%
-                    </span>
-                  </div>
-                  <p style={styles.predictionText}>{pred.prediction}</p>
-                  <span style={styles.predictionMeta}>
-                    {pred.timeframe} — {formatDate(pred.synthesis_date)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Syntheses List */}
-        <section style={styles.section}>
-          <h2 style={styles.sectionTitle}>
-            Toutes les Syntheses ({dashboard.synthesis_count})
-          </h2>
-          <div style={styles.synthesesList}>
-            {dashboard.syntheses.map((synthesis) => (
-              <Link
-                key={synthesis.id}
-                href={`/synthesis/${synthesis.id}`}
-                style={styles.synthesisCard}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = '#000000';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = '#E5E5E5';
-                }}
-              >
-                <div style={styles.synthesisTop}>
-                  <span style={styles.synthesisCategory}>{synthesis.category}</span>
-                  <span style={styles.synthesisDate}>{formatDate(synthesis.date)}</span>
-                </div>
-                <h3 style={styles.synthesisTitle}>{synthesis.title}</h3>
-                {synthesis.summary && (
-                  <p style={styles.synthesisSummary}>
-                    {synthesis.summary.length > 200
-                      ? synthesis.summary.substring(0, 200) + '...'
-                      : synthesis.summary}
-                  </p>
+            {/* Charts Row */}
+            {(dashboard.sentiment_evolution.length > 0 || dashboard.key_entities.length > 0) && (
+              <div style={styles.chartsRow}>
+                {dashboard.sentiment_evolution.length > 0 && (
+                  <section style={styles.chartCard}>
+                    <SentimentChart
+                      synthesisId=""
+                      data={dashboard.sentiment_evolution}
+                      title="Evolution du Sentiment"
+                    />
+                  </section>
                 )}
-                <span style={styles.readMore}>Lire la synthese &rarr;</span>
-              </Link>
-            ))}
-          </div>
-        </section>
+                {dashboard.key_entities.length > 0 && (
+                  <section style={styles.chartCard}>
+                    <EntityFrequencyChart
+                      synthesisId=""
+                      entities={dashboard.key_entities.map(e => ({
+                        name: e.name,
+                        count: e.count,
+                        type: e.type
+                      }))}
+                      title="Frequence des Entites"
+                    />
+                  </section>
+                )}
+              </div>
+            )}
+
+            {/* Geographic Focus */}
+            {dashboard.geo_focus.length > 0 && (
+              <section style={styles.section}>
+                <h2 style={styles.sectionTitle}>Focus Geographique</h2>
+                <div style={styles.geoGrid}>
+                  {dashboard.geo_focus.map((g, index) => (
+                    <div key={index} style={styles.geoCard}>
+                      <span style={styles.geoCountry}>{g.country}</span>
+                      <span style={styles.geoCount}>{g.count} mentions</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Recent Syntheses */}
+            <section style={styles.section}>
+              <h2 style={styles.sectionTitle}>
+                Dernieres Syntheses
+              </h2>
+              <div style={styles.synthesesList}>
+                {dashboard.syntheses.slice(0, 5).map((synthesis) => (
+                  <Link
+                    key={synthesis.id}
+                    href={`/synthesis/${synthesis.id}`}
+                    style={styles.synthesisCard}
+                  >
+                    <div style={styles.synthesisTop}>
+                      <span style={styles.synthesisCategory}>{synthesis.category}</span>
+                      <span style={styles.synthesisDate}>{formatDate(synthesis.date)}</span>
+                    </div>
+                    <h3 style={styles.synthesisTitle}>{synthesis.title}</h3>
+                    {synthesis.summary && (
+                      <p style={styles.synthesisSummary}>
+                        {synthesis.summary.length > 200
+                          ? synthesis.summary.substring(0, 200) + '...'
+                          : synthesis.summary}
+                      </p>
+                    )}
+                    <span style={styles.readMore}>Lire la synthese &rarr;</span>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          </>
+        )}
+
+        {/* === TAB: Timeline === */}
+        {activeTab === 'timeline' && (
+          <section style={styles.section}>
+            <h2 style={styles.sectionTitle}>Chronologie du Dossier</h2>
+            <p style={styles.sectionSubtitle}>
+              Chaque point represente une synthese. La taille est proportionnelle au nombre de sources,
+              la couleur indique le sentiment.
+            </p>
+            <TopicTimeline syntheses={dashboard.syntheses} />
+          </section>
+        )}
+
+        {/* === TAB: Comparison Table === */}
+        {activeTab === 'table' && (
+          <section style={styles.section}>
+            <h2 style={styles.sectionTitle}>Tableau Comparatif</h2>
+            <SynthesisTable syntheses={dashboard.syntheses} />
+          </section>
+        )}
+
+        {/* === TAB: Causal Graph === */}
+        {activeTab === 'causal' && (
+          <section style={styles.section}>
+            <h2 style={styles.sectionTitle}>Graphe Causal Agrege</h2>
+            <p style={styles.sectionSubtitle}>
+              Relations cause-effet cumulees a travers toutes les syntheses du dossier.
+            </p>
+            {hasCausalData ? (
+              <div style={{ height: '500px', border: '1px solid #E5E5E5' }}>
+                <NeuralCausalGraph
+                  nodes={causalNodes}
+                  edges={causalEdges}
+                  centralEntity={dashboard.topic}
+                  narrativeFlow="linear"
+                />
+              </div>
+            ) : (
+              <div style={styles.emptyState}>
+                Pas de donnees causales disponibles pour ce dossier.
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* === TAB: Predictions === */}
+        {activeTab === 'predictions' && (
+          <section style={styles.section}>
+            <h2 style={styles.sectionTitle}>Suivi des Predictions</h2>
+            {dashboard.predictions_summary.length > 0 ? (
+              <PredictionTracker predictions={dashboard.predictions_summary} />
+            ) : (
+              <div style={styles.emptyState}>
+                Aucune prediction disponible pour ce dossier.
+              </div>
+            )}
+          </section>
+        )}
 
         {/* Back Link */}
         <div style={styles.backSection}>
           <Link href="/" style={{ color: '#000', textDecoration: 'none', fontSize: '14px', fontWeight: 500 }}>
-            &larr; Retour a la page d'accueil
+            &larr; Retour a la page d&apos;accueil
           </Link>
         </div>
       </div>
@@ -334,7 +415,19 @@ export default function TopicDashboardPage() {
   );
 }
 
-// Newspaper Style — Light Mode
+function formatDate(dateStr: string) {
+  try {
+    return new Date(dateStr).toLocaleDateString('fr-FR', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+  } catch {
+    return dateStr;
+  }
+}
+
+// Newspaper Style
 const styles: { [key: string]: React.CSSProperties } = {
   page: {
     minHeight: '100vh',
@@ -389,8 +482,9 @@ const styles: { [key: string]: React.CSSProperties } = {
   hero: {
     maxWidth: '1200px',
     margin: '0 auto',
-    padding: '40px 24px 32px',
+    padding: '40px 24px 0',
     borderBottom: '2px solid #000000',
+    paddingBottom: '32px',
   },
   badgeRow: {
     display: 'flex',
@@ -423,19 +517,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: 700,
     lineHeight: 1.15,
     color: '#000000',
-    margin: '0 0 16px 0',
-  },
-  statsLine: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: '12px',
-    fontSize: '14px',
-    color: '#6B7280',
-    marginBottom: '12px',
-  },
-  separator: {
-    color: '#E5E5E5',
+    margin: '0 0 12px 0',
   },
   arcDescription: {
     fontSize: '15px',
@@ -443,22 +525,70 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontStyle: 'italic',
     margin: 0,
   },
+  tabBar: {
+    borderBottom: '1px solid #E5E5E5',
+    backgroundColor: '#FFFFFF',
+    position: 'sticky',
+    top: '57px',
+    zIndex: 99,
+  },
+  tabBarInner: {
+    maxWidth: '1200px',
+    margin: '0 auto',
+    padding: '0 24px',
+    display: 'flex',
+    gap: '0',
+    overflowX: 'auto',
+  },
+  tab: {
+    padding: '14px 20px',
+    fontSize: '13px',
+    fontWeight: 600,
+    color: '#6B7280',
+    backgroundColor: 'transparent',
+    border: 'none',
+    borderBottom: '2px solid transparent',
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    fontFamily: 'inherit',
+    transition: 'color 0.15s, border-color 0.15s',
+  },
+  tabActive: {
+    color: '#000000',
+    borderBottomColor: '#000000',
+  },
+  tabCount: {
+    fontSize: '11px',
+    backgroundColor: '#F3F4F6',
+    padding: '1px 6px',
+    color: '#6B7280',
+    fontWeight: 600,
+  },
   content: {
     maxWidth: '1200px',
     margin: '0 auto',
     padding: '0 24px 80px',
   },
   section: {
-    marginTop: '48px',
+    marginTop: '40px',
   },
   sectionTitle: {
     fontFamily: 'Georgia, "Times New Roman", serif',
     fontSize: '20px',
     fontWeight: 700,
     color: '#000000',
-    margin: '0 0 24px 0',
+    margin: '0 0 16px 0',
     paddingBottom: '8px',
     borderBottom: '1px solid #E5E5E5',
+  },
+  sectionSubtitle: {
+    fontSize: '14px',
+    color: '#6B7280',
+    margin: '0 0 20px 0',
+    lineHeight: 1.5,
   },
   entityGrid: {
     display: 'grid',
@@ -477,7 +607,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '10px',
     fontWeight: 600,
     color: '#6B7280',
-    textTransform: 'uppercase',
+    textTransform: 'uppercase' as const,
     letterSpacing: '0.5px',
   },
   entityName: {
@@ -493,7 +623,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
     gap: '24px',
-    marginTop: '48px',
+    marginTop: '40px',
   },
   chartCard: {
     border: '1px solid #E5E5E5',
@@ -522,45 +652,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '12px',
     color: '#6B7280',
   },
-  predictionsGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
-    gap: '16px',
-  },
-  predictionCard: {
-    padding: '16px 20px',
-    backgroundColor: '#F9FAFB',
-    border: '1px solid #E5E5E5',
-  },
-  predictionHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '8px',
-  },
-  predictionType: {
-    fontSize: '11px',
-    fontWeight: 600,
-    color: '#6B7280',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-  },
-  predictionProb: {
-    fontSize: '16px',
-    fontWeight: 700,
-    fontFamily: 'Georgia, serif',
-  },
-  predictionText: {
-    fontSize: '14px',
-    color: '#000000',
-    margin: '0 0 8px 0',
-    lineHeight: 1.6,
-    fontFamily: 'Georgia, serif',
-  },
-  predictionMeta: {
-    fontSize: '12px',
-    color: '#9CA3AF',
-  },
   synthesesList: {
     display: 'flex',
     flexDirection: 'column',
@@ -572,7 +663,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderBottom: '1px solid #E5E5E5',
     textDecoration: 'none',
     color: '#000000',
-    transition: 'border-color 0.2s ease',
   },
   synthesisTop: {
     display: 'flex',
@@ -584,7 +674,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '11px',
     fontWeight: 700,
     color: '#DC2626',
-    textTransform: 'uppercase',
+    textTransform: 'uppercase' as const,
     letterSpacing: '0.5px',
   },
   synthesisDate: {
@@ -609,6 +699,14 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '13px',
     color: '#2563EB',
     fontWeight: 500,
+  },
+  emptyState: {
+    padding: '48px 24px',
+    textAlign: 'center' as const,
+    color: '#9CA3AF',
+    fontSize: '14px',
+    backgroundColor: '#F9FAFB',
+    border: '1px solid #E5E5E5',
   },
   backSection: {
     marginTop: '60px',
