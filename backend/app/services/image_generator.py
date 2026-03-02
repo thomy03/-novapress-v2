@@ -42,7 +42,7 @@ MODEL_CONFIGS: Dict[str, Dict[str, Any]] = {
     "fal-ai/recraft/v4/text-to-image": {
         "params": {
             "image_size": {"width": 1024, "height": 576},
-            "style": "digital_illustration",
+            "style": "vector_illustration",
         },
     },
     "fal-ai/flux-2-flex": {
