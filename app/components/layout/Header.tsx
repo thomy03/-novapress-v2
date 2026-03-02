@@ -172,7 +172,7 @@ export function Header() {
               Intelligence
             </Link>
 
-            {isAuthenticated && (
+            {isAuthenticated && user?.isAdmin && (
               <Link
                 href="/admin/pipeline"
                 style={{

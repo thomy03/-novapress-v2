@@ -86,6 +86,7 @@ export interface User {
     type: 'free' | 'pro' | 'enterprise';
     expiresAt?: string;
   };
+  isAdmin?: boolean;
 }
 
 export interface UserPreferences {

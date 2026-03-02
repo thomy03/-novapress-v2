@@ -75,6 +75,7 @@ class UserResponse(BaseModel):
     createdAt: str
     lastLogin: Optional[str] = None
     subscription: SubscriptionResponse
+    isAdmin: bool = False
 
 
 class TokensResponse(BaseModel):
@@ -127,6 +128,7 @@ def _format_user(user: User) -> UserResponse:
                 else None
             ),
         ),
+        isAdmin=getattr(user, 'is_admin', False) or False,
     )
 
 

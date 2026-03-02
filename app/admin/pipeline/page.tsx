@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { adminService, PipelineStatus, AdminStats, SourcesResponse } from '../../lib/api/services/admin';
 
 interface SourceStatus {
@@ -13,6 +14,7 @@ interface SourceStatus {
 
 export default function AdminPipelinePage() {
   const { theme } = useTheme();
+  const { user, isAuthenticated: isLoggedIn } = useAuth();
   const [adminKey, setAdminKey] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [status, setStatus] = useState<PipelineStatus | null>(null);
@@ -274,6 +276,27 @@ export default function AdminPipelinePage() {
       default: return theme.border;
     }
   };
+
+  // Block non-admin users
+  if (!isLoggedIn || !user?.isAdmin) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        backgroundColor: theme.bg,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontFamily: 'Georgia, serif',
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <h1 style={{ fontSize: '24px', color: theme.text, marginBottom: '12px' }}>Acces restreint</h1>
+          <p style={{ color: theme.textSecondary, fontSize: '14px' }}>
+            Cette page est reservee aux administrateurs.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{
