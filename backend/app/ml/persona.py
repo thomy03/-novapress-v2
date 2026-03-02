@@ -849,6 +849,17 @@ def build_persona_prompt(
     # Build author byline with style
     byline = f"par {persona.name} › {persona_type}" if persona_type else f"par {persona.name}"
 
+    # Build optional feedback section (pre-computed to avoid nested f-string issue on Python 3.11)
+    feedback_section = ""
+    if feedback_context:
+        feedback_section = (
+            "\n\n===================================\n"
+            "RETOURS LECTEURS (a prendre en compte)\n"
+            "===================================\n"
+            f"{feedback_context}\n"
+            "Utilise ces retours pour ameliorer ton style et ton approche."
+        )
+
     return f"""{persona.system_prompt}
 
 ⚠️ IMPORTANT: Tu signes tes articles sous le nom "{byline}"
@@ -878,14 +889,7 @@ INSTRUCTIONS DE REDACTION
 3. CITE les sources avec [SOURCE:N] (une fois par source)
 4. Redige ENTIEREMENT EN FRANCAIS
 5. Longueur similaire a l'original (400-600 mots pour le body){signature_instruction}
-{f"""
-
-═══════════════════════════════════════
-RETOURS LECTEURS (a prendre en compte)
-═══════════════════════════════════════
-{feedback_context}
-Utilise ces retours pour ameliorer ton style et ton approche.
-""" if feedback_context else ""}
+{feedback_section}
 
 Format JSON strict:
 {{
