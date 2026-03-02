@@ -83,7 +83,7 @@ class FalImageGenerator:
 
     def __init__(self):
         self.api_key = settings.FAL_API_KEY
-        self.base_url = "https://queue.fal.run"
+        self.base_url = "https://fal.run"  # Synchronous endpoint (queue.fal.run returns IN_QUEUE)
         self.circuit_breaker = get_circuit_breaker("fal_ai")
         self.enabled = bool(self.api_key)
 
