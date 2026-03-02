@@ -40,7 +40,7 @@ def get_redis_client() -> redis.Redis:
 # Redis keys for pipeline state
 PIPELINE_LOCK_KEY = "novapress:pipeline:lock"
 PIPELINE_STATE_KEY = "novapress:pipeline:state"
-PIPELINE_LOCK_TTL = 3600  # 1 hour max lock duration
+PIPELINE_LOCK_TTL = 14400  # 4 hours max lock duration (synthesis generation is slow)
 
 
 class PipelineStatus(str, Enum):
@@ -312,6 +312,19 @@ class PipelineManager:
             logger.error(f"Failed to acquire Redis lock: {e}")
             # Fall back to local check
             return not self.is_running
+
+    def _renew_redis_lock(self):
+        """Renew the lock TTL if we still own it."""
+        redis_client = get_redis_client()
+        if redis_client is None:
+            return
+        try:
+            current_value = redis_client.get(PIPELINE_LOCK_KEY)
+            if current_value == getattr(self, '_lock_value', None):
+                redis_client.expire(PIPELINE_LOCK_KEY, PIPELINE_LOCK_TTL)
+                logger.debug(f"Renewed pipeline lock TTL to {PIPELINE_LOCK_TTL}s")
+        except Exception as e:
+            logger.warning(f"Failed to renew Redis lock: {e}")
 
     def _release_redis_lock(self):
         """Release distributed lock if we own it."""
@@ -821,6 +834,9 @@ class PipelineManager:
 
         if self.check_cancelled():
             raise asyncio.CancelledError()
+
+        # Renew lock before synthesis generation (the longest phase)
+        self._renew_redis_lock()
 
         # Syntheses
         syntheses = await pipeline._generate_syntheses(clusters[:10])

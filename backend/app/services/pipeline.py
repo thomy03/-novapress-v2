@@ -502,6 +502,10 @@ class PipelineEngine:
                 continue
 
             try:
+                # Renew Redis lock per-cluster (synthesis generation is slow: ~8-12 min per cluster)
+                if hasattr(self, '_manager') and self._manager:
+                    self._manager._renew_redis_lock()
+
                 articles = cluster["articles"]
                 logger.info(f"✍️ Generating synthesis for cluster {cluster['cluster_id']} ({cluster['size']} articles)")
 
