@@ -522,6 +522,7 @@ class TemporalNarrativeEngine:
     ) -> str:
         """
         Format historical context as text for LLM prompt.
+        Includes actual synthesis content so the LLM can build on previous depth.
 
         Args:
             historical_context: HistoricalContext object
@@ -533,12 +534,14 @@ class TemporalNarrativeEngine:
             return ""
 
         sections = []
+        num_related = len(historical_context.related_syntheses)
 
         # Header
         sections.append(f"""
 ╔══════════════════════════════════════════════════════════════╗
 ║  📜 CONTEXTE HISTORIQUE - {historical_context.days_tracked} jour(s) de suivi
 ║  Phase narrative: {historical_context.narrative_arc.upper()}
+║  Synthèses précédentes: {num_related}
 ╚══════════════════════════════════════════════════════════════╝
 """)
 
@@ -556,6 +559,68 @@ class TemporalNarrativeEngine:
                 sections.append(f"  • {point}")
             sections.append("")
 
+        # === NEW: Include actual content from the most recent related syntheses ===
+        # This is KEY for depth — the LLM needs to read the previous analysis to build on it
+        recent_syntheses = sorted(
+            historical_context.related_syntheses,
+            key=lambda s: s.get('created_at', 0),
+            reverse=True
+        )[:3]  # Top 3 most recent
+
+        if recent_syntheses:
+            sections.append("📰 ANALYSES PRÉCÉDENTES (à approfondir et dépasser):")
+            sections.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            for i, synth in enumerate(recent_syntheses):
+                title = synth.get('title', 'Sans titre')
+                body = synth.get('body', '') or synth.get('summary', '') or ''
+                analysis = synth.get('analysis', '') or ''
+                # Truncate but keep enough for real depth
+                body_excerpt = body[:1500] if body else ''
+                analysis_excerpt = analysis[:500] if analysis else ''
+
+                sections.append(f"\n  [{i+1}] {title}")
+                if body_excerpt:
+                    sections.append(f"  Contenu: {body_excerpt}")
+                if analysis_excerpt:
+                    sections.append(f"  Analyse: {analysis_excerpt}")
+
+                # Include previous causal chains if available
+                prev_causal = synth.get('causal_chain', [])
+                if not prev_causal:
+                    # Try parsing from causal_graph
+                    cg = synth.get('causal_graph', {})
+                    if isinstance(cg, str):
+                        try:
+                            import json
+                            cg = json.loads(cg)
+                        except (ValueError, TypeError):
+                            cg = {}
+                    if isinstance(cg, dict):
+                        for edge in cg.get('edges', [])[:3]:
+                            prev_causal.append({
+                                'cause': edge.get('source', edge.get('cause_text', '')),
+                                'effect': edge.get('target', edge.get('effect_text', '')),
+                                'type': edge.get('relationship', edge.get('relation_type', 'causes'))
+                            })
+
+                if prev_causal:
+                    sections.append("  Chaîne causale précédente:")
+                    for rel in prev_causal[:3]:
+                        sections.append(f"    • {rel.get('cause', '?')} --[{rel.get('type', '?')}]--> {rel.get('effect', '?')}")
+
+                # Include previous predictions if available
+                prev_predictions = synth.get('predictions', [])
+                if prev_predictions:
+                    sections.append("  Prédictions précédentes (à évaluer):")
+                    for pred in prev_predictions[:2]:
+                        if isinstance(pred, dict):
+                            sections.append(f"    • {pred.get('prediction', '?')[:100]} (prob: {pred.get('probability', '?')})")
+                        elif isinstance(pred, str):
+                            sections.append(f"    • {pred[:100]}")
+
+            sections.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+            sections.append("")
+
         # Entity evolution
         if historical_context.entity_evolution:
             sections.append("👤 ÉVOLUTION DES ACTEURS CLÉS:")
@@ -570,16 +635,36 @@ class TemporalNarrativeEngine:
                 sections.append(f"  • {c['title'][:50]}... ({c['count']} contradiction(s))")
             sections.append("")
 
-        # Narrative guidance based on arc
+        # Narrative guidance based on arc — ENHANCED for recurring themes
         arc_guidance = {
             "emerging": "C'est une NOUVELLE HISTOIRE. Présente les faits de base clairement.",
-            "developing": "Histoire EN DÉVELOPPEMENT. Montre l'évolution depuis les premiers éléments.",
-            "peak": "Histoire à son APOGÉE. Synthétise tous les aspects et enjeux.",
-            "declining": "Histoire en DÉCLIN. Résume ce qui s'est passé et les conclusions.",
-            "resolved": "Histoire RÉSOLUE. Récapitule le dénouement et les leçons."
+            "developing": (
+                "Histoire EN DÉVELOPPEMENT. Tu DOIS montrer l'évolution depuis les premiers éléments. "
+                "RÉFÈRE-TOI explicitement aux analyses précédentes ci-dessus et DÉPASSE-LES: "
+                "apporte de nouveaux angles, approfondis les causes, évalue si les prédictions précédentes "
+                "se sont confirmées ou infirmées."
+            ),
+            "peak": (
+                "Histoire à son APOGÉE. Synthétise TOUS les aspects accumulés. "
+                "INTÈGRE les analyses et chaînes causales des synthèses précédentes. "
+                "L'article doit être le plus COMPLET et APPROFONDI possible, "
+                "en tissant les liens entre tous les développements antérieurs."
+            ),
+            "declining": "Histoire en DÉCLIN. Dresse le bilan complet en s'appuyant sur toutes les analyses précédentes.",
+            "resolved": "Histoire RÉSOLUE. Récapitule le dénouement, vérifie les prédictions passées, tire les leçons."
         }
 
-        sections.append(f"📝 CONSIGNE NARRATIVE: {arc_guidance.get(historical_context.narrative_arc, '')}")
+        sections.append(f"""
+⚠️ CONSIGNE CRITIQUE POUR THÈME RÉCURRENT:
+{arc_guidance.get(historical_context.narrative_arc, arc_guidance['developing'])}
+
+Tu as accès à {num_related} synthèse(s) précédente(s). Tu DOIS:
+1. LIRE et INTÉGRER les analyses précédentes (ne pas les ignorer)
+2. APPROFONDIR: chaque nouvelle synthèse doit être PLUS RICHE que la précédente
+3. ÉVALUER les prédictions passées: se sont-elles réalisées?
+4. ÉTENDRE la chaîne causale: ajoute de nouveaux maillons à partir des précédents
+5. CITER les évolutions: "Comme analysé précédemment..." / "Contrairement à notre analyse du..."
+""")
 
         return "\n".join(sections)
 

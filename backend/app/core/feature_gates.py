@@ -41,8 +41,8 @@ class Feature(str, Enum):
 FEATURE_TIERS: dict[Feature, Tier] = {
     Feature.SYNTHESES_UNLIMITED: Tier.PRO,
     Feature.PERSONA_SWITCH: Tier.PRO,
-    Feature.CAUSAL_GRAPH: Tier.PRO,
-    Feature.TIMELINE: Tier.PRO,
+    Feature.CAUSAL_GRAPH: Tier.FREE,  # Free during beta — key differentiator
+    Feature.TIMELINE: Tier.FREE,      # Free during beta — key differentiator
     Feature.AUDIO_BRIEFING: Tier.PRO,
     Feature.TELEGRAM_ALERTS: Tier.PRO,
     Feature.SEMANTIC_SEARCH: Tier.PRO,

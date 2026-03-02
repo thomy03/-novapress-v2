@@ -24,6 +24,9 @@ from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
 
+# Module-level scheduler reference for admin route access
+_scheduler = None
+
 # Configure loguru with settings LOG_LEVEL
 logger.remove()  # Remove default handler
 logger.add(
@@ -110,6 +113,7 @@ async def lifespan(app: FastAPI):
         logger.info("ℹ️ Telegram Bot disabled (no TELEGRAM_BOT_TOKEN)")
 
     # Initialize APScheduler for automatic pipeline execution
+    global _scheduler
     scheduler = None
     try:
         from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -127,6 +131,7 @@ async def lifespan(app: FastAPI):
                 logger.error(f"❌ Scheduled pipeline run failed: {e}")
 
         scheduler = AsyncIOScheduler()
+        _scheduler = scheduler
         scheduler.add_job(
             scheduled_pipeline_run,
             trigger=IntervalTrigger(hours=settings.PIPELINE_SCHEDULE_HOURS),

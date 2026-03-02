@@ -138,6 +138,70 @@ async def stop_pipeline(x_admin_key: str = Header(None, alias="x-admin-key")):
     return result
 
 
+@router.post("/pipeline/schedule")
+async def update_schedule(
+    hours: int,
+    x_admin_key: str = Header(None, alias="x-admin-key")
+):
+    """
+    Change the pipeline schedule interval (in hours).
+    Takes effect immediately without container restart.
+    Requires admin API key.
+
+    Args:
+        hours: New interval in hours (1-24)
+    """
+    verify_admin_key(x_admin_key)
+
+    if hours < 1 or hours > 24:
+        raise HTTPException(status_code=400, detail="Hours must be between 1 and 24")
+
+    try:
+        from apscheduler.triggers.interval import IntervalTrigger
+
+        # Access the scheduler from the app state
+        from app.main import _scheduler
+        if _scheduler is None:
+            raise HTTPException(status_code=503, detail="Scheduler not available")
+
+        _scheduler.reschedule_job(
+            "pipeline_scheduled_run",
+            trigger=IntervalTrigger(hours=hours)
+        )
+        old_hours = settings.PIPELINE_SCHEDULE_HOURS
+        settings.PIPELINE_SCHEDULE_HOURS = hours
+
+        logger.info(f"Schedule changed: {old_hours}h -> {hours}h")
+
+        return {
+            "status": "updated",
+            "old_interval_hours": old_hours,
+            "new_interval_hours": hours,
+            "message": f"Pipeline will now run every {hours} hour(s)"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update schedule: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/pipeline/schedule")
+async def get_schedule():
+    """Get current pipeline schedule. No auth required."""
+    try:
+        from app.main import _scheduler
+        job = _scheduler.get_job("pipeline_scheduled_run") if _scheduler else None
+        next_run = str(job.next_run_time) if job else "unknown"
+    except Exception:
+        next_run = "unknown"
+
+    return {
+        "interval_hours": settings.PIPELINE_SCHEDULE_HOURS,
+        "next_run": next_run
+    }
+
+
 @router.post("/pipeline/reset-lock")
 async def reset_pipeline_lock(x_admin_key: str = Header(None, alias="x-admin-key")):
     """
