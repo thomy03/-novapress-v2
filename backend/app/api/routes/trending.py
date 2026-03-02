@@ -11,6 +11,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from app.db.qdrant_client import get_qdrant_service
+from app.ml.stop_words import is_valid_entity, normalize_entity, deduplicate_entities
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
@@ -114,16 +115,17 @@ async def get_trending_entities(
                 entities = [e.strip() for e in str(key_entities_raw).split(",") if e.strip()]
 
             for entity in entities:
-                # Skip very short or numeric-only entities
-                if len(entity) >= 3 and not entity.isdigit():
-                    entity_counter[entity] += 1
+                normalized = normalize_entity(entity)
+                if is_valid_entity(normalized):
+                    entity_counter[normalized] += 1
 
-        # Return top entities appearing at least twice
-        result = [
+        # Deduplicate (merge "Trump" + "Donald Trump" etc.)
+        raw_list = [
             {"entity": entity, "count": count}
-            for entity, count in entity_counter.most_common(limit)
+            for entity, count in entity_counter.most_common(limit * 2)
             if count >= 2
         ]
+        result = deduplicate_entities(raw_list)[:limit]
 
         return {
             "data": result,

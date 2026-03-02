@@ -131,20 +131,17 @@ async def get_hot_topics(
             try:
                 syntheses = qdrant.get_live_syntheses(hours=72, limit=50)
                 if syntheses:
-                    # Extract significant words from titles
-                    stopwords_fr = {'le', 'la', 'les', 'de', 'du', 'des', 'un', 'une', 'et', 'en', 'à', 'au', 'aux',
-                                   'pour', 'par', 'sur', 'avec', 'dans', 'que', 'qui', 'ce', 'cette', 'son', 'sa',
-                                   'ses', 'mais', 'ou', 'où', 'donc', 'ni', 'car', 'ne', 'pas', 'plus', 'très',
-                                   'est', 'sont', 'été', 'être', 'avoir', 'fait', 'faire', 'comme', 'tout', 'tous',
-                                   'the', 'a', 'an', 'of', 'to', 'in', 'is', 'it', 'and', 'for', 'on', 'with'}
+                    # Use comprehensive stop words module
+                    from app.ml.stop_words import STOP_WORDS_ALL
+                    stopwords_fr = STOP_WORDS_ALL
 
                     word_counter = Counter()
                     synthesis_by_word = {}
 
                     for s in syntheses:
                         title = s.get('title', '')
-                        # Extract significant words (3+ chars, not stopwords)
-                        words = re.findall(r'\b[A-Za-zÀ-ÿ]{3,}\b', title)
+                        # Extract significant words (4+ chars, not stopwords)
+                        words = re.findall(r'\b[A-Za-zÀ-ÿ]{4,}\b', title)
                         significant_words = [w for w in words if w.lower() not in stopwords_fr]
 
                         for word in significant_words:

@@ -404,9 +404,9 @@ class AdvancedRAG:
         # Capitalize words (likely proper nouns) - simple heuristic
         capitalized = re.findall(r'\b[A-Z][a-zÀ-ÿ]+(?:\s+[A-Z][a-zÀ-ÿ]+)*\b', text)
 
-        # Filter common words
-        common_words = {'Le', 'La', 'Les', 'Un', 'Une', 'The', 'A', 'An', 'Ce', 'Cette', 'Il', 'Elle'}
-        proper_nouns = [w for w in capitalized if w not in common_words and len(w) > 2]
+        # Filter common words using comprehensive stop words
+        from app.ml.stop_words import STOP_WORDS_ALL
+        proper_nouns = [w for w in capitalized if w.lower() not in STOP_WORDS_ALL and len(w) > 2]
 
         # Locations (simplified - look for known patterns)
         location_indicators = ['à', 'en', 'au', 'aux', 'in', 'at', 'from']

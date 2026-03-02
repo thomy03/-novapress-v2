@@ -10,6 +10,7 @@ import json
 from loguru import logger
 
 from app.db.qdrant_client import get_qdrant_service
+from app.ml.stop_words import is_valid_entity, normalize_entity
 
 
 def _safe_date_str(created_at: Union[str, float, int, None]) -> str:
@@ -293,7 +294,9 @@ class TopicTracker:
 
     def _get_central_topic(self, synthesis: Dict) -> Optional[str]:
         """Extract central topic from synthesis."""
-        # Try causal graph's central entity
+        import re as _re
+
+        # 1. Try causal graph's central entity (validate it)
         causal_graph = synthesis.get('causal_graph', {})
         if isinstance(causal_graph, str):
             try:
@@ -302,51 +305,57 @@ class TopicTracker:
                 causal_graph = {}
 
         central = causal_graph.get('central_entity')
-        if central and len(central) > 2:
-            return central
+        if central and is_valid_entity(central):
+            return normalize_entity(central)
 
-        # Try first key entity
+        # 2. First valid key entity
         key_entities = self._extract_key_entities(synthesis)
         if key_entities:
             return key_entities[0]
 
-        # Extract from title (first significant noun phrase)
+        # 3. Extract proper noun phrases from title (multi-word capitalized sequences)
         title = synthesis.get('title', '')
-        if ':' in title:
-            # Take part before colon as topic
-            return title.split(':')[0].strip()
+        proper_phrases = _re.findall(
+            r'[A-ZÀ-Ü][a-zà-ü]+(?:\s+[A-ZÀ-Ü][a-zà-ü]+)+', title
+        )
+        if proper_phrases:
+            # Pick the longest proper phrase
+            best = max(proper_phrases, key=len)
+            if is_valid_entity(best):
+                return normalize_entity(best)
 
-        # Take first 4-5 words as topic
-        words = title.split()[:5]
-        if words:
-            return ' '.join(words)
-
+        # 4. Return None rather than garbage words
         return None
 
     def _extract_key_entities(self, synthesis: Dict) -> List[str]:
-        """Extract key entity names from synthesis."""
+        """Extract key entity names from synthesis, filtered through stop words."""
         key_entities = synthesis.get('key_entities', [])
 
-        # Fix: Parse string to list if stored as comma-separated string
-        # Filter out short entities like "le", "de", "un" (noise from NLP)
+        # Parse string to list if stored as comma-separated string
         if isinstance(key_entities, str):
-            key_entities = [e.strip() for e in key_entities.split(",") if e.strip() and len(e.strip()) > 2]
+            key_entities = [e.strip() for e in key_entities.split(",") if e.strip()]
 
-        entities = []
+        raw_names = []
 
         for entity in key_entities:
             if isinstance(entity, dict):
                 name = entity.get('name', '')
                 if entity.get('type') in ('PERSON', 'ORG', 'GPE'):
-                    entities.append(name)
+                    raw_names.append(name)
             elif isinstance(entity, (list, tuple)) and len(entity) >= 2:
                 name, ent_type = entity[0], entity[1]
                 if ent_type in ('PERSON', 'ORG', 'GPE'):
-                    entities.append(name)
+                    raw_names.append(name)
             elif isinstance(entity, str):
-                entities.append(entity)
+                raw_names.append(entity)
 
-        return entities[:10]  # Limit to top 10
+        # Filter and normalize through stop_words module
+        entities = [
+            normalize_entity(e) for e in raw_names
+            if is_valid_entity(e)
+        ]
+
+        return entities[:10]
 
     def _merge_overlapping_groups(
         self,

@@ -871,7 +871,13 @@ Contenu existant (extrait):
                 if use_advanced_rag:
                     synthesis["advanced_rag"] = True
                     synthesis["contradictions_count"] = len(enhanced_context.get('contradictions', []))
-                    synthesis["key_entities"] = enhanced_context.get('key_entities', [])[:5]
+                    # Filter entities through stop_words module
+                    from app.ml.stop_words import is_valid_entity, normalize_entity
+                    raw_entities = enhanced_context.get('key_entities', [])[:5]
+                    synthesis["key_entities"] = [
+                        normalize_entity(e) for e in raw_entities
+                        if is_valid_entity(str(e))
+                    ]
 
                 if use_temporal_narrative and historical_context:
                     synthesis["temporal_narrative"] = True

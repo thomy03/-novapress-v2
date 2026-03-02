@@ -7,12 +7,14 @@
  * Design: Modern UX 2025-2026 with glassmorphism, animations, dark mode
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useArticles } from '../../contexts/ArticlesContext';
 import { Header } from '../layout/Header';
 import { StatusBar } from '../layout/StatusBar';
 import { NewsTicker } from '../layout/NewsTicker';
+import { DossiersBar } from '../layout/DossiersBar';
 import { Footer } from '../layout/Footer';
 import { OfflineNotification } from '../ui/OfflineNotification';
 import { TrendingTopics } from '../trending';
@@ -27,27 +29,17 @@ const PAGE_SIZE = 10;
 
 function MainContent() {
   const { theme } = useTheme();
+  const { state: articlesState } = useArticles();
   const [mounted, setMounted] = useState(false);
   const [syntheses, setSyntheses] = useState<SynthesisBrief[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [offset, setOffset] = useState(0);
-  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
-  const [keywordFilter, setKeywordFilter] = useState<string | null>(null);
-  const [trendingEntities, setTrendingEntities] = useState<string[]>([]);
 
-  // Fetch trending entities from backend NER data (key_entities from Qdrant)
-  useEffect(() => {
-    fetch(`${API_URL}/api/trending/entities?hours=168&limit=15`)
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data?.data) {
-          setTrendingEntities(data.data.map((e: { entity: string }) => e.entity));
-        }
-      })
-      .catch(() => {}); // Fail silently — not critical
-  }, []);
+  // Category comes from ArticlesContext (set by Header Navigation)
+  const selectedCategory = articlesState.selectedCategory;
+  const apiCategory = selectedCategory && selectedCategory !== 'ACCUEIL' ? selectedCategory : null;
 
   // Fetch syntheses with pagination
   const fetchSyntheses = useCallback(async (currentOffset: number, append: boolean = false) => {
@@ -58,8 +50,9 @@ function MainContent() {
     }
 
     try {
+      const categoryParam = apiCategory ? `&category=${apiCategory}` : '';
       const res = await fetch(
-        `${API_URL}/api/syntheses/live?hours=168&limit=${PAGE_SIZE}&offset=${currentOffset}`,
+        `${API_URL}/api/syntheses/live?hours=168&limit=${PAGE_SIZE}&offset=${currentOffset}${categoryParam}`,
         { cache: 'no-store' }
       );
       if (res.ok) {
@@ -81,14 +74,17 @@ function MainContent() {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, []);
+  }, [apiCategory]);
 
-  // Initial fetch + sync category from URL params (MobileHeader → /?category=X)
+  // Mount + initial fetch
   useEffect(() => {
     setMounted(true);
-    const params = new URLSearchParams(window.location.search);
-    const cat = params.get('category');
-    if (cat) setCategoryFilter(cat);
+  }, []);
+
+  // Re-fetch when category changes (from Header Navigation or MobileHeader)
+  useEffect(() => {
+    setOffset(0);
+    setHasMore(true);
     fetchSyntheses(0, false);
   }, [fetchSyntheses]);
 
@@ -106,22 +102,8 @@ function MainContent() {
     fetchNextPage: loadMore,
   });
 
-  // ⚠️ useMemo hooks MUST be before any early return (Rules of Hooks)
-  // Apply category + keyword filters to all syntheses
-  const filteredSyntheses = useMemo(() => {
-    let result = syntheses;
-    if (categoryFilter) result = result.filter(s => s.category === categoryFilter);
-    if (keywordFilter) result = result.filter(s => s.title.toLowerCase().includes(keywordFilter.toLowerCase()));
-    return result;
-  }, [syntheses, categoryFilter, keywordFilter]);
-
-  // Count all categories (from unfiltered syntheses, for stable filter button labels)
-  const categoryCounts = useMemo(() => syntheses.reduce((acc, s) => {
-    if (s.category) acc[s.category] = (acc[s.category] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>), [syntheses]);
-
-  // trendingEntities comes from the backend (key_entities NER, fetched above)
+  // Syntheses are already filtered server-side by category
+  const filteredSyntheses = syntheses;
 
   if (!mounted || loading) {
     return (
@@ -166,81 +148,6 @@ function MainContent() {
       aria-label="Contenu principal"
       className="max-w-[1400px] mx-auto px-6 py-8"
     >
-      {/* Category Filter + Trending Keywords */}
-      {syntheses.length > 0 && (
-        <div style={{ marginBottom: '24px', paddingBottom: '20px', borderBottom: `1px solid ${theme.border}` }}>
-          {/* Category pills — desktop only, MobileHeader handles mobile */}
-          {Object.keys(categoryCounts).length > 1 && (
-            <div
-              className="mobile-nav-scroll desktop-category-filter"
-              style={{ display: 'flex', gap: '8px', marginBottom: '12px', overflowX: 'auto', paddingBottom: '4px' }}
-            >
-              <button
-                onClick={() => { setCategoryFilter(null); setKeywordFilter(null); }}
-                style={{
-                  flexShrink: 0, padding: '6px 14px', borderRadius: '20px',
-                  border: !categoryFilter && !keywordFilter ? 'none' : `1px solid ${theme.border}`,
-                  backgroundColor: !categoryFilter && !keywordFilter ? theme.text : 'transparent',
-                  color: !categoryFilter && !keywordFilter ? theme.bg : theme.text,
-                  fontSize: '12px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
-                }}
-              >
-                Tout ({syntheses.length})
-              </button>
-              {Object.entries(categoryCounts).sort((a, b) => b[1] - a[1]).map(([cat, count]) => {
-                const isActive = categoryFilter === cat;
-                const catColors: Record<string, string> = { MONDE: '#2563EB', TECH: '#7C3AED', ECONOMIE: '#059669', POLITIQUE: '#DC2626', CULTURE: '#D97706', SPORT: '#0891B2', SCIENCES: '#4F46E5' };
-                const catEmoji: Record<string, string> = { MONDE: '🌍', TECH: '💻', ECONOMIE: '📈', POLITIQUE: '🏛️', CULTURE: '🎭', SPORT: '⚽', SCIENCES: '🔬' };
-                const color = catColors[cat] || '#6B7280';
-                return (
-                  <button
-                    key={cat}
-                    onClick={() => { setCategoryFilter(isActive ? null : cat); setKeywordFilter(null); }}
-                    style={{
-                      flexShrink: 0, padding: '6px 14px', borderRadius: '20px',
-                      border: isActive ? 'none' : `1px solid ${color}40`,
-                      backgroundColor: isActive ? color : `${color}10`,
-                      color: isActive ? '#FFF' : color,
-                      fontSize: '12px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {catEmoji[cat] || ''} {cat} ({count})
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Trending keywords */}
-          {trendingEntities.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '11px', fontWeight: 700, color: theme.textSecondary, textTransform: 'uppercase', letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>
-                🔥 Tendances
-              </span>
-              {trendingEntities.map(kw => {
-                const isActive = keywordFilter === kw;
-                return (
-                  <button
-                    key={kw}
-                    onClick={() => { setKeywordFilter(isActive ? null : kw); setCategoryFilter(null); }}
-                    style={{
-                      padding: '3px 10px', borderRadius: '12px',
-                      border: `1px solid ${isActive ? theme.text : theme.border}`,
-                      backgroundColor: isActive ? theme.text : 'transparent',
-                      color: isActive ? theme.bg : theme.textSecondary,
-                      fontSize: '12px', fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap',
-                      transition: 'all 0.15s ease',
-                    }}
-                  >
-                    {kw}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Hero Section: Asymmetric 60/40 Layout with 3 articles */}
       <section className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-4 mb-12">
         {/* Hero Synthesis (60%) */}
@@ -683,6 +590,7 @@ export function HomePage() {
       <Header />
       <StatusBar />
       <NewsTicker />
+      <DossiersBar />
       <MainContent />
       <Footer />
       <OfflineNotification />

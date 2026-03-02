@@ -288,20 +288,20 @@ class TopicDetectionService:
         if self.llm_service:
             try:
                 titles_text = "\n".join(f"- {t}" for t in titles[:10])
-                prompt = f"""Analyse ces titres d'articles et génère:
-1. Un nom de topic court (3-5 mots) qui résume le sujet principal
-2. Une description en 1-2 phrases
+                prompt = f"""Tu es un éditeur en chef. Analyse ces titres de synthèses et génère :
+1. Un NOM DE DOSSIER journalistique (3-7 mots, style Le Monde/NYT)
+   Exemples : "Guerre en Ukraine : Offensive et Diplomatie", "Régulation de l'IA en Europe", "Crise au Moyen-Orient"
+   Le nom doit être un vrai sujet d'actualité, PAS des mots génériques.
+2. Une DESCRIPTION résumant le fil conducteur (1-2 phrases)
 
-Titres:
+Titres :
 {titles_text}
 
-Réponds en JSON:
-{{"name": "...", "description": "..."}}"""
+Réponds UNIQUEMENT en JSON : {{"name": "...", "description": "..."}}"""
 
                 import json
                 response = await self.llm_service.generate_raw(prompt, max_tokens=200)
                 if response:
-                    # Extract JSON from response
                     json_match = response.find('{')
                     json_end = response.rfind('}')
                     if json_match >= 0 and json_end > json_match:
@@ -313,16 +313,13 @@ Réponds en JSON:
 
         # Fallback: Extract common words
         from collections import Counter
+        from app.ml.stop_words import STOP_WORDS_ALL
         import re
 
         all_words = []
-        stop_words = {'le', 'la', 'les', 'de', 'du', 'des', 'un', 'une', 'et', 'en', 'au', 'aux',
-                      'pour', 'par', 'sur', 'dans', 'avec', 'sans', 'qui', 'que', 'ce', 'cette',
-                      'the', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'of', 'and', 'or', 'is', 'are'}
-
         for title in titles:
-            words = re.findall(r'\b[a-zA-ZÀ-ÿ]{3,}\b', title.lower())
-            all_words.extend([w for w in words if w not in stop_words])
+            words = re.findall(r'\b[a-zA-ZÀ-ÿ]{4,}\b', title.lower())
+            all_words.extend([w for w in words if w not in STOP_WORDS_ALL])
 
         word_counts = Counter(all_words)
         top_words = [w for w, c in word_counts.most_common(5)]
@@ -336,15 +333,12 @@ Réponds en JSON:
         """Extract keywords from titles."""
         import re
         from collections import Counter
-
-        stop_words = {'le', 'la', 'les', 'de', 'du', 'des', 'un', 'une', 'et', 'en', 'au', 'aux',
-                      'pour', 'par', 'sur', 'dans', 'avec', 'sans', 'qui', 'que', 'ce', 'cette',
-                      'the', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'of', 'and', 'or', 'is', 'are'}
+        from app.ml.stop_words import STOP_WORDS_ALL
 
         all_words = []
         for title in titles:
             words = re.findall(r'\b[a-zA-ZÀ-ÿ]{4,}\b', title.lower())
-            all_words.extend([w for w in words if w not in stop_words])
+            all_words.extend([w for w in words if w not in STOP_WORDS_ALL])
 
         word_counts = Counter(all_words)
         return [w for w, c in word_counts.most_common(20)]
