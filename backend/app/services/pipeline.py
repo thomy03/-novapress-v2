@@ -328,7 +328,7 @@ class PipelineEngine:
             await self._store_syntheses(syntheses)
             logger.success(f"✅ {len(syntheses)} syntheses verified in vector database")
 
-        # === 8. NEXUS IMAGES ===
+        # === 8. NEXUS SVG INFOGRAPHICS ===
         try:
             from app.services.nexus_image_generator import get_nexus_image_generator
             nexus_gen = get_nexus_image_generator()
@@ -342,21 +342,46 @@ class PipelineEngine:
 
                 topic = synthesis.get("category", "") or synthesis.get("title", "")[:40]
                 try:
-                    url = await nexus_gen.generate_nexus_image(
+                    svg = await nexus_gen.generate_nexus_svg(
                         topic=topic,
                         causal_graph=causal_graph,
                         synthesis_title=synthesis.get("title", ""),
                         synthesis_id=synthesis.get("id", ""),
+                        geographic_context=synthesis.get("geographic_context", []),
+                        key_metrics=synthesis.get("key_metrics", []),
                     )
-                    if url:
+                    if svg:
                         nexus_count += 1
                 except Exception as nexus_err:
-                    logger.debug(f"Nexus image generation skipped: {nexus_err}")
+                    logger.debug(f"Nexus SVG generation skipped: {nexus_err}")
 
             if nexus_count > 0:
-                logger.success(f"🖼️ Generated {nexus_count} nexus images")
+                logger.success(f"🖼️ Generated {nexus_count} nexus SVG infographics")
+
+            # === 8.5 EDITORIAL GEO SVG MAPS ===
+            geo_svg_count = 0
+            for synthesis in syntheses:
+                geo_relevance = synthesis.get("geo_relevance", "none")
+                geo_context = synthesis.get("geographic_context", [])
+                if geo_relevance in ("high", "medium") and geo_context:
+                    try:
+                        geo_svg = await nexus_gen.generate_geo_svg(
+                            synthesis_id=synthesis.get("id", ""),
+                            synthesis_title=synthesis.get("title", ""),
+                            geographic_context=geo_context,
+                            geo_relevance=geo_relevance,
+                            category=synthesis.get("category", ""),
+                        )
+                        if geo_svg:
+                            geo_svg_count += 1
+                    except Exception as geo_err:
+                        logger.debug(f"Geo SVG generation skipped: {geo_err}")
+
+            if geo_svg_count > 0:
+                logger.success(f"🗺️ Generated {geo_svg_count} editorial geo SVG maps")
+
         except Exception as nexus_import_err:
-            logger.debug(f"Nexus image generation not available: {nexus_import_err}")
+            logger.debug(f"Nexus SVG generation not available: {nexus_import_err}")
 
         # === STATS ===
         results["stats"] = {

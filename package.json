@@ -23,7 +23,6 @@
     "react-dom": "19.1.0",
     "react-force-graph-2d": "^1.29.0",
     "react-is": "^19.2.3",
-    "react-simple-maps": "^3.0.0",
     "recharts": "^3.6.0"
   },
   "devDependencies": {
@@ -31,7 +30,6 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@types/react-simple-maps": "^3.0.6",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

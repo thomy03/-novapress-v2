@@ -10,7 +10,7 @@ import {
 } from '@/app/types/synthesis-page';
 
 const KeyMetricCallout = dynamic(() => import('./KeyMetricCallout'), { ssr: false });
-const MiniGeoWidget = dynamic(() => import('./MiniGeoWidget'), { ssr: false });
+const GeoSvgWidget = dynamic(() => import('./GeoSvgWidget'), { ssr: false });
 const MiniSparkline = dynamic(() => import('./MiniSparkline'), { ssr: false });
 
 /**
@@ -184,8 +184,8 @@ export default function SynthesisBody({ synthesis }: SynthesisBodyProps) {
         <KeyMetricCallout metrics={synthesis.keyMetrics} />
       )}
 
-      {/* Geographic context — shown for any article with geographic data */}
-      <MiniGeoWidget synthesis={synthesis} />
+      {/* Geographic context — editorial SVG map */}
+      <GeoSvgWidget synthesis={synthesis} />
 
       {/* Body — structured in sections under ## headings */}
       <div style={styles.body}>
