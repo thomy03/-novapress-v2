@@ -115,6 +115,7 @@ export interface SynthesisData {
   sourceImages?: SourceImage[];
   // Phase 3A: Geographic context
   geographicContext?: GeographicLocation[];
+  geoRelevance?: 'high' | 'medium' | 'none';
   // Key Metrics (Axios/Bloomberg-style callouts)
   keyMetrics?: KeyMetric[];
 }
