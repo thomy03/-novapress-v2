@@ -17,6 +17,9 @@ import {
   CausalSection,
   HistoricalContext
 } from '@/app/components/synthesis';
+import dynamic from 'next/dynamic';
+
+const MiniCausalWidget = dynamic(() => import('./MiniCausalWidget'), { ssr: false });
 import FeedbackWidget from '@/app/components/synthesis/FeedbackWidget';
 import { AudioPlayer } from '@/app/components/audio';
 import { FollowButton } from '@/app/components/ui/FollowButton';
@@ -313,6 +316,15 @@ export default function SynthesisClient({ initialSynthesis }: SynthesisClientPro
 
           {/* Body Content */}
           <SynthesisBody synthesis={synthesis} />
+
+          {/* Inline Causal Widget — relations + predictions in newspaper style */}
+          {causalData && !causalLoading && (
+            <MiniCausalWidget
+              edges={causalData.edges || []}
+              predictions={synthesis.predictions || []}
+              centralEntity={causalData.central_entity}
+            />
+          )}
 
           {/* Sources & Enrichment */}
           <SourcesSection synthesis={synthesis} />

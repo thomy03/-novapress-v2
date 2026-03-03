@@ -125,6 +125,10 @@ async function getSynthesis(id: string): Promise<SynthesisData | null> {
       // Feedback
       avgRating: data.avgRating || 0,
       feedbackCount: data.feedbackCount || 0,
+      // Image (fal.ai generated)
+      imageUrl: data.imageUrl || undefined,
+      // Key Metrics (Axios/Bloomberg-style callouts)
+      keyMetrics: data.keyMetrics || [],
     };
 
     return synthesis;
