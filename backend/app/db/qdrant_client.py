@@ -1053,6 +1053,10 @@ class QdrantService:
                 "image_url": str(synthesis.get("image_url", ""))[:500] if synthesis.get("image_url") else "",
                 # Key Metrics (Axios/Bloomberg-style callouts)
                 "key_metrics": synthesis.get("key_metrics", []),
+                # Phase 2D: Source images from original articles
+                "source_images": synthesis.get("source_images", [])[:5],
+                # Phase 3A: Geographic context from LLM
+                "geographic_context": synthesis.get("geographic_context", [])[:10],
             }
         )
 

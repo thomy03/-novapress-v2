@@ -47,6 +47,23 @@ export interface AuthorDisplay {
   signature: string;
 }
 
+// ========== Source Images (Phase 2D) ==========
+
+export interface SourceImage {
+  url: string;
+  source: string;
+  title: string;
+}
+
+// ========== Geographic Context (Phase 3A) ==========
+
+export interface GeographicLocation {
+  place: string;
+  type: string; // "city", "country", "waterway", "region"
+  role: string; // Contextual role in the story
+  country?: string; // ISO 2-letter code
+}
+
 // ========== Key Metrics (Axios/Bloomberg callouts) ==========
 
 export interface KeyMetric {
@@ -94,6 +111,10 @@ export interface SynthesisData {
   feedbackCount?: number;
   // Image (fal.ai generated)
   imageUrl?: string;
+  // Phase 2D: Source images from original articles
+  sourceImages?: SourceImage[];
+  // Phase 3A: Geographic context
+  geographicContext?: GeographicLocation[];
   // Key Metrics (Axios/Bloomberg-style callouts)
   keyMetrics?: KeyMetric[];
 }

@@ -62,12 +62,14 @@ class CausalAggregator:
         if not synthesis_ids:
             return self._empty_graph()
 
-        # Collect all causal graphs
+        # Collect all causal graphs and predictions
         all_nodes = []
         all_edges = []
+        all_predictions = []
         synthesis_timestamps = []
+        synthesis_titles = []  # For chronology
 
-        for syn_id in synthesis_ids:
+        for syn_id in synthesis_ids[-50:]:  # Limit to 50 most recent
             synthesis = self.qdrant_service.get_synthesis_by_id(syn_id)
             if not synthesis:
                 continue
@@ -82,9 +84,24 @@ class CausalAggregator:
             nodes = causal_graph.get("nodes", [])
             edges = causal_graph.get("edges", [])
 
+            # Collect predictions from causal_graph
+            predictions = causal_graph.get("predictions", [])
+            if predictions:
+                for pred in predictions:
+                    if isinstance(pred, dict):
+                        pred["source_synthesis_id"] = syn_id
+                        pred["source_timestamp"] = synthesis.get("created_at", 0)
+                        all_predictions.append(pred)
+
             # Tag with synthesis info
             timestamp = synthesis.get("created_at", 0)
             synthesis_timestamps.append(timestamp)
+            synthesis_titles.append({
+                "id": syn_id,
+                "title": synthesis.get("title", ""),
+                "timestamp": timestamp,
+                "category": synthesis.get("category", "MONDE"),
+            })
 
             for node in nodes:
                 node["source_synthesis_id"] = syn_id
@@ -120,12 +137,29 @@ class CausalAggregator:
         # Determine overall narrative arc
         narrative_arc = self._determine_narrative_arc(synthesis_timestamps, merged_nodes)
 
+        # Aggregate predictions (deduplicate, combine probabilities)
+        merged_predictions = self._aggregate_predictions(all_predictions)
+
+        # Build chronology from synthesis titles (sorted by time)
+        synthesis_titles.sort(key=lambda x: x.get("timestamp", 0))
+        chronology = [
+            {
+                "id": s["id"],
+                "title": s["title"],
+                "timestamp": s["timestamp"],
+                "category": s["category"],
+            }
+            for s in synthesis_titles
+        ]
+
         return {
             "nodes": merged_nodes,
             "edges": merged_edges,
             "timeline_layers": timeline_layers,
             "central_entities": central_entities,
             "narrative_arc": narrative_arc,
+            "predictions": merged_predictions,
+            "chronology": chronology,
             "total_syntheses": len(synthesis_ids),
             "total_original_nodes": len(all_nodes),
             "total_original_edges": len(all_edges)
@@ -139,10 +173,76 @@ class CausalAggregator:
             "timeline_layers": [],
             "central_entities": [],
             "narrative_arc": "emerging",
+            "predictions": [],
+            "chronology": [],
             "total_syntheses": 0,
             "total_original_nodes": 0,
             "total_original_edges": 0
         }
+
+    def _aggregate_predictions(self, all_predictions: List[Dict]) -> List[Dict]:
+        """
+        Aggregate predictions from multiple syntheses.
+        Deduplicates by text similarity, combines probabilities (weighted by recency).
+        """
+        if not all_predictions:
+            return []
+
+        # Group similar predictions
+        groups: List[List[Dict]] = []
+        for pred in all_predictions:
+            text = pred.get("text", pred.get("prediction", "")).lower().strip()
+            if not text:
+                continue
+
+            matched = False
+            for group in groups:
+                ref_text = group[0].get("text", group[0].get("prediction", "")).lower().strip()
+                # Simple word overlap similarity
+                words_a = set(text.split())
+                words_b = set(ref_text.split())
+                if words_a and words_b:
+                    overlap = len(words_a & words_b) / max(len(words_a | words_b), 1)
+                    if overlap > 0.5:
+                        group.append(pred)
+                        matched = True
+                        break
+
+            if not matched:
+                groups.append([pred])
+
+        # Merge each group
+        merged = []
+        for group in groups:
+            # Use the most recent prediction text
+            group.sort(key=lambda x: x.get("source_timestamp", 0), reverse=True)
+            best = group[0]
+
+            # Average probability, weighted by recency
+            probabilities = []
+            for p in group:
+                prob = p.get("probability", p.get("confidence", 0.5))
+                if isinstance(prob, str):
+                    try:
+                        prob = float(prob.replace("%", "")) / 100 if "%" in prob else float(prob)
+                    except (ValueError, TypeError):
+                        prob = 0.5
+                probabilities.append(float(prob))
+
+            avg_prob = sum(probabilities) / len(probabilities) if probabilities else 0.5
+
+            merged.append({
+                "text": best.get("text", best.get("prediction", "")),
+                "probability": round(avg_prob, 2),
+                "horizon": best.get("horizon", best.get("timeframe", "MT")),
+                "mention_count": len(group),
+                "first_seen": min(p.get("source_timestamp", 0) for p in group),
+                "last_seen": max(p.get("source_timestamp", 0) for p in group),
+            })
+
+        # Sort by probability descending
+        merged.sort(key=lambda x: x["probability"], reverse=True)
+        return merged[:10]  # Cap at 10 predictions
 
     def _deduplicate_nodes(
         self,

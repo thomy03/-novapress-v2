@@ -983,10 +983,24 @@ Contenu existant (extrait):
                         ]
                         logger.info(f"   Fallback generated {len(validated_causal_chain)} causal relations")
 
-                synthesis["causal_chain"] = validated_causal_chain  # Replace with validated/fallback version
+                # Phase 1C: Dedicated LLM fallback if still < 3 relations
+                if len(validated_causal_chain) < 3:
+                    logger.info(f"   🔗 Attempting dedicated LLM causal extraction ({len(validated_causal_chain)} relations so far)...")
+                    try:
+                        llm_causal = await self.llm_service.extract_causal_chain(synthesis)
+                        if llm_causal:
+                            from app.ml.causal_extraction import validate_causal_chain as vc
+                            llm_validated = vc(llm_causal)
+                            if len(llm_validated) > len(validated_causal_chain):
+                                validated_causal_chain = llm_validated
+                                logger.info(f"   ✅ Dedicated LLM extraction: {len(validated_causal_chain)} relations")
+                    except Exception as llm_causal_err:
+                        logger.warning(f"   ⚠️ Dedicated LLM causal extraction failed: {llm_causal_err}")
+
+                synthesis["causal_chain"] = validated_causal_chain
 
                 if not validated_causal_chain:
-                    logger.warning(f"⚠️ Cluster {cluster['cluster_id']}: No causal relations even after fallback")
+                    logger.warning(f"⚠️ Cluster {cluster['cluster_id']}: No causal relations even after all fallbacks")
                 else:
                     logger.info(f"✅ Cluster {cluster['cluster_id']}: {len(validated_causal_chain)} causal relations (final)")
 
@@ -1086,6 +1100,22 @@ Contenu existant (extrait):
                 except Exception as img_error:
                     logger.warning(f"⚠️ Image generation failed: {img_error}")
                     synthesis["image_url"] = None
+
+                # === Phase 2D: Collect source images from articles ===
+                source_images = []
+                seen_img_urls = set()
+                for a in articles:
+                    img_url = a.get("image_url") or a.get("top_image")
+                    if img_url and img_url not in seen_img_urls:
+                        seen_img_urls.add(img_url)
+                        source_images.append({
+                            "url": img_url,
+                            "source": a.get("source_name", a.get("source_domain", "")),
+                            "title": a.get("raw_title", a.get("title", "")),
+                        })
+                synthesis["source_images"] = source_images[:5]  # Cap at 5
+                if source_images:
+                    logger.info(f"📸 Collected {len(source_images[:5])} source images")
 
                 # Add the neutral/base synthesis
                 syntheses.append(synthesis)
@@ -1543,8 +1573,7 @@ Contenu existant (extrait):
                 return
 
             synthesis_ids = topic.get("synthesis_ids", [])
-            if len(synthesis_ids) < 2:
-                # Need at least 2 syntheses to aggregate
+            if not synthesis_ids:
                 return
 
             # Aggregate causal graphs

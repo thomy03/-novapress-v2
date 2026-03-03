@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { EntityFrequencyChart, SentimentChart } from '@/app/components/charts';
@@ -92,14 +92,25 @@ const NARRATIVE_ARC_CONFIG: Record<string, { label: string; color: string; descr
 
 type TabId = 'overview' | 'timeline' | 'table' | 'causal' | 'predictions';
 
-export default function TopicDashboardPage() {
+export default function TopicDashboardPageWrapper() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Chargement...</div>}>
+      <TopicDashboardPage />
+    </Suspense>
+  );
+}
+
+function TopicDashboardPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const topicName = decodeURIComponent(params.name as string);
 
   const [dashboard, setDashboard] = useState<TopicDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<TabId>('overview');
+  // Support ?tab=causal from synthesis page link
+  const initialTab = (searchParams.get('tab') as TabId) || 'overview';
+  const [activeTab, setActiveTab] = useState<TabId>(initialTab);
 
   useEffect(() => {
     const fetchDashboard = async () => {
@@ -366,28 +377,229 @@ export default function TopicDashboardPage() {
           </section>
         )}
 
-        {/* === TAB: Causal Graph === */}
+        {/* === TAB: Causal Graph (Phase 4B-4C redesign) === */}
         {activeTab === 'causal' && (
-          <section style={styles.section}>
-            <h2 style={styles.sectionTitle}>Graphe Causal Agrege</h2>
-            <p style={styles.sectionSubtitle}>
-              Relations cause-effet cumulees a travers toutes les syntheses du dossier.
-            </p>
-            {hasCausalData ? (
-              <div style={{ height: '500px', border: '1px solid #E5E5E5' }}>
-                <NeuralCausalGraph
-                  nodes={causalNodes}
-                  edges={causalEdges}
-                  centralEntity={dashboard.topic}
-                  narrativeFlow="linear"
-                />
+          <>
+            {/* NEXUS CAUSAL Header */}
+            <section style={styles.section}>
+              <div style={{
+                borderBottom: '3px solid #000',
+                paddingBottom: '12px',
+                marginBottom: '24px',
+              }}>
+                <h2 style={{
+                  fontFamily: 'Georgia, "Times New Roman", serif',
+                  fontSize: '28px',
+                  fontWeight: 700,
+                  color: '#000',
+                  margin: '0 0 8px 0',
+                }}>
+                  NEXUS CAUSAL — {dashboard.topic}
+                </h2>
+                <div style={{
+                  display: 'flex',
+                  gap: '24px',
+                  fontSize: '13px',
+                  color: '#6B7280',
+                }}>
+                  <span>{dashboard.synthesis_count} syntheses</span>
+                  <span>{dashboard.aggregated_causal_graph.total_nodes} noeuds</span>
+                  <span>{dashboard.aggregated_causal_graph.total_edges} relations</span>
+                  <span>Arc: <strong style={{ color: arcConfig.color }}>{arcConfig.label}</strong></span>
+                </div>
               </div>
-            ) : (
-              <div style={styles.emptyState}>
-                Pas de donnees causales disponibles pour ce dossier.
+
+              {/* Central Entities */}
+              {dashboard.key_entities.length > 0 && (
+                <div style={{ marginBottom: '24px' }}>
+                  <div style={{
+                    fontSize: '10px',
+                    fontWeight: 800,
+                    letterSpacing: '2px',
+                    color: '#6B7280',
+                    marginBottom: '10px',
+                    textTransform: 'uppercase' as const,
+                  }}>
+                    ENTITES CENTRALES
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {dashboard.key_entities.slice(0, 8).map((entity, i) => (
+                      <span key={i} style={{
+                        display: 'inline-block',
+                        padding: '6px 14px',
+                        backgroundColor: i < 3 ? '#000' : '#F9FAFB',
+                        color: i < 3 ? '#FFF' : '#000',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        border: i >= 3 ? '1px solid #E5E5E5' : 'none',
+                        letterSpacing: '0.3px',
+                      }}>
+                        {entity.name.toUpperCase()}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </section>
+
+            {/* Causal Graph — White newspaper style */}
+            <section style={styles.section}>
+              <div style={{
+                fontSize: '10px',
+                fontWeight: 800,
+                letterSpacing: '2px',
+                color: '#6B7280',
+                marginBottom: '12px',
+                textTransform: 'uppercase' as const,
+              }}>
+                GRAPHE CAUSAL
               </div>
+              {hasCausalData ? (
+                <div style={{
+                  height: '500px',
+                  border: '1px solid #E5E5E5',
+                  backgroundColor: '#FFFFFF',
+                }}>
+                  <NeuralCausalGraph
+                    nodes={causalNodes}
+                    edges={causalEdges}
+                    centralEntity={dashboard.topic}
+                    narrativeFlow="linear"
+                  />
+                </div>
+              ) : (
+                <div style={styles.emptyState}>
+                  Pas de donnees causales disponibles. Le graphe se remplira automatiquement
+                  a mesure que de nouvelles syntheses sont generees.
+                </div>
+              )}
+            </section>
+
+            {/* Scenarios Prospectifs */}
+            {dashboard.predictions_summary.length > 0 && (
+              <section style={styles.section}>
+                <div style={{
+                  fontSize: '10px',
+                  fontWeight: 800,
+                  letterSpacing: '2px',
+                  color: '#6B7280',
+                  marginBottom: '12px',
+                  textTransform: 'uppercase' as const,
+                }}>
+                  SCENARIOS PROSPECTIFS
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {dashboard.predictions_summary.slice(0, 5).map((pred, i) => {
+                    const horizonLabel = pred.timeframe === 'court_terme' ? 'CT'
+                      : pred.timeframe === 'moyen_terme' ? 'MT' : 'LT';
+                    const probPct = Math.round(pred.probability * 100);
+                    return (
+                      <div key={i} style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '16px',
+                        padding: '12px 16px',
+                        borderLeft: `4px solid ${probPct >= 60 ? '#DC2626' : probPct >= 40 ? '#F59E0B' : '#6B7280'}`,
+                        backgroundColor: '#F9FAFB',
+                      }}>
+                        <div style={{
+                          fontSize: '20px',
+                          fontWeight: 700,
+                          color: probPct >= 60 ? '#DC2626' : probPct >= 40 ? '#F59E0B' : '#6B7280',
+                          minWidth: '48px',
+                        }}>
+                          {probPct}%
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            color: '#6B7280',
+                            letterSpacing: '0.5px',
+                            marginBottom: '4px',
+                          }}>
+                            {horizonLabel} | {pred.type}
+                          </div>
+                          <div style={{
+                            fontSize: '14px',
+                            color: '#000',
+                            lineHeight: 1.4,
+                          }}>
+                            {pred.prediction}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
             )}
-          </section>
+
+            {/* Chronologie du Theme */}
+            <section style={styles.section}>
+              <div style={{
+                fontSize: '10px',
+                fontWeight: 800,
+                letterSpacing: '2px',
+                color: '#6B7280',
+                marginBottom: '12px',
+                textTransform: 'uppercase' as const,
+              }}>
+                CHRONOLOGIE DU THEME
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+                {dashboard.syntheses.slice(0, 10).map((synthesis, i) => {
+                  const isLast = i === 0;
+                  return (
+                    <Link
+                      key={synthesis.id}
+                      href={`/synthesis/${synthesis.id}`}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '16px',
+                        padding: '12px 0',
+                        borderBottom: '1px solid #E5E5E5',
+                        textDecoration: 'none',
+                        color: '#000',
+                      }}
+                    >
+                      <span style={{
+                        fontSize: '12px',
+                        color: '#6B7280',
+                        minWidth: '60px',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {formatDate(synthesis.date).split(' ').slice(0, 2).join(' ')}
+                      </span>
+                      <span style={{
+                        flex: 1,
+                        fontSize: '14px',
+                        fontWeight: isLast ? 700 : 400,
+                        color: isLast ? '#000' : '#374151',
+                        lineHeight: 1.3,
+                      }}>
+                        {synthesis.title}
+                      </span>
+                      {isLast && (
+                        <span style={{
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          color: '#DC2626',
+                          backgroundColor: '#FEE2E2',
+                          padding: '2px 8px',
+                          letterSpacing: '0.5px',
+                        }}>
+                          ACTUEL
+                        </span>
+                      )}
+                      <span style={{ fontSize: '12px', color: '#2563EB' }}>Lire &rarr;</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </section>
+          </>
         )}
 
         {/* === TAB: Predictions === */}

@@ -1,10 +1,11 @@
 """
 Image generation service for NovaPress AI v2.
 Uses fal.ai API with multi-model selection per category.
+Phase 2A: LLM scene description for contextual images.
 
 Models:
-  - Recraft V4 (design): MONDE, POLITIQUE, ECONOMIE, SCIENCES (~$0.04/image)
-  - Nano Banana Pro (photorealistic): SPORT (~$0.04/image)
+  - Nano Banana Pro (photorealistic): MONDE, POLITIQUE, SPORT (~$0.04/image)
+  - Recraft V4 (design): ECONOMIE, SCIENCES (~$0.04/image)
   - Flux 2 Flex (default): TECH, CULTURE (~$0.03/image)
   - Flux Schnell (fast): fallback (~$0.003/image)
 
@@ -19,9 +20,10 @@ from app.core.circuit_breaker import get_circuit_breaker, CircuitOpenError
 
 
 # Category → model tier mapping
+# Phase 2B: MONDE/POLITIQUE use photorealistic for concrete scenes
 CATEGORY_MODEL_MAP: Dict[str, str] = {
-    "MONDE": "design",
-    "POLITIQUE": "design",
+    "MONDE": "photorealistic",
+    "POLITIQUE": "photorealistic",
     "ECONOMIE": "design",
     "SCIENCES": "design",
     "SPORT": "photorealistic",
@@ -64,15 +66,15 @@ MODEL_CONFIGS: Dict[str, Dict[str, Any]] = {
     },
 }
 
-# Category-specific style prompts — all enforce zero text/logos
+# Category-specific style prompts — photojournalistic editorial, NO abstract art
 STYLE_PROMPTS: Dict[str, str] = {
-    "MONDE": "Editorial newspaper illustration, geopolitical theme, world map elements, diplomatic setting, muted documentary tones",
-    "POLITIQUE": "Institutional editorial illustration, political symbols, formal architecture, serious mood, press conference atmosphere",
-    "ECONOMIE": "Clean editorial illustration, financial theme, abstract geometric data patterns, professional color palette, business atmosphere",
-    "SCIENCES": "Scientific editorial illustration, laboratory elements, molecular structures, precise clean lines, educational style",
+    "MONDE": "Photojournalistic editorial scene, documentary photography, realistic setting, dramatic natural lighting, press agency quality, cinematic composition",
+    "POLITIQUE": "Press photography style, institutional setting, parliament or government building, serious documentary tone, natural lighting, editorial newspaper quality",
+    "ECONOMIE": "Business editorial photography, trading floor or financial district, professional documentary style, clean composition, muted professional tones",
+    "SCIENCES": "Scientific documentary photography, laboratory or research facility, precise clean composition, educational editorial style, natural lighting",
     "SPORT": "Dynamic sports photography, frozen motion, athletic energy, stadium atmosphere, dramatic cinematic angle",
-    "TECH": "Futuristic digital art, circuit patterns, holographic elements, neon blue accents, abstract technology concept",
-    "CULTURE": "Artistic editorial illustration, cultural symbolism, museum quality composition, vibrant yet sophisticated palette",
+    "TECH": "Modern technology editorial, silicon valley aesthetic, clean minimalist hardware, blue-tinted lighting, professional product photography style",
+    "CULTURE": "Cultural editorial photography, museum or theater setting, artistic composition, warm sophisticated lighting, documentary quality",
 }
 
 NO_TEXT_SUFFIX = "absolutely no text, no letters, no words, no numbers, no logos, no watermarks, no captions"
@@ -106,6 +108,7 @@ class FalImageGenerator:
     async def generate_for_synthesis(self, synthesis: Dict[str, Any]) -> Optional[str]:
         """
         Generate an editorial illustration based on synthesis content.
+        Phase 2A: Uses LLM scene description for contextual images.
         Uses category-appropriate model with fallback to Flux Schnell.
 
         Returns:
@@ -116,7 +119,9 @@ class FalImageGenerator:
 
         category = synthesis.get("category", "MONDE")
         primary_model = self._get_model_for_category(category)
-        prompt = self._build_prompt(synthesis, category)
+
+        # Phase 2A: Try LLM scene description first for richer prompts
+        prompt = await self._build_scene_prompt(synthesis, category)
 
         # Try primary model first
         url = await self._call_model(primary_model, prompt, category)
@@ -171,10 +176,87 @@ class FalImageGenerator:
             logger.error(f"[{model}] Image generation failed: {e}")
             return None
 
-    def _build_prompt(self, synthesis: Dict[str, Any], category: str) -> str:
+    async def _build_scene_prompt(self, synthesis: Dict[str, Any], category: str) -> str:
         """
-        Build a fal.ai prompt from synthesis metadata.
-        Uses category-specific style hints. Enforces zero text/logos.
+        Phase 2A: Build an image prompt using LLM scene description.
+        The LLM generates a concrete visual scene description based on article content.
+        Falls back to basic prompt if LLM fails.
+        """
+        try:
+            scene_desc = await self._get_llm_scene_description(synthesis)
+            if scene_desc and len(scene_desc) > 20:
+                style = STYLE_PROMPTS.get(category, "professional editorial photography")
+                return (
+                    f"{scene_desc}. "
+                    f"Style: {style}, "
+                    f"editorial newspaper quality, cinematic composition. "
+                    f"{NO_TEXT_SUFFIX}."
+                )
+        except Exception as e:
+            logger.warning(f"LLM scene description failed, using fallback: {e}")
+
+        # Fallback to basic prompt
+        return self._build_basic_prompt(synthesis, category)
+
+    async def _get_llm_scene_description(self, synthesis: Dict[str, Any]) -> Optional[str]:
+        """
+        Ask LLM to generate a concrete visual scene description (~80 words).
+        Costs ~$0.0003 per call (short prompt + short response).
+        """
+        try:
+            from app.ml.llm import get_llm_service
+            llm = get_llm_service()
+        except Exception:
+            return None
+
+        title = synthesis.get("title", "")
+        key_points = synthesis.get("keyPoints", [])
+        body = synthesis.get("body", "") or synthesis.get("summary", "")
+        analysis = synthesis.get("analysis", "")
+
+        kp_text = "; ".join(kp[:80] for kp in key_points[:4]) if key_points else ""
+
+        prompt = f"""Décris une SCÈNE VISUELLE concrète pour illustrer cet article de presse.
+
+TITRE: {title}
+POINTS CLÉS: {kp_text}
+EXTRAIT: {body[:800]}
+{f"ANALYSE: {analysis[:300]}" if analysis else ""}
+
+Règles:
+- Décris une scène CONCRÈTE et RÉALISTE (pas abstraite)
+- Base-toi UNIQUEMENT sur le contenu des sources
+- Pas de personnes identifiables (pas de visages reconnaissables)
+- Inclus: lieu, objets, atmosphère, éclairage, couleurs dominantes
+- Maximum 80 mots
+- EN ANGLAIS (pour le modèle d'image)
+
+Réponds UNIQUEMENT avec la description de la scène, rien d'autre."""
+
+        try:
+            response = await llm.client.chat.completions.create(
+                model=llm.model,
+                messages=[
+                    {"role": "system", "content": "You are an expert editorial photo director. You describe concrete visual scenes for newspaper illustrations."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                max_tokens=150,
+            )
+            text = response.choices[0].message.content
+            if text:
+                # Clean up — remove quotes, newlines
+                text = text.strip().strip('"').strip("'").replace("\n", " ")
+                logger.info(f"🖼️ LLM scene description: {text[:100]}...")
+                return text
+        except Exception as e:
+            logger.warning(f"LLM scene description generation failed: {e}")
+
+        return None
+
+    def _build_basic_prompt(self, synthesis: Dict[str, Any], category: str) -> str:
+        """
+        Fallback: Build a basic prompt from title and entities.
         """
         title = synthesis.get("title", "")
 
@@ -192,13 +274,13 @@ class FalImageGenerator:
             if entity_names:
                 entity_text = f" Featuring elements related to: {entity_names}."
 
-        style = STYLE_PROMPTS.get(category, "sophisticated, professional editorial illustration")
+        style = STYLE_PROMPTS.get(category, "professional editorial photography")
 
         return (
-            f"Editorial newspaper illustration for: {title}.{entity_text} "
-            f"Style: {style}, minimal, professional, muted colors, "
-            f"no people faces, abstract conceptual art, newspaper quality, "
-            f"sophisticated composition. {NO_TEXT_SUFFIX}."
+            f"Editorial press photograph for news article: {title}.{entity_text} "
+            f"Style: {style}, professional, muted natural colors, "
+            f"cinematic composition, newspaper quality. "
+            f"{NO_TEXT_SUFFIX}."
         )
 
 

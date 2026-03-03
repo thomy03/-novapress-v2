@@ -298,6 +298,12 @@ class LLMService:
                             json_lines.append(line)
                     text = "\n".join(json_lines)
 
+                # Phase 1A: Diagnostic logging for causal_chain presence
+                if "causal_chain" in text:
+                    logger.info("✅ causal_chain PRESENT in raw LLM output")
+                else:
+                    logger.warning("⚠️ causal_chain MISSING from raw LLM output")
+
                 return json.loads(text)
 
             except RateLimitError as e:
@@ -474,6 +480,9 @@ Format JSON strict:
     {{"cause": "Fait déclencheur", "effect": "Conséquence observée", "type": "causes", "sources": ["Source1"]}},
     {{"cause": "Réaction", "effect": "Impact", "type": "triggers", "sources": ["Source2"]}}
   ],
+  "geographic_context": [
+    {{"place": "Lieu précis mentionné", "type": "city|country|region|waterway", "role": "Rôle dans l'actualité", "country": "FR"}}
+  ],
   "sentiment": "positive|negative|neutral|mixed",
   "topic_intensity": "breaking|hot|developing|standard",
   "readingTime": {max(3, min_words // 200)}
@@ -495,12 +504,73 @@ Format JSON strict:
             "keyPoints": result.get("keyPoints", []),
             "analysis": result.get("analysis", ""),
             "causal_chain": result.get("causal_chain", []),
+            "geographic_context": result.get("geographic_context", []),
             "sentiment": result.get("sentiment", "neutral"),
             "topic_intensity": result.get("topic_intensity", "standard"),
             "complianceScore": 95,
             "readingTime": result.get("readingTime", 5),
-            "generation_cost_usd": self.get_last_generation_cost()  # Phase 2.5: Cost Tracker
+            "generation_cost_usd": self.get_last_generation_cost()
         }
+
+    async def extract_causal_chain(self, synthesis: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Dedicated LLM call to extract causal relations from an existing synthesis.
+        Short, focused prompt — costs ~$0.0005 per call.
+        Used as fallback when the main synthesis LLM didn't generate causal_chain.
+
+        Args:
+            synthesis: Dict with title, body, keyPoints, analysis
+
+        Returns:
+            List of causal relations [{cause, effect, type, sources}]
+        """
+        title = synthesis.get("title", "")
+        body = synthesis.get("body", "") or synthesis.get("summary", "")
+        key_points = synthesis.get("keyPoints", [])
+        analysis = synthesis.get("analysis", "")
+
+        # Build compact input
+        kp_text = "\n".join(f"- {kp}" for kp in key_points[:6]) if key_points else ""
+
+        prompt = f"""Analyse cet article et extrais les relations CAUSE → EFFET.
+
+TITRE: {title}
+
+POINTS CLÉS:
+{kp_text}
+
+CORPS (extrait): {body[:1500]}
+
+{f"ANALYSE: {analysis[:500]}" if analysis else ""}
+
+Tu DOIS identifier entre 3 et 7 relations causales.
+Pour CHAQUE fait, demande-toi: "Pourquoi?" (→cause) et "Et après?" (→effet).
+
+Types de relations:
+- "causes": lien causal direct (A provoque B)
+- "triggers": déclencheur temporel (A déclenche B)
+- "enables": condition permissive (A rend B possible)
+- "prevents": blocage (A empêche B)
+
+Réponds UNIQUEMENT avec ce JSON:
+{{
+  "causal_chain": [
+    {{"cause": "Description claire de la cause", "effect": "Description claire de l'effet", "type": "causes|triggers|enables|prevents", "sources": []}},
+    ...
+  ]
+}}"""
+
+        try:
+            result = await self.generate_json(prompt, temperature=0.4, max_tokens=1000)
+            chain = result.get("causal_chain", [])
+            if chain:
+                logger.info(f"🔗 Dedicated causal extraction: {len(chain)} relations for '{title[:50]}...'")
+            else:
+                logger.warning(f"⚠️ Dedicated causal extraction returned empty for '{title[:50]}...'")
+            return chain
+        except Exception as e:
+            logger.error(f"Dedicated causal extraction failed: {e}")
+            return []
 
     async def synthesize_articles_advanced(
         self,
@@ -649,6 +719,9 @@ Format JSON strict:
     {{"cause": "Événement déclencheur", "effect": "Conséquence", "type": "causes", "sources": ["Source"]}},
     {{"cause": "Action", "effect": "Réaction", "type": "triggers", "sources": ["Source"]}}
   ],
+  "geographic_context": [
+    {{"place": "Lieu précis", "type": "city|country|region|waterway", "role": "Rôle contextuel", "country": "XX"}}
+  ],
   "sentiment": "positive|negative|neutral|mixed",
   "topic_intensity": "breaking|hot|developing|standard",
   "readingTime": {max(3, min_words // 200)},
@@ -671,12 +744,13 @@ Format JSON strict:
             "keyPoints": result.get("keyPoints", []),
             "analysis": result.get("analysis", ""),
             "causal_chain": result.get("causal_chain", []),
+            "geographic_context": result.get("geographic_context", []),
             "sentiment": result.get("sentiment", "neutral"),
             "topic_intensity": result.get("topic_intensity", "standard"),
             "complianceScore": 95,
             "readingTime": result.get("readingTime", 5),
             "hasContradictions": result.get("hasContradictions", len(contradictions) > 0),
-            "generation_cost_usd": self.get_last_generation_cost()  # Phase 2.5: Cost Tracker
+            "generation_cost_usd": self.get_last_generation_cost()
         }
 
     async def synthesize_with_history(
@@ -1002,6 +1076,9 @@ Format JSON (causal_chain + predictions + sentiment + topic_intensity + key_metr
       "rationale": "L'interconnexion économique rend les marchés sensibles aux instabilités régionales"
     }}
   ],
+  "geographic_context": [
+    {{"place": "Lieu précis", "type": "city|country|region|waterway", "role": "Son rôle dans l'actualité", "country": "XX"}}
+  ],
   "sentiment": "negative",
   "topic_intensity": "hot",
   "key_metrics": [
@@ -1030,13 +1107,14 @@ Format JSON (causal_chain + predictions + sentiment + topic_intensity + key_metr
             "complianceScore": 95,
             "readingTime": result.get("readingTime", 6),
             "hasContradictions": len(contradictions) > 0,
-            "isEnriched": True,  # Flag indicating TNA was used
-            "causal_chain": result.get("causal_chain", []),  # Causal relations for Nexus Causal
-            "generation_cost_usd": self.get_last_generation_cost(),  # Phase 2.5: Cost Tracker
-            "predictions": result.get("predictions", []),  # Future predictions for Nexus Causal
-            "sentiment": result.get("sentiment", "neutral"),  # Tone for persona selection
-            "topic_intensity": result.get("topic_intensity", "standard"),  # Urgency level
-            "key_metrics": result.get("key_metrics", []),  # Axios/Bloomberg-style callouts
+            "isEnriched": True,
+            "causal_chain": result.get("causal_chain", []),
+            "geographic_context": result.get("geographic_context", []),
+            "generation_cost_usd": self.get_last_generation_cost(),
+            "predictions": result.get("predictions", []),
+            "sentiment": result.get("sentiment", "neutral"),
+            "topic_intensity": result.get("topic_intensity", "standard"),
+            "key_metrics": result.get("key_metrics", []),
         }
 
     async def synthesize_with_persona(

@@ -93,6 +93,29 @@ export function SynthesisHeader({ synthesis, formatDate }: SynthesisHeaderProps)
           <span style={styles.imageCaption}>Illustration generee par IA</span>
         </div>
       )}
+
+      {/* Phase 2D: Source Images Gallery */}
+      {synthesis.sourceImages && synthesis.sourceImages.length > 0 && (
+        <div style={styles.sourceImagesContainer}>
+          <span style={styles.sourceImagesLabel}>IMAGES DES SOURCES</span>
+          <div style={styles.sourceImagesGrid}>
+            {synthesis.sourceImages.slice(0, 4).map((img, i) => (
+              <div key={i} style={styles.sourceImageItem}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={img.url}
+                  alt={img.title || img.source}
+                  style={styles.sourceImageThumb}
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+                <span style={styles.sourceImageCredit}>{img.source}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -198,6 +221,44 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontStyle: 'italic',
     marginTop: '6px',
     textAlign: 'right' as const,
+  },
+  sourceImagesContainer: {
+    marginBottom: '24px',
+    paddingTop: '16px',
+    borderTop: `1px solid ${sharedStyles.border}`,
+  },
+  sourceImagesLabel: {
+    display: 'block',
+    fontSize: '10px',
+    fontWeight: '700',
+    letterSpacing: '1px',
+    color: sharedStyles.textMuted,
+    marginBottom: '10px',
+  },
+  sourceImagesGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(4, 1fr)',
+    gap: '8px',
+  },
+  sourceImageItem: {
+    position: 'relative' as const,
+    overflow: 'hidden',
+  },
+  sourceImageThumb: {
+    width: '100%',
+    height: '80px',
+    objectFit: 'cover' as const,
+    display: 'block',
+    filter: 'grayscale(30%)',
+  },
+  sourceImageCredit: {
+    display: 'block',
+    fontSize: '9px',
+    color: sharedStyles.textMuted,
+    marginTop: '3px',
+    whiteSpace: 'nowrap' as const,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
 };
 

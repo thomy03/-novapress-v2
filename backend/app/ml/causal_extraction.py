@@ -118,10 +118,10 @@ def validate_causal_chain(causal_chain: List[Dict[str, Any]]) -> List[Dict[str, 
 
         # Validate required fields
         errors = []
-        if not cause or not isinstance(cause, str) or len(cause.strip()) < 5:
-            errors.append("missing/invalid 'cause' (must be string >= 5 chars)")
-        if not effect or not isinstance(effect, str) or len(effect.strip()) < 5:
-            errors.append("missing/invalid 'effect' (must be string >= 5 chars)")
+        if not cause or not isinstance(cause, str) or len(cause.strip()) < 3:
+            errors.append("missing/invalid 'cause' (must be string >= 3 chars)")
+        if not effect or not isinstance(effect, str) or len(effect.strip()) < 3:
+            errors.append("missing/invalid 'effect' (must be string >= 3 chars)")
         if not rel_type or rel_type not in VALID_TYPES:
             if rel_type:
                 logger.debug(f"causal_chain[{i}]: Invalid type '{rel_type}', defaulting to 'causes'")

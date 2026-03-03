@@ -53,6 +53,7 @@ export interface CausalGraphResponse {
   central_entity: string;
   narrative_flow: NarrativeFlow;
   total_relations: number;
+  predictions?: Prediction[];
 }
 
 export interface CausalPreviewResponse {

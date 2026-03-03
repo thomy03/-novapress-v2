@@ -14,7 +14,6 @@ import {
   PersonaSection,
   SynthesisBody,
   SourcesSection,
-  CausalSection,
   HistoricalContext
 } from '@/app/components/synthesis';
 import dynamic from 'next/dynamic';
@@ -36,6 +35,123 @@ import { subscriptionService } from '@/app/lib/api/services';
 import { SubscriptionTier } from '@/app/types/api';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+
+/**
+ * Phase 4A: TopicNexusLink — Replaces the CausalSection sidebar.
+ * Shows a summary of causal relations + a link to the full theme Nexus page.
+ */
+function TopicNexusLink({
+  synthesisId,
+  causalData,
+  causalLoading,
+}: {
+  synthesisId: string;
+  causalData: CausalGraphResponse | null;
+  causalLoading: boolean;
+}) {
+  const [topicInfo, setTopicInfo] = useState<{ topic_name: string | null; is_recurring: boolean } | null>(null);
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/trending/syntheses/${synthesisId}/topic-info`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setTopicInfo(data); })
+      .catch(() => {});
+  }, [synthesisId]);
+
+  const nodeCount = causalData?.nodes?.length || 0;
+  const edgeCount = causalData?.edges?.length || 0;
+  const topicName = topicInfo?.topic_name;
+  const isRecurring = topicInfo?.is_recurring;
+
+  return (
+    <div style={{
+      padding: '20px',
+      backgroundColor: '#fff',
+      border: '1px solid #E5E5E5',
+    }}>
+      <h3 style={{
+        margin: '0 0 16px 0',
+        fontSize: '11px',
+        fontWeight: 800,
+        textTransform: 'uppercase' as const,
+        letterSpacing: '2px',
+        color: '#000',
+        borderBottom: '2px solid #000',
+        paddingBottom: '8px',
+      }}>
+        NEXUS CAUSAL
+      </h3>
+
+      {causalLoading ? (
+        <p style={{ fontSize: '13px', color: '#9CA3AF' }}>Chargement...</p>
+      ) : (
+        <>
+          {/* Stats */}
+          <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+            <div style={{ textAlign: 'center' as const }}>
+              <div style={{ fontSize: '24px', fontWeight: 700, color: '#000' }}>{nodeCount}</div>
+              <div style={{ fontSize: '10px', color: '#6B7280', textTransform: 'uppercase' as const, letterSpacing: '0.5px' }}>noeuds</div>
+            </div>
+            <div style={{ textAlign: 'center' as const }}>
+              <div style={{ fontSize: '24px', fontWeight: 700, color: '#000' }}>{edgeCount}</div>
+              <div style={{ fontSize: '10px', color: '#6B7280', textTransform: 'uppercase' as const, letterSpacing: '0.5px' }}>relations</div>
+            </div>
+          </div>
+
+          {/* Predictions preview */}
+          {causalData?.predictions && causalData.predictions.length > 0 && (
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ fontSize: '10px', fontWeight: 700, color: '#6B7280', letterSpacing: '1px', marginBottom: '8px', textTransform: 'uppercase' as const }}>
+                SCENARIOS
+              </div>
+              {causalData.predictions.slice(0, 2).map((pred, i) => (
+                <div key={i} style={{
+                  padding: '8px',
+                  backgroundColor: '#F9FAFB',
+                  marginBottom: '6px',
+                  borderLeft: '3px solid #DC2626',
+                }}>
+                  <div style={{ fontSize: '12px', color: '#000', lineHeight: '1.4' }}>
+                    {typeof pred === 'object' && 'prediction' in pred
+                      ? (pred as { prediction: string }).prediction?.slice(0, 100)
+                      : String(pred).slice(0, 100)}...
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Link to theme nexus */}
+          {isRecurring && topicName && (
+            <Link
+              href={`/topics/${encodeURIComponent(topicName)}?tab=causal`}
+              style={{
+                display: 'block',
+                padding: '12px 16px',
+                backgroundColor: '#000',
+                color: '#fff',
+                textAlign: 'center' as const,
+                fontSize: '12px',
+                fontWeight: 700,
+                letterSpacing: '0.5px',
+                textDecoration: 'none',
+                textTransform: 'uppercase' as const,
+              }}
+            >
+              Voir le Nexus du theme : {topicName}
+            </Link>
+          )}
+
+          {!isRecurring && (
+            <p style={{ fontSize: '12px', color: '#9CA3AF', fontStyle: 'italic' }}>
+              Ce sujet n&apos;est pas encore lie a un theme recurrent.
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
 
 interface SynthesisClientProps {
   initialSynthesis: SynthesisData;
@@ -215,9 +331,8 @@ export default function SynthesisClient({ initialSynthesis }: SynthesisClientPro
           />
         }
         rightSidebar={
-          <CausalSection
+          <TopicNexusLink
             synthesisId={synthesis.id}
-            synthesisTitle={synthesis.title}
             causalData={causalData}
             causalLoading={causalLoading}
           />

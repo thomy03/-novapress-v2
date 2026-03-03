@@ -6,214 +6,273 @@ import {
   Geographies,
   Geography,
   ZoomableGroup,
+  Marker,
 } from 'react-simple-maps';
-import { SynthesisData, sharedStyles } from '@/app/types/synthesis-page';
+import { SynthesisData, GeographicLocation, sharedStyles } from '@/app/types/synthesis-page';
 
 const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
 
 /**
- * MiniGeoWidget — Compact Le Monde-style world map for MONDE category.
- * Auto-extracts mentioned countries from sourceArticles domains + keyPoints + body text.
- * Only renders when >= 2 countries are detected.
+ * MiniGeoWidget — Editorial contextual geography widget.
+ * Phase 3C: Uses LLM-generated geographic_context for precise locations.
+ * Fallback: extracts countries from text if no geographic_context.
+ * Style: "THEATRE DES OPERATIONS" — Le Monde editorial.
  */
 
-// Country name → ISO Alpha-3 mapping for text extraction (French + English, no duplicates)
+// Country ISO2 → approximate center coordinates for map centering
+const COUNTRY_CENTERS: Record<string, [number, number]> = {
+  FR: [2, 47], DE: [10, 51], IT: [12, 42], ES: [-4, 40], GB: [-2, 54],
+  US: [-98, 39], RU: [60, 60], CN: [105, 35], JP: [138, 36], IN: [78, 22],
+  BR: [-50, -14], CA: [-100, 56], AU: [135, -25], MX: [-102, 23],
+  TR: [32, 39], IR: [53, 32], IQ: [44, 33], IL: [35, 31], PS: [35, 32],
+  SY: [38, 35], LB: [36, 34], EG: [30, 26], MA: [-6, 32], DZ: [3, 28],
+  TN: [9, 34], NG: [8, 10], ZA: [25, -29], KR: [127, 37], KP: [127, 40],
+  TW: [121, 24], SA: [45, 24], PK: [69, 30], UA: [32, 49], PL: [20, 52],
+  GR: [22, 39], AR: [-64, -34], CO: [-74, 4], VE: [-66, 8], PE: [-76, -10],
+  CL: [-71, -30], SE: [15, 62], NO: [10, 62], FI: [26, 64], AT: [14, 47],
+  BE: [4, 51], NL: [5, 52], CH: [8, 47], PT: [-8, 39], RO: [25, 46],
+  HU: [19, 47], ID: [117, -2], TH: [100, 15], VN: [108, 16], PH: [122, 13],
+};
+
+// Country name → ISO Alpha-3 mapping for regex fallback
 const COUNTRY_NAME_TO_ISO3: Record<string, string> = {
-  // French names
-  'allemagne': 'DEU', 'italie': 'ITA', 'espagne': 'ESP',
-  'royaume-uni': 'GBR', 'etats-unis': 'USA', 'russie': 'RUS', 'chine': 'CHN',
-  'japon': 'JPN', 'inde': 'IND', 'bresil': 'BRA',
-  'australie': 'AUS', 'mexique': 'MEX', 'argentine': 'ARG',
-  'turquie': 'TUR', 'irak': 'IRQ',
-  'syrie': 'SYR', 'liban': 'LBN', 'egypte': 'EGY',
-  'maroc': 'MAR', 'algerie': 'DZA', 'tunisie': 'TUN', 'senegal': 'SEN',
-  'afrique du sud': 'ZAF', 'coree du nord': 'PRK',
-  'coree du sud': 'KOR', 'arabie saoudite': 'SAU',
-  'pologne': 'POL', 'roumanie': 'ROU', 'grece': 'GRC', 'suisse': 'CHE',
-  'belgique': 'BEL', 'pays-bas': 'NLD', 'suede': 'SWE',
-  'norvege': 'NOR', 'danemark': 'DNK', 'finlande': 'FIN', 'autriche': 'AUT',
-  'hongrie': 'HUN', 'colombie': 'COL', 'perou': 'PER',
-  'chili': 'CHL', 'banglad esh': 'BGD', 'indonesie': 'IDN',
-  'thailande': 'THA',
-  // English names (unique keys only)
-  'france': 'FRA', 'germany': 'DEU', 'italy': 'ITA', 'spain': 'ESP',
-  'united kingdom': 'GBR', 'united states': 'USA', 'russia': 'RUS', 'china': 'CHN',
-  'japan': 'JPN', 'india': 'IND', 'brazil': 'BRA', 'canada': 'CAN',
-  'australia': 'AUS', 'mexico': 'MEX', 'argentina': 'ARG', 'ukraine': 'UKR',
-  'turkey': 'TUR', 'iran': 'IRN', 'iraq': 'IRQ', 'israel': 'ISR',
-  'palestine': 'PSE', 'syria': 'SYR', 'lebanon': 'LBN', 'egypt': 'EGY',
-  'morocco': 'MAR', 'algeria': 'DZA', 'tunisia': 'TUN', 'nigeria': 'NGA',
-  'south africa': 'ZAF', 'north korea': 'PRK', 'south korea': 'KOR',
-  'taiwan': 'TWN', 'saudi arabia': 'SAU', 'poland': 'POL', 'romania': 'ROU',
-  'greece': 'GRC', 'switzerland': 'CHE', 'belgium': 'BEL', 'netherlands': 'NLD',
-  'portugal': 'PRT', 'sweden': 'SWE', 'norway': 'NOR', 'denmark': 'DNK',
-  'finland': 'FIN', 'austria': 'AUT', 'hungary': 'HUN', 'colombia': 'COL',
-  'venezuela': 'VEN', 'peru': 'PER', 'chile': 'CHL', 'pakistan': 'PAK',
-  'indonesia': 'IDN', 'thailand': 'THA', 'vietnam': 'VNM', 'philippines': 'PHL',
+  'france': 'FRA', 'allemagne': 'DEU', 'germany': 'DEU', 'italie': 'ITA', 'italy': 'ITA',
+  'espagne': 'ESP', 'spain': 'ESP', 'royaume-uni': 'GBR', 'united kingdom': 'GBR',
+  'etats-unis': 'USA', 'united states': 'USA', 'russie': 'RUS', 'russia': 'RUS',
+  'chine': 'CHN', 'china': 'CHN', 'japon': 'JPN', 'japan': 'JPN', 'inde': 'IND',
+  'india': 'IND', 'bresil': 'BRA', 'brazil': 'BRA', 'canada': 'CAN',
+  'ukraine': 'UKR', 'turquie': 'TUR', 'turkey': 'TUR', 'iran': 'IRN',
+  'irak': 'IRQ', 'iraq': 'IRQ', 'israel': 'ISR', 'palestine': 'PSE',
+  'syrie': 'SYR', 'syria': 'SYR', 'liban': 'LBN', 'lebanon': 'LBN',
+  'egypte': 'EGY', 'egypt': 'EGY', 'maroc': 'MAR', 'morocco': 'MAR',
+  'algerie': 'DZA', 'algeria': 'DZA', 'tunisie': 'TUN', 'tunisia': 'TUN',
+  'afrique du sud': 'ZAF', 'south africa': 'ZAF', 'arabie saoudite': 'SAU',
+  'saudi arabia': 'SAU', 'coree du nord': 'PRK', 'north korea': 'PRK',
+  'coree du sud': 'KOR', 'south korea': 'KOR', 'pologne': 'POL', 'poland': 'POL',
+  'grece': 'GRC', 'greece': 'GRC', 'suisse': 'CHE', 'switzerland': 'CHE',
 };
 
-// Domain TLD → ISO3 mapping
-const TLD_TO_ISO3: Record<string, string> = {
-  '.fr': 'FRA', '.de': 'DEU', '.it': 'ITA', '.es': 'ESP',
-  '.co.uk': 'GBR', '.com': 'USA', '.ru': 'RUS', '.cn': 'CHN',
-  '.jp': 'JPN', '.in': 'IND', '.br': 'BRA', '.ca': 'CAN',
-  '.au': 'AUS', '.mx': 'MEX', '.ar': 'ARG',
-};
-
-interface CountryMention {
-  iso3: string;
-  name: string;
-  count: number;
+// ISO2 → flag emoji
+function countryFlag(iso2: string): string {
+  if (!iso2 || iso2.length !== 2) return '';
+  return String.fromCodePoint(
+    ...iso2.toUpperCase().split('').map(c => 0x1F1E6 + c.charCodeAt(0) - 65)
+  );
 }
 
-function extractCountries(synthesis: SynthesisData): CountryMention[] {
-  const counts = new Map<string, { name: string; count: number }>();
+interface GeoData {
+  locations: GeographicLocation[];
+  highlightedISO3: string[];
+  center: [number, number];
+  zoom: number;
+}
 
-  // Combine all text sources for country detection
+function extractGeoData(synthesis: SynthesisData): GeoData {
+  const locations = synthesis.geographicContext || [];
+
+  // If we have LLM-generated context, use it
+  if (locations.length > 0) {
+    // Determine map center from countries
+    const countries = locations
+      .map(l => l.country?.toUpperCase())
+      .filter(Boolean) as string[];
+
+    const uniqueCountries = [...new Set(countries)];
+    const highlightedISO3: string[] = [];
+
+    // Map ISO2 to ISO3 for map highlighting
+    for (const iso2 of uniqueCountries) {
+      const iso3 = ISO2_TO_ISO3[iso2];
+      if (iso3) highlightedISO3.push(iso3);
+    }
+
+    // Calculate center based on mentioned countries
+    let centerLon = 0, centerLat = 0, count = 0;
+    for (const iso2 of uniqueCountries) {
+      const coords = COUNTRY_CENTERS[iso2];
+      if (coords) {
+        centerLon += coords[0];
+        centerLat += coords[1];
+        count++;
+      }
+    }
+    const center: [number, number] = count > 0
+      ? [centerLon / count, centerLat / count]
+      : [10, 30];
+
+    // Zoom based on geographic spread
+    let zoom = 1;
+    if (count === 1) zoom = 3;
+    else if (count === 2) zoom = 2;
+    else if (count <= 4) zoom = 1.5;
+
+    return { locations, highlightedISO3, center, zoom };
+  }
+
+  // Fallback: extract countries from text
+  return extractFallbackGeoData(synthesis);
+}
+
+function extractFallbackGeoData(synthesis: SynthesisData): GeoData {
   const textSources = [
     synthesis.body || '',
     synthesis.introduction || '',
     ...(synthesis.keyPoints || []),
   ].join(' ').toLowerCase();
 
-  // Search for country names in text
+  const found = new Map<string, number>();
   for (const [name, iso3] of Object.entries(COUNTRY_NAME_TO_ISO3)) {
-    // Word boundary matching using regex
     const regex = new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
     const matches = textSources.match(regex);
-    if (matches && matches.length > 0) {
-      const existing = counts.get(iso3);
-      counts.set(iso3, {
-        name: name.charAt(0).toUpperCase() + name.slice(1),
-        count: (existing?.count || 0) + matches.length,
-      });
-    }
+    if (matches) found.set(iso3, (found.get(iso3) || 0) + matches.length);
   }
 
-  // Extract from source article domains
-  if (synthesis.sourceArticles) {
-    for (const src of synthesis.sourceArticles) {
-      if (src.url) {
-        try {
-          const hostname = new URL(src.url).hostname;
-          for (const [tld, iso3] of Object.entries(TLD_TO_ISO3)) {
-            if (hostname.endsWith(tld) && tld !== '.com') {
-              const existing = counts.get(iso3);
-              counts.set(iso3, {
-                name: existing?.name || iso3,
-                count: (existing?.count || 0) + 1,
-              });
-            }
-          }
-        } catch {
-          // Invalid URL, skip
-        }
-      }
-    }
-  }
+  const locations: GeographicLocation[] = Array.from(found.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([iso3]) => ({
+      place: iso3,
+      type: 'country',
+      role: 'Mentionné dans l\'article',
+      country: ISO3_TO_ISO2[iso3] || '',
+    }));
 
-  return Array.from(counts.entries())
-    .map(([iso3, data]) => ({ iso3, ...data }))
-    .sort((a, b) => b.count - a.count);
+  const highlightedISO3 = Array.from(found.keys());
+
+  return {
+    locations,
+    highlightedISO3,
+    center: [10, 30],
+    zoom: 1,
+  };
 }
 
-function getCountryFill(iso3: string, countries: CountryMention[]): string {
-  const mention = countries.find((c) => c.iso3 === iso3);
-  if (!mention) return '#E5E5E5';
-  if (mention.count >= 5) return '#DC2626';
-  if (mention.count >= 3) return '#F59E0B';
-  return '#3B82F6';
-}
+// ISO2 ↔ ISO3 mapping
+const ISO2_TO_ISO3: Record<string, string> = {
+  FR: 'FRA', DE: 'DEU', IT: 'ITA', ES: 'ESP', GB: 'GBR', US: 'USA',
+  RU: 'RUS', CN: 'CHN', JP: 'JPN', IN: 'IND', BR: 'BRA', CA: 'CAN',
+  AU: 'AUS', MX: 'MEX', TR: 'TUR', IR: 'IRN', IQ: 'IRQ', IL: 'ISR',
+  PS: 'PSE', SY: 'SYR', LB: 'LBN', EG: 'EGY', MA: 'MAR', DZ: 'DZA',
+  TN: 'TUN', NG: 'NGA', ZA: 'ZAF', KR: 'KOR', KP: 'PRK', TW: 'TWN',
+  SA: 'SAU', PK: 'PAK', UA: 'UKR', PL: 'POL', GR: 'GRC', AR: 'ARG',
+  CO: 'COL', VE: 'VEN', PE: 'PER', CL: 'CHL', SE: 'SWE', NO: 'NOR',
+  FI: 'FIN', AT: 'AUT', BE: 'BEL', NL: 'NLD', CH: 'CHE', PT: 'PRT',
+  RO: 'ROU', HU: 'HUN', ID: 'IDN', TH: 'THA', VN: 'VNM', PH: 'PHL',
+};
+
+const ISO3_TO_ISO2: Record<string, string> = Object.fromEntries(
+  Object.entries(ISO2_TO_ISO3).map(([k, v]) => [v, k])
+);
+
+// Type emoji mapping
+const TYPE_ICONS: Record<string, string> = {
+  city: '\u{1F3D9}',     // 🏙
+  country: '\u{1F3F3}',  // 🏳
+  region: '\u{1F30D}',   // 🌍
+  waterway: '\u{1F30A}', // 🌊
+  base: '\u{1F6E1}',     // 🛡
+};
 
 interface MiniGeoWidgetProps {
   synthesis: SynthesisData;
 }
 
-const MiniGeoWidgetInner = memo(function MiniGeoWidgetInner({
-  countries,
+const GeoMapInner = memo(function GeoMapInner({
+  geoData,
 }: {
-  countries: CountryMention[];
+  geoData: GeoData;
 }) {
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
 
   return (
     <div style={styles.container}>
-      <h3 style={styles.title}>Zones Geographiques</h3>
-
-      {/* Legend */}
-      <div style={styles.legend}>
-        {[
-          { color: '#DC2626', label: 'Fortement mentionne' },
-          { color: '#F59E0B', label: 'Moderement' },
-          { color: '#3B82F6', label: 'Mentionne' },
-        ].map(({ color, label }) => (
-          <span key={color} style={styles.legendItem}>
-            <span style={{ ...styles.legendDot, backgroundColor: color }} />
-            <span style={styles.legendLabel}>{label}</span>
-          </span>
-        ))}
-      </div>
-
-      {/* Country pills */}
-      <div style={styles.pills}>
-        {countries.slice(0, 8).map((c) => (
-          <span
-            key={c.iso3}
-            style={{
-              ...styles.pill,
-              backgroundColor: c.count >= 5 ? '#FEE2E2' : c.count >= 3 ? '#FEF3C7' : '#DBEAFE',
-              color: c.count >= 5 ? '#DC2626' : c.count >= 3 ? '#D97706' : '#2563EB',
-            }}
-          >
-            {c.name} ({c.count})
-          </span>
-        ))}
-      </div>
+      <h3 style={styles.sectionTitle}>THEATRE DES OPERATIONS</h3>
 
       {/* Map */}
       <div style={styles.mapContainer}>
         <ComposableMap
-          projectionConfig={{ rotate: [-10, 0, 0], scale: 147 }}
+          projectionConfig={{
+            rotate: [-geoData.center[0], 0, 0],
+            center: [0, geoData.center[1]],
+            scale: 147 * geoData.zoom,
+          }}
           style={{ width: '100%', height: '100%' }}
         >
-          <ZoomableGroup center={[0, 20]} zoom={1}>
+          <ZoomableGroup>
             <Geographies geography={GEO_URL}>
               {({ geographies }) =>
                 geographies.map((geo) => {
                   const iso3 = geo.properties.ISO_A3;
-                  const fill = getCountryFill(iso3, countries);
-                  const isMentioned = countries.some((c) => c.iso3 === iso3);
+                  const isHighlighted = geoData.highlightedISO3.includes(iso3);
 
                   return (
                     <Geography
                       key={geo.rsmKey}
                       geography={geo}
                       onMouseEnter={(evt) => {
-                        const mention = countries.find((c) => c.iso3 === iso3);
-                        const text = mention
-                          ? `${mention.name}: ${mention.count} mention${mention.count > 1 ? 's' : ''}`
-                          : geo.properties.NAME;
-                        setTooltip({ text, x: evt.clientX, y: evt.clientY });
+                        if (isHighlighted) {
+                          const loc = geoData.locations.find(l => {
+                            const locIso3 = l.country ? ISO2_TO_ISO3[l.country.toUpperCase()] : '';
+                            return locIso3 === iso3;
+                          });
+                          setTooltip({
+                            text: loc ? `${loc.place}: ${loc.role}` : geo.properties.NAME,
+                            x: evt.clientX,
+                            y: evt.clientY,
+                          });
+                        }
                       }}
                       onMouseLeave={() => setTooltip(null)}
                       style={{
-                        default: { fill, stroke: '#FFF', strokeWidth: 0.5, outline: 'none' },
-                        hover: {
-                          fill: isMentioned ? '#1D4ED8' : '#D1D5DB',
+                        default: {
+                          fill: isHighlighted ? '#DC2626' : '#E5E5E5',
                           stroke: '#FFF',
                           strokeWidth: 0.5,
                           outline: 'none',
-                          cursor: 'pointer',
                         },
-                        pressed: { fill: '#1E40AF', stroke: '#FFF', strokeWidth: 0.5, outline: 'none' },
+                        hover: {
+                          fill: isHighlighted ? '#B91C1C' : '#D1D5DB',
+                          stroke: '#FFF',
+                          strokeWidth: 0.5,
+                          outline: 'none',
+                          cursor: isHighlighted ? 'pointer' : 'default',
+                        },
+                        pressed: { fill: '#991B1B', stroke: '#FFF', strokeWidth: 0.5, outline: 'none' },
                       }}
                     />
                   );
                 })
               }
             </Geographies>
+            {/* Markers for specific locations */}
+            {geoData.locations
+              .filter(l => l.country && COUNTRY_CENTERS[l.country.toUpperCase()])
+              .map((loc, i) => {
+                const coords = COUNTRY_CENTERS[loc.country!.toUpperCase()];
+                return (
+                  <Marker key={i} coordinates={coords}>
+                    <circle r={4} fill="#000" opacity={0.7} />
+                    <circle r={2} fill="#DC2626" />
+                  </Marker>
+                );
+              })}
           </ZoomableGroup>
         </ComposableMap>
+      </div>
+
+      {/* Location list — editorial style */}
+      <div style={styles.locationList}>
+        {geoData.locations.slice(0, 6).map((loc, i) => (
+          <div key={i} style={styles.locationItem}>
+            <span style={styles.locationFlag}>
+              {loc.country ? countryFlag(loc.country.toUpperCase()) : (TYPE_ICONS[loc.type] || '')}
+            </span>
+            <div style={styles.locationText}>
+              <span style={styles.locationName}>{loc.place}</span>
+              <span style={styles.locationRole}>{loc.role}</span>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Tooltip */}
@@ -225,12 +284,12 @@ const MiniGeoWidgetInner = memo(function MiniGeoWidgetInner({
             top: tooltip.y - 30,
             backgroundColor: '#fff',
             border: '1px solid #E5E5E5',
-            borderRadius: '4px',
             padding: '6px 10px',
             boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
             fontSize: '12px',
             pointerEvents: 'none',
             zIndex: 1000,
+            maxWidth: '200px',
           }}
         >
           {tooltip.text}
@@ -241,12 +300,12 @@ const MiniGeoWidgetInner = memo(function MiniGeoWidgetInner({
 });
 
 export default function MiniGeoWidget({ synthesis }: MiniGeoWidgetProps) {
-  const countries = useMemo(() => extractCountries(synthesis), [synthesis]);
+  const geoData = useMemo(() => extractGeoData(synthesis), [synthesis]);
 
-  // Only render if >= 2 countries detected
-  if (countries.length < 2) return null;
+  // Only render if we have locations
+  if (geoData.locations.length < 1) return null;
 
-  return <MiniGeoWidgetInner countries={countries} />;
+  return <GeoMapInner geoData={geoData} />;
 }
 
 const styles: Record<string, React.CSSProperties> = {
@@ -257,49 +316,56 @@ const styles: Record<string, React.CSSProperties> = {
     border: `1px solid ${sharedStyles.border}`,
     position: 'relative',
   },
-  title: {
-    margin: '0 0 12px 0',
-    fontSize: '12px',
-    fontWeight: 700,
+  sectionTitle: {
+    margin: '0 0 16px 0',
+    fontSize: '11px',
+    fontWeight: 800,
     textTransform: 'uppercase',
-    letterSpacing: '1px',
-    color: sharedStyles.textSecondary,
+    letterSpacing: '2px',
+    color: sharedStyles.textPrimary,
     fontFamily: sharedStyles.fontSans,
-  },
-  legend: {
-    display: 'flex',
-    gap: '16px',
-    marginBottom: '12px',
-    fontSize: '11px',
-  },
-  legendItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
-  },
-  legendDot: {
-    width: '10px',
-    height: '10px',
-    borderRadius: '2px',
-    display: 'inline-block',
-  },
-  legendLabel: {
-    color: sharedStyles.textMuted,
-  },
-  pills: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '6px',
-    marginBottom: '12px',
-  },
-  pill: {
-    padding: '3px 8px',
-    borderRadius: '3px',
-    fontSize: '11px',
-    fontWeight: 500,
+    borderBottom: '2px solid #000',
+    paddingBottom: '8px',
   },
   mapContainer: {
     width: '100%',
-    height: '250px',
+    height: '220px',
+    marginBottom: '16px',
+  },
+  locationList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  locationItem: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '10px',
+    padding: '6px 0',
+    borderBottom: `1px solid ${sharedStyles.border}`,
+  },
+  locationFlag: {
+    fontSize: '16px',
+    lineHeight: '1',
+    flexShrink: 0,
+    marginTop: '2px',
+  },
+  locationText: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+    minWidth: 0,
+  },
+  locationName: {
+    fontSize: '13px',
+    fontWeight: 700,
+    color: sharedStyles.textPrimary,
+    fontFamily: sharedStyles.fontSans,
+  },
+  locationRole: {
+    fontSize: '11px',
+    color: sharedStyles.textSecondary,
+    lineHeight: '1.3',
+    fontFamily: sharedStyles.fontSans,
   },
 };
