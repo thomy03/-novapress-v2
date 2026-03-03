@@ -70,7 +70,18 @@ interface GeoFocus {
 
 interface CausalGraph {
   nodes: { id: string; label: string; type: string; mention_count?: number; first_seen?: number; last_seen?: number; source_syntheses?: string[] }[];
-  edges: { source: string; target: string; type: string; confidence?: number; mention_count?: number; source_syntheses?: string[]; id?: string }[];
+  edges: {
+    cause_text?: string;
+    effect_text?: string;
+    relation_type?: string;
+    source?: string;
+    target?: string;
+    type?: string;
+    confidence?: number;
+    mention_count?: number;
+    source_syntheses?: string[];
+    id?: string;
+  }[];
   total_nodes: number;
   total_edges: number;
 }
@@ -222,9 +233,9 @@ function TopicDashboardPage() {
   const nodeLabelsById = Object.fromEntries(causalNodes.map(n => [n.id, n.label]));
   const causalEdges = dashboard.aggregated_causal_graph.edges.map((e, idx) => ({
     id: e.id || `edge-${idx}`,
-    cause_text: nodeLabelsById[e.source] || e.source,
-    effect_text: nodeLabelsById[e.target] || e.target,
-    relation_type: (e.type || 'causes') as 'causes' | 'triggers' | 'enables' | 'prevents' | 'relates_to',
+    cause_text: e.cause_text || nodeLabelsById[e.source || ''] || '',
+    effect_text: e.effect_text || nodeLabelsById[e.target || ''] || '',
+    relation_type: (e.relation_type || e.type || 'causes') as 'causes' | 'triggers' | 'enables' | 'prevents' | 'relates_to',
     confidence: e.confidence || 0.7,
     evidence: [] as string[],
     source_articles: [] as string[],
@@ -306,7 +317,7 @@ function TopicDashboardPage() {
                 color: '#6B7280',
                 margin: 0,
               }}>
-                Organisme vivant : chaque synth\u00e8se enrichit le graphe. Les noeuds grandissent avec les confirmations, les nouveaux pulsent.
+                {'Organisme vivant : chaque synthèse enrichit le graphe. Les noeuds grandissent avec les confirmations, les nouveaux pulsent.'}
               </p>
             </div>
 
@@ -326,8 +337,7 @@ function TopicDashboardPage() {
               </div>
             ) : (
               <div style={styles.emptyState}>
-                Pas de donn\u00e9es causales disponibles. Le graphe se remplira automatiquement
-                \u00e0 mesure que de nouvelles synth\u00e8ses sont g\u00e9n\u00e9r\u00e9es.
+                {'Pas de données causales disponibles. Le graphe se remplira automatiquement à mesure que de nouvelles synthèses sont générées.'}
               </div>
             )}
 
@@ -342,7 +352,7 @@ function TopicDashboardPage() {
                   marginBottom: '12px',
                   textTransform: 'uppercase' as const,
                 }}>
-                  SC\u00c9NARIOS PROSPECTIFS
+                  {'SCÉNARIOS PROSPECTIFS'}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {dashboard.predictions_summary.slice(0, 5).map((pred, i) => {
@@ -407,14 +417,14 @@ function TopicDashboardPage() {
                 {/* Entities */}
                 {dashboard.key_entities.length > 0 && (
                   <div style={{ marginBottom: '32px' }}>
-                    <h2 style={styles.sectionTitle}>Entit\u00e9s cl\u00e9s</h2>
+                    <h2 style={styles.sectionTitle}>{'Entités clés'}</h2>
                     <TopicEntityCards entities={dashboard.key_entities} />
                   </div>
                 )}
 
                 {/* Recent Syntheses */}
                 <div>
-                  <h2 style={styles.sectionTitle}>Derni\u00e8res synth\u00e8ses</h2>
+                  <h2 style={styles.sectionTitle}>{'Dernières synthèses'}</h2>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
                     {dashboard.syntheses.slice(0, 5).map((synthesis, i) => (
                       <Link
@@ -503,7 +513,7 @@ function TopicDashboardPage() {
                       textTransform: 'uppercase',
                       marginBottom: '10px',
                     }}>
-                      FOCUS G\u00c9OGRAPHIQUE
+                      {'FOCUS GÉOGRAPHIQUE'}
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                       {dashboard.geo_focus.map((g, i) => (
@@ -570,7 +580,7 @@ function TopicDashboardPage() {
           <section style={styles.section}>
             <h2 style={styles.sectionTitle}>Chronologie du Dossier</h2>
             <p style={styles.sectionSubtitle}>
-              Chaque point repr\u00e9sente une synth\u00e8se. La taille est proportionnelle au nombre de sources,
+              {'Chaque point représente une synthèse. La taille est proportionnelle au nombre de sources,'}
               la couleur indique le sentiment.
             </p>
             <TopicTimeline syntheses={dashboard.syntheses} />
@@ -588,12 +598,12 @@ function TopicDashboardPage() {
         {/* === TAB: Predictions === */}
         {activeTab === 'predictions' && (
           <section style={styles.section}>
-            <h2 style={styles.sectionTitle}>Suivi des Pr\u00e9dictions</h2>
+            <h2 style={styles.sectionTitle}>{'Suivi des Prédictions'}</h2>
             {dashboard.predictions_summary.length > 0 ? (
               <PredictionTracker predictions={dashboard.predictions_summary} />
             ) : (
               <div style={styles.emptyState}>
-                Aucune pr\u00e9diction disponible pour ce dossier.
+                {'Aucune prédiction disponible pour ce dossier.'}
               </div>
             )}
           </section>
@@ -602,7 +612,7 @@ function TopicDashboardPage() {
         {/* Back Link */}
         <div style={styles.backSection}>
           <Link href="/" style={{ color: '#000', textDecoration: 'none', fontSize: '14px', fontWeight: 500 }}>
-            &larr; Retour \u00e0 la page d&apos;accueil
+            {'← Retour à la page d\u0027accueil'}
           </Link>
         </div>
       </div>

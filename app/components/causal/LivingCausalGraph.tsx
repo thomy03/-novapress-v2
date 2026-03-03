@@ -171,24 +171,27 @@ function LivingCausalGraphInner({
     });
   }, [causalNodes, causalEdges, latestTimestamp]);
 
-  // Build React Flow edges
+  // Build React Flow edges — filter out edges with no matching source/target node
   const initialEdges: Edge[] = useMemo(() => {
-    return causalEdges.map((edge, idx) => {
-      const src = causalNodes.find(n => n.label === edge.cause_text);
-      const tgt = causalNodes.find(n => n.label === edge.effect_text);
-      const agg = edge as AggregatedCausalEdge;
-      return {
-        id: agg.id || `edge-${idx}`,
-        source: src?.id || `unknown-src-${idx}`,
-        target: tgt?.id || `unknown-tgt-${idx}`,
-        type: 'flowchart',
-        data: {
-          relationType: edge.relation_type,
-          confidence: edge.confidence,
-          mentionCount: agg.mention_count || 1,
-        },
-      };
-    });
+    return causalEdges
+      .map((edge, idx) => {
+        const src = causalNodes.find(n => n.label === edge.cause_text);
+        const tgt = causalNodes.find(n => n.label === edge.effect_text);
+        if (!src || !tgt) return null; // Skip invalid edges
+        const agg = edge as AggregatedCausalEdge;
+        return {
+          id: agg.id || `edge-${idx}`,
+          source: src.id,
+          target: tgt.id,
+          type: 'flowchart',
+          data: {
+            relationType: edge.relation_type,
+            confidence: edge.confidence,
+            mentionCount: agg.mention_count || 1,
+          },
+        };
+      })
+      .filter(Boolean) as Edge[];
   }, [causalNodes, causalEdges]);
 
   const [nodes, , onNodesChange] = useNodesState(initialNodes);

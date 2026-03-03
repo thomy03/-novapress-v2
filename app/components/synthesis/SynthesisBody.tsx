@@ -122,6 +122,11 @@ export default function SynthesisBody({ synthesis }: SynthesisBodyProps) {
         <KeyMetricCallout metrics={synthesis.keyMetrics} />
       )}
 
+      {/* Geographic context — positioned early for MONDE articles */}
+      {synthesis.category === 'MONDE' && (
+        <MiniGeoWidget synthesis={synthesis} />
+      )}
+
       {/* Body — with intertitre support (## Heading) */}
       <div style={styles.body}>
         {paragraphs.map((paragraph, idx) => {
@@ -144,9 +149,6 @@ export default function SynthesisBody({ synthesis }: SynthesisBodyProps) {
       </div>
 
       {/* Category-specific widgets */}
-      {synthesis.category === 'MONDE' && (
-        <MiniGeoWidget synthesis={synthesis} />
-      )}
       {synthesis.category === 'ECONOMIE' && synthesis.keyMetrics && (
         <MiniSparkline metrics={synthesis.keyMetrics} category={synthesis.category} />
       )}

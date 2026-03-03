@@ -100,11 +100,20 @@ function extractGeoData(synthesis: SynthesisData): GeoData {
       ? [centerLon / count, centerLat / count]
       : [10, 30];
 
-    // Zoom based on geographic spread
+    // Zoom based on bounding box of countries
     let zoom = 1;
-    if (count === 1) zoom = 3;
-    else if (count === 2) zoom = 2;
-    else if (count <= 4) zoom = 1.5;
+    if (count === 1) zoom = 4;
+    else if (count >= 2) {
+      const lons = uniqueCountries.map(c => COUNTRY_CENTERS[c]?.[0]).filter(v => v !== undefined) as number[];
+      const lats = uniqueCountries.map(c => COUNTRY_CENTERS[c]?.[1]).filter(v => v !== undefined) as number[];
+      const lonSpread = Math.max(...lons) - Math.min(...lons);
+      const latSpread = Math.max(...lats) - Math.min(...lats);
+      const maxSpread = Math.max(lonSpread, latSpread);
+      if (maxSpread < 15) zoom = 3.5;
+      else if (maxSpread < 40) zoom = 2.5;
+      else if (maxSpread < 80) zoom = 1.8;
+      else zoom = 1.2;
+    }
 
     return { locations, highlightedISO3, center, zoom };
   }
@@ -186,7 +195,7 @@ const GeoMapInner = memo(function GeoMapInner({
 
   return (
     <div style={styles.container}>
-      <h3 style={styles.sectionTitle}>THEATRE DES OPERATIONS</h3>
+      <h3 style={styles.sectionTitle}>{'GÉOGRAPHIE DE L\u2019ÉVÉNEMENT'}</h3>
 
       {/* Map */}
       <div style={styles.mapContainer}>

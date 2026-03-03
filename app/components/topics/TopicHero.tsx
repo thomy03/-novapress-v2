@@ -61,7 +61,7 @@ export default function TopicHero({
         fontSize: '13px',
         marginBottom: '24px',
       }}>
-        \u2190 Retour aux actualit\u00e9s
+        {'← Retour aux actualités'}
       </Link>
 
       {/* Badges */}
