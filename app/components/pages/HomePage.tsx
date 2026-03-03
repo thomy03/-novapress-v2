@@ -41,57 +41,83 @@ function CompactCard({ synthesis: s, theme, formatDate }: {
           backgroundColor: theme.card,
           border: `1px solid ${theme.border}`,
           borderRadius: '4px',
-          padding: '16px 20px',
+          overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
         }}
       >
-        {/* Title — 2 lines max */}
-        <h3 style={{
-          fontFamily: 'var(--font-serif)',
-          fontSize: '15px',
-          fontWeight: 600,
-          lineHeight: 1.35,
-          color: theme.text,
-          margin: 0,
-          marginBottom: '8px',
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical',
-          overflow: 'hidden',
-        }}>
-          {s.title}
-        </h3>
+        {/* Thumbnail */}
+        {s.imageUrl && (
+          <div style={{
+            width: '100%',
+            height: '120px',
+            overflow: 'hidden',
+            backgroundColor: '#F9FAFB',
+          }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={s.imageUrl}
+              alt=""
+              loading="lazy"
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                display: 'block',
+              }}
+            />
+          </div>
+        )}
 
-        {/* Summary — 2 lines max */}
-        <p style={{
-          fontSize: '13px',
-          lineHeight: 1.5,
-          color: theme.textSecondary,
-          margin: 0,
-          marginBottom: '12px',
-          flex: 1,
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical',
-          overflow: 'hidden',
-        }}>
-          {s.summary}
-        </p>
+        {/* Card content with padding */}
+        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', flex: 1 }}>
+          {/* Title — 2 lines max */}
+          <h3 style={{
+            fontFamily: 'var(--font-serif)',
+            fontSize: '15px',
+            fontWeight: 600,
+            lineHeight: 1.35,
+            color: theme.text,
+            margin: 0,
+            marginBottom: '8px',
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+          }}>
+            {s.title}
+          </h3>
 
-        {/* Meta footer */}
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          fontSize: '11px',
-          color: theme.textSecondary,
-          borderTop: `1px solid ${theme.border}`,
-          paddingTop: '8px',
-          marginTop: 'auto',
-        }}>
-          <span style={{ fontFamily: 'var(--font-mono)' }}>{s.numSources} sources</span>
-          <span>{formatDate(s.createdAt)}</span>
+          {/* Summary — 2 lines max */}
+          <p style={{
+            fontSize: '13px',
+            lineHeight: 1.5,
+            color: theme.textSecondary,
+            margin: 0,
+            marginBottom: '12px',
+            flex: 1,
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+          }}>
+            {s.summary}
+          </p>
+
+          {/* Meta footer */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            fontSize: '11px',
+            color: theme.textSecondary,
+            borderTop: `1px solid ${theme.border}`,
+            paddingTop: '8px',
+            marginTop: 'auto',
+          }}>
+            <span style={{ fontFamily: 'var(--font-mono)' }}>{s.numSources} sources</span>
+            <span>{formatDate(s.createdAt)}</span>
+          </div>
         </div>
       </article>
     </Link>
@@ -336,6 +362,31 @@ function MainContent() {
                   position: 'relative',
                 }}
               >
+                {/* Thumbnail */}
+                {s.imageUrl && (
+                  <div style={{
+                    width: '100%',
+                    height: '80px',
+                    overflow: 'hidden',
+                    borderRadius: '8px',
+                    marginBottom: '12px',
+                    backgroundColor: '#F9FAFB',
+                  }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={s.imageUrl}
+                      alt=""
+                      loading="lazy"
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        display: 'block',
+                      }}
+                    />
+                  </div>
+                )}
+
                 {/* Accent line on hover */}
                 <div
                   className="accent-line-reveal"

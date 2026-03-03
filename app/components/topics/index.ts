@@ -6,4 +6,7 @@ export { default as TopicKPIBar } from './TopicKPIBar';
 export { default as TopicTimeline } from './TopicTimeline';
 export { default as SynthesisTable } from './SynthesisTable';
 export { default as PredictionTracker } from './PredictionTracker';
+export { default as TopicHero } from './TopicHero';
+export { default as TopicEntityCards } from './TopicEntityCards';
+export { default as TopicSentimentSparkline } from './TopicSentimentSparkline';
 export type { NarrativeArc } from './NarrativeArcIndicator';

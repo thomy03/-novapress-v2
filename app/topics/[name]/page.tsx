@@ -4,19 +4,36 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { EntityFrequencyChart, SentimentChart } from '@/app/components/charts';
 import {
   NarrativeArcIndicator,
-  TopicKPIBar,
   TopicTimeline,
   SynthesisTable,
   PredictionTracker,
+  TopicHero,
+  TopicEntityCards,
+  TopicSentimentSparkline,
 } from '@/app/components/topics';
 
-// Lazy-load the causal graph (heavy dependency: reactflow)
-const NeuralCausalGraph = dynamic(
-  () => import('@/app/components/causal/NeuralCausalGraph'),
-  { ssr: false, loading: () => <div style={{ height: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF', fontSize: '14px' }}>Chargement du graphe causal...</div> }
+// Lazy-load the Living Causal Graph (heavy dependency: @xyflow/react)
+const LivingCausalGraph = dynamic(
+  () => import('@/app/components/causal/LivingCausalGraph'),
+  {
+    ssr: false,
+    loading: () => (
+      <div style={{
+        height: 500,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: '#9CA3AF',
+        fontSize: '14px',
+        border: '1px solid #E5E5E5',
+        backgroundColor: '#F9FAFB',
+      }}>
+        Chargement du graphe causal...
+      </div>
+    ),
+  }
 );
 
 interface SynthesisSummary {
@@ -28,6 +45,7 @@ interface SynthesisSummary {
   sentiment: string;
   num_sources: number;
   transparency_score: number;
+  imageUrl?: string;
 }
 
 interface KeyEntity {
@@ -51,8 +69,8 @@ interface GeoFocus {
 }
 
 interface CausalGraph {
-  nodes: { id: string; label: string; type: string }[];
-  edges: { source: string; target: string; type: string; confidence?: number }[];
+  nodes: { id: string; label: string; type: string; mention_count?: number; first_seen?: number; last_seen?: number; source_syntheses?: string[] }[];
+  edges: { source: string; target: string; type: string; confidence?: number; mention_count?: number; source_syntheses?: string[]; id?: string }[];
   total_nodes: number;
   total_edges: number;
 }
@@ -83,14 +101,14 @@ interface TopicDashboard {
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 const NARRATIVE_ARC_CONFIG: Record<string, { label: string; color: string; description: string }> = {
-  emerging: { label: 'Emergent', color: '#2563EB', description: 'Sujet recent, peu de couverture' },
-  developing: { label: 'En developpement', color: '#10B981', description: 'Attention mediatique croissante' },
-  peak: { label: 'Point culminant', color: '#DC2626', description: 'Maximum de couverture mediatique' },
-  declining: { label: 'En declin', color: '#F59E0B', description: 'Interet mediatique en baisse' },
-  resolved: { label: 'Resolu', color: '#6B7280', description: 'Sujet clos ou resolu' }
+  emerging: { label: '\u00c9mergent', color: '#2563EB', description: 'Sujet r\u00e9cent, peu de couverture' },
+  developing: { label: 'En d\u00e9veloppement', color: '#10B981', description: 'Attention m\u00e9diatique croissante' },
+  peak: { label: 'Point culminant', color: '#DC2626', description: 'Maximum de couverture m\u00e9diatique' },
+  declining: { label: 'En d\u00e9clin', color: '#F59E0B', description: 'Int\u00e9r\u00eat m\u00e9diatique en baisse' },
+  resolved: { label: 'R\u00e9solu', color: '#6B7280', description: 'Sujet clos ou r\u00e9solu' },
 };
 
-type TabId = 'overview' | 'timeline' | 'table' | 'causal' | 'predictions';
+type TabId = 'causal' | 'overview' | 'timeline' | 'table' | 'predictions';
 
 export default function TopicDashboardPageWrapper() {
   return (
@@ -108,7 +126,6 @@ function TopicDashboardPage() {
   const [dashboard, setDashboard] = useState<TopicDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Support ?tab=causal from synthesis page link
   const initialTab = (searchParams.get('tab') as TabId) || 'overview';
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
 
@@ -122,13 +139,18 @@ function TopicDashboardPage() {
 
         if (!response.ok) {
           if (response.status === 404) {
-            throw new Error('Topic non trouve ou pas assez de syntheses (minimum 3 requis)');
+            throw new Error('Topic non trouv\u00e9 ou pas assez de synth\u00e8ses (minimum 3 requis)');
           }
           throw new Error('Erreur lors du chargement du dashboard');
         }
 
         const data = await response.json();
         setDashboard(data);
+
+        // Auto-select causal tab if data available and no explicit tab
+        if (!searchParams.get('tab') && data.aggregated_causal_graph?.total_nodes > 0) {
+          setActiveTab('causal');
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Erreur inconnue');
       } finally {
@@ -139,7 +161,7 @@ function TopicDashboardPage() {
     if (topicName) {
       fetchDashboard();
     }
-  }, [topicName]);
+  }, [topicName, searchParams]);
 
   if (loading) {
     return (
@@ -171,78 +193,77 @@ function TopicDashboardPage() {
   }
 
   const arcConfig = NARRATIVE_ARC_CONFIG[dashboard.narrative_arc] || NARRATIVE_ARC_CONFIG.developing;
+  const hasCausalData = dashboard.aggregated_causal_graph.total_nodes > 0;
 
-  const tabs: { id: TabId; label: string; count?: number }[] = [
-    { id: 'overview', label: 'Vue d\'ensemble' },
-    { id: 'timeline', label: 'Chronologie', count: dashboard.synthesis_count },
-    { id: 'table', label: 'Comparatif', count: dashboard.synthesis_count },
-    { id: 'causal', label: 'Graphe causal', count: dashboard.aggregated_causal_graph.total_nodes },
-    { id: 'predictions', label: 'Predictions', count: dashboard.predictions_summary.length },
-  ];
+  // Build tabs — put causal first if data exists
+  const allTabs: { id: TabId; label: string; count?: number }[] = [];
+  if (hasCausalData) {
+    allTabs.push({ id: 'causal', label: 'Graphe causal', count: dashboard.aggregated_causal_graph.total_nodes });
+  }
+  allTabs.push({ id: 'overview', label: 'Vue d\'ensemble' });
+  allTabs.push({ id: 'timeline', label: 'Chronologie', count: dashboard.synthesis_count });
+  allTabs.push({ id: 'table', label: 'Comparatif', count: dashboard.synthesis_count });
+  if (!hasCausalData) {
+    allTabs.push({ id: 'causal', label: 'Graphe causal', count: 0 });
+  }
+  allTabs.push({ id: 'predictions', label: 'Pr\u00e9dictions', count: dashboard.predictions_summary.length });
 
-  // Transform causal graph data for NeuralCausalGraph
+  // Transform causal graph data for LivingCausalGraph
   const causalNodes = dashboard.aggregated_causal_graph.nodes.map(n => ({
     id: n.id,
     label: n.label,
     node_type: (n.type || 'event') as 'event' | 'entity' | 'decision' | 'keyword',
     fact_density: 0.5,
+    mention_count: n.mention_count || 1,
+    first_seen: n.first_seen || 0,
+    last_seen: n.last_seen || 0,
+    source_syntheses: n.source_syntheses || [],
   }));
   const nodeLabelsById = Object.fromEntries(causalNodes.map(n => [n.id, n.label]));
-  const causalEdges = dashboard.aggregated_causal_graph.edges.map(e => ({
+  const causalEdges = dashboard.aggregated_causal_graph.edges.map((e, idx) => ({
+    id: e.id || `edge-${idx}`,
     cause_text: nodeLabelsById[e.source] || e.source,
     effect_text: nodeLabelsById[e.target] || e.target,
     relation_type: (e.type || 'causes') as 'causes' | 'triggers' | 'enables' | 'prevents' | 'relates_to',
     confidence: e.confidence || 0.7,
     evidence: [] as string[],
     source_articles: [] as string[],
+    mention_count: e.mention_count || 1,
+    source_syntheses: e.source_syntheses || [],
   }));
-  const hasCausalData = causalNodes.length > 0;
+
+  const synthesesForPanel = dashboard.syntheses.map(s => ({
+    id: s.id,
+    title: s.title,
+    date: s.date,
+  }));
 
   return (
     <div style={styles.page}>
-      {/* Header Bar */}
+      {/* Header Bar (sticky) */}
       <header style={styles.header}>
         <div style={styles.headerContent}>
-          <Link href="/" style={styles.backLink}>
-            <span style={{ fontSize: '18px' }}>&larr;</span>
-            <span>Retour aux actualites</span>
-          </Link>
           <span style={styles.headerLabel}>DOSSIER</span>
         </div>
       </header>
 
-      {/* Hero Section */}
-      <div style={styles.hero}>
-        <div style={styles.badgeRow}>
-          <span style={styles.dossieBadge}>DOSSIER</span>
-          <NarrativeArcIndicator arc={dashboard.narrative_arc as 'emerging' | 'developing' | 'peak' | 'declining' | 'resolved'} size="medium" />
-          {dashboard.is_active && (
-            <span style={styles.activeBadge}>EN COURS</span>
-          )}
-        </div>
-
-        <h1 style={styles.title}>{dashboard.topic}</h1>
-
-        <p style={styles.arcDescription}>
-          <span style={{ color: arcConfig.color, fontWeight: 600 }}>{arcConfig.label}</span>
-          {' \u2014 '}{arcConfig.description}
-        </p>
-
-        {/* KPI Bar */}
-        <TopicKPIBar
-          synthesisCount={dashboard.synthesis_count}
-          durationDays={dashboard.duration_days || 0}
-          transparencyAvg={dashboard.transparency_avg || 0}
-          sourcesTotal={dashboard.sources_total || 0}
-          entitiesCount={dashboard.key_entities.length}
-          causalNodes={dashboard.aggregated_causal_graph.total_nodes}
-        />
-      </div>
+      {/* Hero */}
+      <TopicHero
+        topic={dashboard.topic}
+        narrativeArc={dashboard.narrative_arc}
+        isActive={dashboard.is_active}
+        synthesisCount={dashboard.synthesis_count}
+        durationDays={dashboard.duration_days || 0}
+        transparencyAvg={dashboard.transparency_avg || 0}
+        sourcesTotal={dashboard.sources_total || 0}
+        entitiesCount={dashboard.key_entities.length}
+        causalNodes={dashboard.aggregated_causal_graph.total_nodes}
+      />
 
       {/* Tab Navigation */}
       <div style={styles.tabBar}>
         <div style={styles.tabBarInner}>
-          {tabs.map((tab) => (
+          {allTabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
@@ -260,224 +281,59 @@ function TopicDashboardPage() {
         </div>
       </div>
 
-      {/* Main Content */}
+      {/* Content */}
       <div style={styles.content}>
 
-        {/* === TAB: Overview === */}
-        {activeTab === 'overview' && (
-          <>
-            {/* Key Entities */}
-            {dashboard.key_entities.length > 0 && (
-              <section style={styles.section}>
-                <h2 style={styles.sectionTitle}>Entites Cles</h2>
-                <div style={styles.entityGrid}>
-                  {dashboard.key_entities.slice(0, 12).map((entity, index) => (
-                    <div key={index} style={styles.entityCard}>
-                      <span style={styles.entityType}>{entity.type}</span>
-                      <span style={styles.entityName}>{entity.name}</span>
-                      <span style={styles.entityCount}>{entity.count} mentions</span>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {/* Charts Row */}
-            {(dashboard.sentiment_evolution.length > 0 || dashboard.key_entities.length > 0) && (
-              <div style={styles.chartsRow}>
-                {dashboard.sentiment_evolution.length > 0 && (
-                  <section style={styles.chartCard}>
-                    <SentimentChart
-                      synthesisId=""
-                      data={dashboard.sentiment_evolution}
-                      title="Evolution du Sentiment"
-                    />
-                  </section>
-                )}
-                {dashboard.key_entities.length > 0 && (
-                  <section style={styles.chartCard}>
-                    <EntityFrequencyChart
-                      synthesisId=""
-                      entities={dashboard.key_entities.map(e => ({
-                        name: e.name,
-                        count: e.count,
-                        type: e.type
-                      }))}
-                      title="Frequence des Entites"
-                    />
-                  </section>
-                )}
-              </div>
-            )}
-
-            {/* Geographic Focus */}
-            {dashboard.geo_focus.length > 0 && (
-              <section style={styles.section}>
-                <h2 style={styles.sectionTitle}>Focus Geographique</h2>
-                <div style={styles.geoGrid}>
-                  {dashboard.geo_focus.map((g, index) => (
-                    <div key={index} style={styles.geoCard}>
-                      <span style={styles.geoCountry}>{g.country}</span>
-                      <span style={styles.geoCount}>{g.count} mentions</span>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {/* Recent Syntheses */}
-            <section style={styles.section}>
-              <h2 style={styles.sectionTitle}>
-                Dernieres Syntheses
-              </h2>
-              <div style={styles.synthesesList}>
-                {dashboard.syntheses.slice(0, 5).map((synthesis) => (
-                  <Link
-                    key={synthesis.id}
-                    href={`/synthesis/${synthesis.id}`}
-                    style={styles.synthesisCard}
-                  >
-                    <div style={styles.synthesisTop}>
-                      <span style={styles.synthesisCategory}>{synthesis.category}</span>
-                      <span style={styles.synthesisDate}>{formatDate(synthesis.date)}</span>
-                    </div>
-                    <h3 style={styles.synthesisTitle}>{synthesis.title}</h3>
-                    {synthesis.summary && (
-                      <p style={styles.synthesisSummary}>
-                        {synthesis.summary.length > 200
-                          ? synthesis.summary.substring(0, 200) + '...'
-                          : synthesis.summary}
-                      </p>
-                    )}
-                    <span style={styles.readMore}>Lire la synthese &rarr;</span>
-                  </Link>
-                ))}
-              </div>
-            </section>
-          </>
-        )}
-
-        {/* === TAB: Timeline === */}
-        {activeTab === 'timeline' && (
-          <section style={styles.section}>
-            <h2 style={styles.sectionTitle}>Chronologie du Dossier</h2>
-            <p style={styles.sectionSubtitle}>
-              Chaque point represente une synthese. La taille est proportionnelle au nombre de sources,
-              la couleur indique le sentiment.
-            </p>
-            <TopicTimeline syntheses={dashboard.syntheses} />
-          </section>
-        )}
-
-        {/* === TAB: Comparison Table === */}
-        {activeTab === 'table' && (
-          <section style={styles.section}>
-            <h2 style={styles.sectionTitle}>Tableau Comparatif</h2>
-            <SynthesisTable syntheses={dashboard.syntheses} />
-          </section>
-        )}
-
-        {/* === TAB: Causal Graph (Phase 4B-4C redesign) === */}
+        {/* === TAB: Causal Graph === */}
         {activeTab === 'causal' && (
-          <>
-            {/* NEXUS CAUSAL Header */}
-            <section style={styles.section}>
-              <div style={{
-                borderBottom: '3px solid #000',
-                paddingBottom: '12px',
-                marginBottom: '24px',
+          <section style={styles.section}>
+            <div style={{
+              borderBottom: '3px solid #000',
+              paddingBottom: '12px',
+              marginBottom: '24px',
+            }}>
+              <h2 style={{
+                fontFamily: 'Georgia, "Times New Roman", serif',
+                fontSize: '28px',
+                fontWeight: 700,
+                color: '#000',
+                margin: '0 0 8px 0',
               }}>
-                <h2 style={{
-                  fontFamily: 'Georgia, "Times New Roman", serif',
-                  fontSize: '28px',
-                  fontWeight: 700,
-                  color: '#000',
-                  margin: '0 0 8px 0',
-                }}>
-                  NEXUS CAUSAL — {dashboard.topic}
-                </h2>
-                <div style={{
-                  display: 'flex',
-                  gap: '24px',
-                  fontSize: '13px',
-                  color: '#6B7280',
-                }}>
-                  <span>{dashboard.synthesis_count} syntheses</span>
-                  <span>{dashboard.aggregated_causal_graph.total_nodes} noeuds</span>
-                  <span>{dashboard.aggregated_causal_graph.total_edges} relations</span>
-                  <span>Arc: <strong style={{ color: arcConfig.color }}>{arcConfig.label}</strong></span>
-                </div>
-              </div>
-
-              {/* Central Entities */}
-              {dashboard.key_entities.length > 0 && (
-                <div style={{ marginBottom: '24px' }}>
-                  <div style={{
-                    fontSize: '10px',
-                    fontWeight: 800,
-                    letterSpacing: '2px',
-                    color: '#6B7280',
-                    marginBottom: '10px',
-                    textTransform: 'uppercase' as const,
-                  }}>
-                    ENTITES CENTRALES
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                    {dashboard.key_entities.slice(0, 8).map((entity, i) => (
-                      <span key={i} style={{
-                        display: 'inline-block',
-                        padding: '6px 14px',
-                        backgroundColor: i < 3 ? '#000' : '#F9FAFB',
-                        color: i < 3 ? '#FFF' : '#000',
-                        fontSize: '12px',
-                        fontWeight: 700,
-                        border: i >= 3 ? '1px solid #E5E5E5' : 'none',
-                        letterSpacing: '0.3px',
-                      }}>
-                        {entity.name.toUpperCase()}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </section>
-
-            {/* Causal Graph — White newspaper style */}
-            <section style={styles.section}>
-              <div style={{
-                fontSize: '10px',
-                fontWeight: 800,
-                letterSpacing: '2px',
+                NEXUS CAUSAL — {dashboard.topic}
+              </h2>
+              <p style={{
+                fontSize: '13px',
                 color: '#6B7280',
-                marginBottom: '12px',
-                textTransform: 'uppercase' as const,
+                margin: 0,
               }}>
-                GRAPHE CAUSAL
-              </div>
-              {hasCausalData ? (
-                <div style={{
-                  height: '500px',
-                  border: '1px solid #E5E5E5',
-                  backgroundColor: '#FFFFFF',
-                }}>
-                  <NeuralCausalGraph
-                    nodes={causalNodes}
-                    edges={causalEdges}
-                    centralEntity={dashboard.topic}
-                    narrativeFlow="linear"
-                  />
-                </div>
-              ) : (
-                <div style={styles.emptyState}>
-                  Pas de donnees causales disponibles. Le graphe se remplira automatiquement
-                  a mesure que de nouvelles syntheses sont generees.
-                </div>
-              )}
-            </section>
+                Organisme vivant : chaque synth\u00e8se enrichit le graphe. Les noeuds grandissent avec les confirmations, les nouveaux pulsent.
+              </p>
+            </div>
 
-            {/* Scenarios Prospectifs */}
+            {hasCausalData ? (
+              <div style={{
+                height: '600px',
+                border: '1px solid #E5E5E5',
+                backgroundColor: '#FFFFFF',
+              }}>
+                <LivingCausalGraph
+                  nodes={causalNodes}
+                  edges={causalEdges}
+                  centralEntity={dashboard.topic}
+                  narrativeFlow={(dashboard.narrative_arc === 'linear' || dashboard.narrative_arc === 'branching' || dashboard.narrative_arc === 'circular') ? dashboard.narrative_arc as 'linear' | 'branching' | 'circular' : 'linear'}
+                  syntheses={synthesesForPanel}
+                />
+              </div>
+            ) : (
+              <div style={styles.emptyState}>
+                Pas de donn\u00e9es causales disponibles. Le graphe se remplira automatiquement
+                \u00e0 mesure que de nouvelles synth\u00e8ses sont g\u00e9n\u00e9r\u00e9es.
+              </div>
+            )}
+
+            {/* Predictions below graph */}
             {dashboard.predictions_summary.length > 0 && (
-              <section style={styles.section}>
+              <div style={{ marginTop: '32px' }}>
                 <div style={{
                   fontSize: '10px',
                   fontWeight: 800,
@@ -486,7 +342,7 @@ function TopicDashboardPage() {
                   marginBottom: '12px',
                   textTransform: 'uppercase' as const,
                 }}>
-                  SCENARIOS PROSPECTIFS
+                  SC\u00c9NARIOS PROSPECTIFS
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {dashboard.predictions_summary.slice(0, 5).map((pred, i) => {
@@ -532,85 +388,212 @@ function TopicDashboardPage() {
                     );
                   })}
                 </div>
-              </section>
+              </div>
             )}
+          </section>
+        )}
 
-            {/* Chronologie du Theme */}
-            <section style={styles.section}>
-              <div style={{
-                fontSize: '10px',
-                fontWeight: 800,
-                letterSpacing: '2px',
-                color: '#6B7280',
-                marginBottom: '12px',
-                textTransform: 'uppercase' as const,
-              }}>
-                CHRONOLOGIE DU THEME
+        {/* === TAB: Overview === */}
+        {activeTab === 'overview' && (
+          <section style={styles.section}>
+            {/* 2-column layout */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: '40px',
+            }}>
+              {/* Left column (60%) — entities + recent syntheses */}
+              <div>
+                {/* Entities */}
+                {dashboard.key_entities.length > 0 && (
+                  <div style={{ marginBottom: '32px' }}>
+                    <h2 style={styles.sectionTitle}>Entit\u00e9s cl\u00e9s</h2>
+                    <TopicEntityCards entities={dashboard.key_entities} />
+                  </div>
+                )}
+
+                {/* Recent Syntheses */}
+                <div>
+                  <h2 style={styles.sectionTitle}>Derni\u00e8res synth\u00e8ses</h2>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+                    {dashboard.syntheses.slice(0, 5).map((synthesis, i) => (
+                      <Link
+                        key={synthesis.id}
+                        href={`/synthesis/${synthesis.id}`}
+                        style={{
+                          display: 'flex',
+                          gap: '16px',
+                          padding: '16px 0',
+                          borderBottom: '1px solid #E5E5E5',
+                          textDecoration: 'none',
+                          color: '#000',
+                          alignItems: 'flex-start',
+                        }}
+                      >
+                        {/* Thumbnail */}
+                        {synthesis.imageUrl && (
+                          <div style={{
+                            width: '80px',
+                            height: '60px',
+                            overflow: 'hidden',
+                            flexShrink: 0,
+                            backgroundColor: '#F9FAFB',
+                          }}>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={synthesis.imageUrl}
+                              alt=""
+                              loading="lazy"
+                              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                            />
+                          </div>
+                        )}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            marginBottom: '4px',
+                          }}>
+                            <span style={{ fontSize: '11px', fontWeight: 700, color: '#DC2626', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                              {synthesis.category}
+                            </span>
+                            <span style={{ fontSize: '12px', color: '#9CA3AF' }}>
+                              {formatDate(synthesis.date)}
+                            </span>
+                          </div>
+                          <h3 style={{
+                            fontSize: '16px',
+                            fontWeight: 600,
+                            color: '#000',
+                            margin: 0,
+                            fontFamily: 'Georgia, "Times New Roman", serif',
+                            lineHeight: 1.3,
+                          }}>
+                            {synthesis.title}
+                          </h3>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
-                {dashboard.syntheses.slice(0, 10).map((synthesis, i) => {
-                  const isLast = i === 0;
-                  return (
-                    <Link
-                      key={synthesis.id}
-                      href={`/synthesis/${synthesis.id}`}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '16px',
-                        padding: '12px 0',
-                        borderBottom: '1px solid #E5E5E5',
-                        textDecoration: 'none',
-                        color: '#000',
-                      }}
-                    >
-                      <span style={{
-                        fontSize: '12px',
-                        color: '#6B7280',
-                        minWidth: '60px',
-                        whiteSpace: 'nowrap',
-                      }}>
-                        {formatDate(synthesis.date).split(' ').slice(0, 2).join(' ')}
-                      </span>
-                      <span style={{
-                        flex: 1,
-                        fontSize: '14px',
-                        fontWeight: isLast ? 700 : 400,
-                        color: isLast ? '#000' : '#374151',
-                        lineHeight: 1.3,
-                      }}>
-                        {synthesis.title}
-                      </span>
-                      {isLast && (
-                        <span style={{
-                          fontSize: '10px',
-                          fontWeight: 700,
-                          color: '#DC2626',
-                          backgroundColor: '#FEE2E2',
-                          padding: '2px 8px',
-                          letterSpacing: '0.5px',
+
+              {/* Right column (40%) — sentiment, geo, arc */}
+              <div>
+                {/* Sentiment Sparkline */}
+                {dashboard.sentiment_evolution.length > 0 && (
+                  <div style={{
+                    marginBottom: '32px',
+                    padding: '16px',
+                    border: '1px solid #E5E5E5',
+                    backgroundColor: '#FFFFFF',
+                  }}>
+                    <TopicSentimentSparkline data={dashboard.sentiment_evolution} />
+                  </div>
+                )}
+
+                {/* Geographic Focus */}
+                {dashboard.geo_focus.length > 0 && (
+                  <div style={{ marginBottom: '32px' }}>
+                    <div style={{
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      letterSpacing: '1.5px',
+                      color: '#6B7280',
+                      textTransform: 'uppercase',
+                      marginBottom: '10px',
+                    }}>
+                      FOCUS G\u00c9OGRAPHIQUE
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                      {dashboard.geo_focus.map((g, i) => (
+                        <span key={i} style={{
+                          padding: '6px 14px',
+                          backgroundColor: '#F9FAFB',
+                          border: '1px solid #E5E5E5',
+                          fontSize: '13px',
+                          color: '#000',
                         }}>
-                          ACTUEL
+                          {g.country} <span style={{ color: '#9CA3AF', fontSize: '11px' }}>({g.count})</span>
                         </span>
-                      )}
-                      <span style={{ fontSize: '12px', color: '#2563EB' }}>Lire &rarr;</span>
-                    </Link>
-                  );
-                })}
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Narrative Arc */}
+                <div style={{
+                  padding: '16px',
+                  border: '1px solid #E5E5E5',
+                  backgroundColor: '#FFFFFF',
+                }}>
+                  <div style={{
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    letterSpacing: '1.5px',
+                    color: '#6B7280',
+                    textTransform: 'uppercase',
+                    marginBottom: '10px',
+                  }}>
+                    ARC NARRATIF
+                  </div>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                  }}>
+                    <span style={{
+                      fontSize: '18px',
+                      fontWeight: 700,
+                      color: arcConfig.color,
+                      fontFamily: 'Georgia, "Times New Roman", serif',
+                    }}>
+                      {arcConfig.label}
+                    </span>
+                  </div>
+                  <p style={{
+                    fontSize: '13px',
+                    color: '#6B7280',
+                    margin: '8px 0 0 0',
+                    lineHeight: 1.5,
+                  }}>
+                    {arcConfig.description}
+                  </p>
+                </div>
               </div>
-            </section>
-          </>
+            </div>
+          </section>
+        )}
+
+        {/* === TAB: Timeline === */}
+        {activeTab === 'timeline' && (
+          <section style={styles.section}>
+            <h2 style={styles.sectionTitle}>Chronologie du Dossier</h2>
+            <p style={styles.sectionSubtitle}>
+              Chaque point repr\u00e9sente une synth\u00e8se. La taille est proportionnelle au nombre de sources,
+              la couleur indique le sentiment.
+            </p>
+            <TopicTimeline syntheses={dashboard.syntheses} />
+          </section>
+        )}
+
+        {/* === TAB: Comparison Table === */}
+        {activeTab === 'table' && (
+          <section style={styles.section}>
+            <h2 style={styles.sectionTitle}>Tableau Comparatif</h2>
+            <SynthesisTable syntheses={dashboard.syntheses} />
+          </section>
         )}
 
         {/* === TAB: Predictions === */}
         {activeTab === 'predictions' && (
           <section style={styles.section}>
-            <h2 style={styles.sectionTitle}>Suivi des Predictions</h2>
+            <h2 style={styles.sectionTitle}>Suivi des Pr\u00e9dictions</h2>
             {dashboard.predictions_summary.length > 0 ? (
               <PredictionTracker predictions={dashboard.predictions_summary} />
             ) : (
               <div style={styles.emptyState}>
-                Aucune prediction disponible pour ce dossier.
+                Aucune pr\u00e9diction disponible pour ce dossier.
               </div>
             )}
           </section>
@@ -619,7 +602,7 @@ function TopicDashboardPage() {
         {/* Back Link */}
         <div style={styles.backSection}>
           <Link href="/" style={{ color: '#000', textDecoration: 'none', fontSize: '14px', fontWeight: 500 }}>
-            &larr; Retour a la page d&apos;accueil
+            &larr; Retour \u00e0 la page d&apos;accueil
           </Link>
         </div>
       </div>
@@ -632,14 +615,13 @@ function formatDate(dateStr: string) {
     return new Date(dateStr).toLocaleDateString('fr-FR', {
       day: 'numeric',
       month: 'long',
-      year: 'numeric'
+      year: 'numeric',
     });
   } catch {
     return dateStr;
   }
 }
 
-// Newspaper Style
 const styles: { [key: string]: React.CSSProperties } = {
   page: {
     minHeight: '100vh',
@@ -674,68 +656,14 @@ const styles: { [key: string]: React.CSSProperties } = {
     margin: '0 auto',
     padding: '0 24px',
     display: 'flex',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     alignItems: 'center',
-  },
-  backLink: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '8px',
-    color: '#6B7280',
-    textDecoration: 'none',
-    fontSize: '14px',
   },
   headerLabel: {
     fontSize: '11px',
     fontWeight: 700,
     letterSpacing: '1px',
     color: '#2563EB',
-  },
-  hero: {
-    maxWidth: '1200px',
-    margin: '0 auto',
-    padding: '40px 24px 0',
-    borderBottom: '2px solid #000000',
-    paddingBottom: '32px',
-  },
-  badgeRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    flexWrap: 'wrap',
-    marginBottom: '16px',
-  },
-  dossieBadge: {
-    display: 'inline-block',
-    backgroundColor: '#000000',
-    color: '#FFFFFF',
-    padding: '4px 12px',
-    fontSize: '11px',
-    fontWeight: 700,
-    letterSpacing: '1px',
-  },
-  activeBadge: {
-    display: 'inline-block',
-    backgroundColor: '#FEE2E2',
-    color: '#DC2626',
-    padding: '4px 12px',
-    fontSize: '11px',
-    fontWeight: 600,
-    letterSpacing: '0.5px',
-  },
-  title: {
-    fontFamily: 'Georgia, "Times New Roman", serif',
-    fontSize: '42px',
-    fontWeight: 700,
-    lineHeight: 1.15,
-    color: '#000000',
-    margin: '0 0 12px 0',
-  },
-  arcDescription: {
-    fontSize: '15px',
-    color: '#6B7280',
-    fontStyle: 'italic',
-    margin: 0,
   },
   tabBar: {
     borderBottom: '1px solid #E5E5E5',
@@ -801,116 +729,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: '#6B7280',
     margin: '0 0 20px 0',
     lineHeight: 1.5,
-  },
-  entityGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-    gap: '12px',
-  },
-  entityCard: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-    padding: '12px 16px',
-    backgroundColor: '#F9FAFB',
-    border: '1px solid #E5E5E5',
-  },
-  entityType: {
-    fontSize: '10px',
-    fontWeight: 600,
-    color: '#6B7280',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.5px',
-  },
-  entityName: {
-    fontSize: '15px',
-    fontWeight: 600,
-    color: '#000000',
-  },
-  entityCount: {
-    fontSize: '12px',
-    color: '#9CA3AF',
-  },
-  chartsRow: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
-    gap: '24px',
-    marginTop: '40px',
-  },
-  chartCard: {
-    border: '1px solid #E5E5E5',
-    padding: '16px',
-    backgroundColor: '#FFFFFF',
-  },
-  geoGrid: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '8px',
-  },
-  geoCard: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '8px 16px',
-    backgroundColor: '#F9FAFB',
-    border: '1px solid #E5E5E5',
-  },
-  geoCountry: {
-    fontSize: '14px',
-    fontWeight: 600,
-    color: '#000000',
-  },
-  geoCount: {
-    fontSize: '12px',
-    color: '#6B7280',
-  },
-  synthesesList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '0',
-  },
-  synthesisCard: {
-    display: 'block',
-    padding: '20px 0',
-    borderBottom: '1px solid #E5E5E5',
-    textDecoration: 'none',
-    color: '#000000',
-  },
-  synthesisTop: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '6px',
-  },
-  synthesisCategory: {
-    fontSize: '11px',
-    fontWeight: 700,
-    color: '#DC2626',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.5px',
-  },
-  synthesisDate: {
-    fontSize: '12px',
-    color: '#9CA3AF',
-  },
-  synthesisTitle: {
-    fontSize: '18px',
-    fontWeight: 600,
-    color: '#000000',
-    margin: '0 0 6px 0',
-    fontFamily: 'Georgia, "Times New Roman", serif',
-    lineHeight: 1.3,
-  },
-  synthesisSummary: {
-    fontSize: '14px',
-    color: '#6B7280',
-    margin: '0 0 8px 0',
-    lineHeight: 1.5,
-  },
-  readMore: {
-    fontSize: '13px',
-    color: '#2563EB',
-    fontWeight: 500,
   },
   emptyState: {
     padding: '48px 24px',

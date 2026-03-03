@@ -42,6 +42,23 @@ export interface CausalGraph {
 }
 
 // ==========================================
+// Aggregated Types (Living Causal Graph)
+// ==========================================
+
+export interface AggregatedCausalNode extends CausalNode {
+  mention_count: number;
+  first_seen: number;    // Unix timestamp
+  last_seen: number;     // Unix timestamp
+  source_syntheses: string[];
+}
+
+export interface AggregatedCausalEdge extends CausalEdge {
+  id: string;
+  mention_count: number;
+  source_syntheses: string[];
+}
+
+// ==========================================
 // API Response Types
 // ==========================================
 

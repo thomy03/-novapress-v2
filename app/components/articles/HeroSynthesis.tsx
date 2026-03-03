@@ -31,6 +31,7 @@ export interface SynthesisBrief {
   readingTime: number;
   createdAt: string;
   complianceScore?: number;
+  imageUrl?: string;
 }
 
 interface HeroSynthesisProps {
@@ -68,6 +69,30 @@ export function HeroSynthesis({ synthesis }: HeroSynthesisProps) {
         cursor: 'pointer',
       }}
     >
+      {/* Hero image */}
+      {synthesis.imageUrl && (
+        <div style={{
+          width: '100%',
+          height: '280px',
+          overflow: 'hidden',
+          borderRadius: '2px',
+          backgroundColor: '#F9FAFB',
+        }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={synthesis.imageUrl}
+            alt={synthesis.title}
+            loading="eager"
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              display: 'block',
+            }}
+          />
+        </div>
+      )}
+
       {/* Category badge */}
       {synthesis.category && (
         <span
