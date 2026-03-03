@@ -122,13 +122,25 @@ export default function SynthesisBody({ synthesis }: SynthesisBodyProps) {
         <KeyMetricCallout metrics={synthesis.keyMetrics} />
       )}
 
-      {/* Body */}
+      {/* Body — with intertitre support (## Heading) */}
       <div style={styles.body}>
-        {paragraphs.map((paragraph, idx) => (
-          <p key={idx} style={{ marginBottom: '24px' }}>
-            {renderTextWithCitations(paragraph, synthesis.sourceArticles)}
-          </p>
-        ))}
+        {paragraphs.map((paragraph, idx) => {
+          // Detect intertitre lines: "## Some Title"
+          const trimmed = paragraph.trim();
+          if (trimmed.startsWith('## ')) {
+            const headingText = trimmed.slice(3).trim();
+            return (
+              <h2 key={idx} style={styles.intertitre}>
+                {headingText}
+              </h2>
+            );
+          }
+          return (
+            <p key={idx} style={{ marginBottom: '24px' }}>
+              {renderTextWithCitations(paragraph, synthesis.sourceArticles)}
+            </p>
+          );
+        })}
       </div>
 
       {/* Category-specific widgets */}
@@ -183,6 +195,16 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '18px',
     lineHeight: '1.8',
     color: '#374151',
+  },
+  intertitre: {
+    fontFamily: sharedStyles.fontSerif,
+    fontSize: '22px',
+    fontWeight: 700,
+    color: '#000000',
+    margin: '40px 0 16px 0',
+    paddingBottom: '8px',
+    borderBottom: '1px solid #E5E5E5',
+    lineHeight: 1.3,
   },
   analysisSection: {
     backgroundColor: sharedStyles.bgGray,

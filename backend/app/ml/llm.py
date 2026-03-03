@@ -425,7 +425,9 @@ INSTRUCTIONS DE RÉDACTION:
 3. CORPS DE L'ARTICLE (body): ⚠️ MINIMUM {min_words} MOTS OBLIGATOIRE
    - Article DÉVELOPPÉ de {min_words}-{max_words} mots (MINIMUM ABSOLU: {min_words})
    - EXACTEMENT 5-7 paragraphes de 100-150 mots chacun
-   - Structure en paragraphes thématiques
+   - ⚠️ INTERTITRES OBLIGATOIRES: Insère 2-3 intertitres avec le format ## Titre
+     Exemple: ## Les faits\\n\\nParagraphe...\\n\\n## Réactions et enjeux\\n\\nParagraphe...
+     Les intertitres doivent être courts (3-6 mots), informatifs, en style journal
    - Contexte et enjeux expliqués
    - CHAQUE paragraphe DOIT avoir 1-2 citations [SOURCE:N] après les faits importants
    - Analyse des implications et perspectives
@@ -468,7 +470,7 @@ Format JSON strict:
 {{
   "title": "Titre accrocheur et factuel",
   "introduction": "Chapô avec les faits essentiels [SOURCE:1] et le contexte [SOURCE:2]...",
-  "body": "Premier paragraphe sur le fait principal [SOURCE:1]. Deuxième paragraphe avec contexte supplémentaire [SOURCE:2] et réactions [SOURCE:3]. Troisième paragraphe sur les implications [SOURCE:1]...",
+  "body": "## Les faits\n\nPremier paragraphe sur le fait principal [SOURCE:1]. Détails et contexte immédiat de l'événement [SOURCE:2].\n\nDeuxième paragraphe avec contexte supplémentaire [SOURCE:2] et réactions [SOURCE:3].\n\n## Réactions et enjeux\n\nTroisième paragraphe sur les réactions des acteurs principaux [SOURCE:3]. Implications directes.\n\nQuatrième paragraphe sur le contexte plus large [SOURCE:1].\n\n## Perspectives\n\nCinquième paragraphe sur les implications futures et les scénarios possibles [SOURCE:2].",
   "keyPoints": [
     "Premier point clé développé avec contexte",
     "Deuxième point clé avec détails importants",
