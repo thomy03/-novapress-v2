@@ -14,23 +14,31 @@ import {
   TopicSentimentSparkline,
 } from '@/app/components/topics';
 
-// Lazy-load the Living Causal Graph (heavy dependency: @xyflow/react)
-const LivingCausalGraph = dynamic(
-  () => import('@/app/components/causal/LivingCausalGraph'),
+// Lazy-load the Nexus Scroll Viewer (images + force graph fallback)
+const NexusScrollViewer = dynamic(
+  () => import('@/app/components/causal/NexusScrollViewer'),
   {
     ssr: false,
     loading: () => (
       <div style={{
-        height: 500,
+        height: 600,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        color: '#9CA3AF',
-        fontSize: '14px',
-        border: '1px solid #E5E5E5',
-        backgroundColor: '#F9FAFB',
+        flexDirection: 'column',
+        gap: '12px',
+        backgroundColor: '#0A0A1A',
       }}>
-        Chargement du graphe causal...
+        <div style={{
+          width: '32px',
+          height: '32px',
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(37, 99, 235, 0.8) 0%, rgba(37, 99, 235, 0.2) 70%, transparent 100%)',
+          animation: 'pulse 1.5s ease-in-out infinite',
+        }} />
+        <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '13px' }}>
+          Chargement du nexus causal...
+        </span>
       </div>
     ),
   }
@@ -317,24 +325,18 @@ function TopicDashboardPage() {
                 color: '#6B7280',
                 margin: 0,
               }}>
-                {'Organisme vivant : chaque synthèse enrichit le graphe. Les noeuds grandissent avec les confirmations, les nouveaux pulsent.'}
+                {'Scrollez pour naviguer dans le temps. Chaque image montre le nexus causal au moment de la synthèse.'}
               </p>
             </div>
 
             {hasCausalData ? (
-              <div style={{
-                height: '600px',
-                border: '1px solid #E5E5E5',
-                backgroundColor: '#FFFFFF',
-              }}>
-                <LivingCausalGraph
-                  nodes={causalNodes}
-                  edges={causalEdges}
-                  centralEntity={dashboard.topic}
-                  narrativeFlow={(dashboard.narrative_arc === 'linear' || dashboard.narrative_arc === 'branching' || dashboard.narrative_arc === 'circular') ? dashboard.narrative_arc as 'linear' | 'branching' | 'circular' : 'linear'}
-                  syntheses={synthesesForPanel}
-                />
-              </div>
+              <NexusScrollViewer
+                topic={dashboard.topic}
+                nodes={causalNodes}
+                edges={causalEdges}
+                centralEntity={dashboard.topic}
+                height={600}
+              />
             ) : (
               <div style={styles.emptyState}>
                 {'Pas de données causales disponibles. Le graphe se remplira automatiquement à mesure que de nouvelles synthèses sont générées.'}

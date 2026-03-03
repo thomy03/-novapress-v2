@@ -328,6 +328,36 @@ class PipelineEngine:
             await self._store_syntheses(syntheses)
             logger.success(f"✅ {len(syntheses)} syntheses verified in vector database")
 
+        # === 8. NEXUS IMAGES ===
+        try:
+            from app.services.nexus_image_generator import get_nexus_image_generator
+            nexus_gen = get_nexus_image_generator()
+            nexus_gen.reset_run_tracker()
+            nexus_count = 0
+
+            for synthesis in syntheses:
+                causal_graph = synthesis.get("causal_graph", {})
+                if not causal_graph or len(causal_graph.get("nodes", [])) < 3:
+                    continue
+
+                topic = synthesis.get("category", "") or synthesis.get("title", "")[:40]
+                try:
+                    url = await nexus_gen.generate_nexus_image(
+                        topic=topic,
+                        causal_graph=causal_graph,
+                        synthesis_title=synthesis.get("title", ""),
+                        synthesis_id=synthesis.get("id", ""),
+                    )
+                    if url:
+                        nexus_count += 1
+                except Exception as nexus_err:
+                    logger.debug(f"Nexus image generation skipped: {nexus_err}")
+
+            if nexus_count > 0:
+                logger.success(f"🖼️ Generated {nexus_count} nexus images")
+        except Exception as nexus_import_err:
+            logger.debug(f"Nexus image generation not available: {nexus_import_err}")
+
         # === STATS ===
         results["stats"] = {
             "total_scraped": len(raw_articles),
