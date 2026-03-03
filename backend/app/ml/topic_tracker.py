@@ -546,11 +546,9 @@ class TopicTracker:
 
     def _aggregate_causal_graphs(self, syntheses: List[Dict]) -> Dict:
         """Aggregate causal graphs from multiple syntheses."""
-        all_nodes = []
         all_edges = []
-        node_ids = set()
         edge_keys = set()
-
+        # Collect unique edges first
         for s in syntheses:
             causal_graph = s.get('causal_graph', {})
             if isinstance(causal_graph, str):
@@ -559,20 +557,32 @@ class TopicTracker:
                 except (json.JSONDecodeError, ValueError, TypeError):
                     continue
 
-            for node in causal_graph.get('nodes', []):
-                node_id = node.get('id', '')
-                if node_id and node_id not in node_ids:
-                    node_ids.add(node_id)
-                    all_nodes.append(node)
-
             for edge in causal_graph.get('edges', []):
-                edge_key = f"{edge.get('cause_text', '')}_{edge.get('effect_text', '')}"
-                if edge_key not in edge_keys:
+                cause = edge.get('cause_text', '')
+                effect = edge.get('effect_text', '')
+                edge_key = f"{cause}_{effect}"
+                if edge_key not in edge_keys and cause and effect:
                     edge_keys.add(edge_key)
                     all_edges.append(edge)
 
+        # Build unique nodes from edge texts (ensures labels match edge cause_text/effect_text)
+        seen_labels = set()
+        all_nodes = []
+        node_id = 0
+        for edge in all_edges:
+            for text, density in [(edge.get('cause_text', ''), 0.7), (edge.get('effect_text', ''), 0.6)]:
+                if text and text not in seen_labels:
+                    seen_labels.add(text)
+                    all_nodes.append({
+                        "id": f"agg_node_{node_id}",
+                        "label": text,
+                        "node_type": "event",
+                        "fact_density": density,
+                    })
+                    node_id += 1
+
         return {
-            "nodes": all_nodes[:30],  # Limit for performance
+            "nodes": all_nodes[:30],
             "edges": all_edges[:50],
             "total_nodes": len(all_nodes),
             "total_edges": len(all_edges)

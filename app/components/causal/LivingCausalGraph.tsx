@@ -41,8 +41,10 @@ function bfsLayout(
   if (nodes.length === 0) return positions;
 
   // Build adjacency list (cause_text -> effect_text)
-  const nodeByLabel = new Map<string, CausalNode>();
-  for (const n of nodes) nodeByLabel.set(n.label, n);
+  // Match by exact label or startsWith (backward compat with truncated labels)
+  const findNode = (text: string) =>
+    nodes.find(n => n.label === text)
+    || nodes.find(n => text.startsWith(n.label) || n.label.startsWith(text));
 
   const outgoing = new Map<string, string[]>();
   const incoming = new Map<string, string[]>();
@@ -52,9 +54,9 @@ function bfsLayout(
   }
 
   for (const edge of edges) {
-    const src = nodes.find(n => n.label === edge.cause_text);
-    const tgt = nodes.find(n => n.label === edge.effect_text);
-    if (src && tgt) {
+    const src = findNode(edge.cause_text);
+    const tgt = findNode(edge.effect_text);
+    if (src && tgt && src.id !== tgt.id) {
       outgoing.get(src.id)?.push(tgt.id);
       incoming.get(tgt.id)?.push(src.id);
     }
@@ -171,13 +173,17 @@ function LivingCausalGraphInner({
     });
   }, [causalNodes, causalEdges, latestTimestamp]);
 
-  // Build React Flow edges — filter out edges with no matching source/target node
+  // Build React Flow edges — match by exact label or startsWith (backward compat with truncated labels)
   const initialEdges: Edge[] = useMemo(() => {
+    const findNode = (text: string) =>
+      causalNodes.find(n => n.label === text)
+      || causalNodes.find(n => text.startsWith(n.label) || n.label.startsWith(text));
+
     return causalEdges
       .map((edge, idx) => {
-        const src = causalNodes.find(n => n.label === edge.cause_text);
-        const tgt = causalNodes.find(n => n.label === edge.effect_text);
-        if (!src || !tgt) return null; // Skip invalid edges
+        const src = findNode(edge.cause_text);
+        const tgt = findNode(edge.effect_text);
+        if (!src || !tgt || src.id === tgt.id) return null;
         const agg = edge as AggregatedCausalEdge;
         return {
           id: agg.id || `edge-${idx}`,

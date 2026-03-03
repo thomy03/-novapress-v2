@@ -933,7 +933,7 @@ class QdrantService:
                     if cause and cause not in seen_labels:
                         nodes.append({
                             "id": f"node_{node_id}",
-                            "label": cause[:80],
+                            "label": cause,
                             "node_type": "event",
                             "fact_density": 0.7
                         })
@@ -944,7 +944,7 @@ class QdrantService:
                     if effect and effect not in seen_labels:
                         nodes.append({
                             "id": f"node_{node_id}",
-                            "label": effect[:80],
+                            "label": effect,
                             "node_type": "event",
                             "fact_density": 0.6
                         })
