@@ -16,12 +16,13 @@ const MiniSparkline = dynamic(() => import('./MiniSparkline'), { ssr: false });
 /**
  * REF-012c: SynthesisBody Component
  *
- * Client Component for the main body of a synthesis article.
- * Includes:
- * - Introduction/chapo (with blue border-left)
- * - Body paragraphs with clickable citations
+ * Renders structured article body with:
+ * - Drop cap on first paragraph
+ * - Section blocks grouped under ## headings with left-border accent
+ * - Introduction/chapo with blue border-left
  * - Analysis section (gray background)
  * - Key Points (bullet list)
+ * - Clickable [SOURCE:N] citations
  */
 
 export interface SynthesisBodyProps {
@@ -30,7 +31,6 @@ export interface SynthesisBodyProps {
 
 /**
  * Parse text to replace [SOURCE:N] with clickable highlighted links
- * Handles the citation pattern and creates interactive source references
  */
 function renderTextWithCitations(
   text: string,
@@ -44,7 +44,6 @@ function renderTextWithCitations(
   let match;
 
   while ((match = sourcePattern.exec(text)) !== null) {
-    // Add text before the match
     if (match.index > lastIndex) {
       parts.push(text.slice(lastIndex, match.index));
     }
@@ -54,7 +53,6 @@ function renderTextWithCitations(
     const source = sourceArticles?.[sourceIndex];
 
     if (source && source.url) {
-      // Direct link to source — tooltip shows name + title on hover
       parts.push(
         <a
           key={`source-${match.index}`}
@@ -71,13 +69,12 @@ function renderTextWithCitations(
             marginLeft: '1px',
             marginRight: '2px',
           }}
-          title={`${source.name}${source.title ? ` — ${source.title}` : ''}`}
+          title={`${source.name}${source.title ? ` \u2014 ${source.title}` : ''}`}
         >
           [{sourceNum}]
         </a>
       );
     } else {
-      // Fallback: non-clickable superscript number
       parts.push(
         <span
           key={`source-${match.index}`}
@@ -96,7 +93,6 @@ function renderTextWithCitations(
     lastIndex = match.index + match[0].length;
   }
 
-  // Add remaining text after the last match
   if (lastIndex < text.length) {
     parts.push(text.slice(lastIndex));
   }
@@ -104,9 +100,75 @@ function renderTextWithCitations(
   return parts;
 }
 
+/**
+ * Render a paragraph with drop cap on the first one
+ */
+function renderParagraph(
+  text: string,
+  sourceArticles: SourceArticle[] | undefined,
+  isFirstParagraph: boolean,
+  key: string | number,
+) {
+  if (!isFirstParagraph || text.length < 20) {
+    return (
+      <p key={key} style={styles.paragraph}>
+        {renderTextWithCitations(text, sourceArticles)}
+      </p>
+    );
+  }
+
+  // Drop cap: first letter gets special styling
+  const firstChar = text[0];
+  const rest = text.slice(1);
+
+  return (
+    <p key={key} style={styles.paragraph}>
+      <span style={styles.dropCap}>{firstChar}</span>
+      {renderTextWithCitations(rest, sourceArticles)}
+    </p>
+  );
+}
+
+/**
+ * Group paragraphs into sections based on ## headings
+ */
+interface Section {
+  heading?: string;
+  paragraphs: string[];
+}
+
+function groupIntoSections(paragraphs: string[]): Section[] {
+  const sections: Section[] = [];
+  let current: Section = { paragraphs: [] };
+
+  for (const p of paragraphs) {
+    const trimmed = p.trim();
+    if (trimmed.startsWith('## ')) {
+      // Start a new section
+      if (current.paragraphs.length > 0 || current.heading) {
+        sections.push(current);
+      }
+      current = { heading: trimmed.slice(3).trim(), paragraphs: [] };
+    } else {
+      current.paragraphs.push(trimmed);
+    }
+  }
+
+  // Push the last section
+  if (current.paragraphs.length > 0 || current.heading) {
+    sections.push(current);
+  }
+
+  return sections;
+}
+
 export default function SynthesisBody({ synthesis }: SynthesisBodyProps) {
   const fullContent = synthesis.body || synthesis.summary || '';
   const paragraphs = getParagraphs(fullContent);
+  const sections = groupIntoSections(paragraphs);
+
+  // Track whether we've rendered the first paragraph (for drop cap)
+  let firstParagraphRendered = false;
 
   return (
     <div>
@@ -122,28 +184,39 @@ export default function SynthesisBody({ synthesis }: SynthesisBodyProps) {
         <KeyMetricCallout metrics={synthesis.keyMetrics} />
       )}
 
-      {/* Geographic context — positioned early for MONDE articles */}
-      {synthesis.category === 'MONDE' && (
-        <MiniGeoWidget synthesis={synthesis} />
-      )}
+      {/* Geographic context — shown for any article with geographic data */}
+      <MiniGeoWidget synthesis={synthesis} />
 
-      {/* Body — with intertitre support (## Heading) */}
+      {/* Body — structured in sections under ## headings */}
       <div style={styles.body}>
-        {paragraphs.map((paragraph, idx) => {
-          // Detect intertitre lines: "## Some Title"
-          const trimmed = paragraph.trim();
-          if (trimmed.startsWith('## ')) {
-            const headingText = trimmed.slice(3).trim();
+        {sections.map((section, sIdx) => {
+          if (!section.heading && section.paragraphs.length === 0) return null;
+
+          // Section without heading = intro paragraphs (before first ##)
+          if (!section.heading) {
             return (
-              <h2 key={idx} style={styles.intertitre}>
-                {headingText}
-              </h2>
+              <div key={sIdx}>
+                {section.paragraphs.map((p, pIdx) => {
+                  const isFirst = !firstParagraphRendered;
+                  if (isFirst) firstParagraphRendered = true;
+                  return renderParagraph(p, synthesis.sourceArticles, isFirst, `s${sIdx}-p${pIdx}`);
+                })}
+              </div>
             );
           }
+
+          // Section with heading = structured block
           return (
-            <p key={idx} style={{ marginBottom: '24px' }}>
-              {renderTextWithCitations(paragraph, synthesis.sourceArticles)}
-            </p>
+            <div key={sIdx} style={styles.sectionBlock}>
+              <h2 style={styles.intertitre}>{section.heading}</h2>
+              <div style={styles.sectionContent}>
+                {section.paragraphs.map((p, pIdx) => {
+                  const isFirst = !firstParagraphRendered;
+                  if (isFirst) firstParagraphRendered = true;
+                  return renderParagraph(p, synthesis.sourceArticles, isFirst, `s${sIdx}-p${pIdx}`);
+                })}
+              </div>
+            </div>
           );
         })}
       </div>
@@ -166,7 +239,7 @@ export default function SynthesisBody({ synthesis }: SynthesisBodyProps) {
       {/* Key Points */}
       {synthesis.keyPoints && synthesis.keyPoints.length > 0 && (
         <div style={styles.keyPointsSection}>
-          <h2 style={styles.keyPointsTitle}>Points Cles</h2>
+          <h2 style={styles.keyPointsTitle}>Points Cl\u00e9s</h2>
           <ul style={styles.keyPointsList}>
             {synthesis.keyPoints.map((point, index) => (
               <li key={index} style={styles.keyPoint}>
@@ -198,15 +271,38 @@ const styles: { [key: string]: React.CSSProperties } = {
     lineHeight: '1.8',
     color: '#374151',
   },
+  paragraph: {
+    marginBottom: '24px',
+    lineHeight: '1.8',
+  },
+  dropCap: {
+    float: 'left',
+    fontSize: '60px',
+    lineHeight: '48px',
+    fontWeight: 700,
+    fontFamily: 'Georgia, "Times New Roman", serif',
+    color: '#000',
+    paddingRight: '8px',
+    paddingTop: '4px',
+  },
+  sectionBlock: {
+    marginTop: '40px',
+    marginBottom: '32px',
+  },
   intertitre: {
     fontFamily: sharedStyles.fontSerif,
     fontSize: '22px',
     fontWeight: 700,
     color: '#000000',
-    margin: '40px 0 16px 0',
-    paddingBottom: '8px',
-    borderBottom: '1px solid #E5E5E5',
+    margin: '0 0 20px 0',
+    paddingBottom: '10px',
+    borderBottom: '2px solid #000',
     lineHeight: 1.3,
+    letterSpacing: '-0.3px',
+  },
+  sectionContent: {
+    paddingLeft: '16px',
+    borderLeft: '3px solid #E5E5E5',
   },
   analysisSection: {
     backgroundColor: sharedStyles.bgGray,
