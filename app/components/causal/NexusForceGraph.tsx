@@ -8,12 +8,12 @@ const ForceGraph2D = dynamic(
   { ssr: false }
 );
 
-// Node types → colors (cosmic palette)
-const NODE_COLORS: Record<string, { core: string; glow: string }> = {
-  event:    { core: '#DC2626', glow: '#FCA5A5' },
-  entity:   { core: '#2563EB', glow: '#93C5FD' },
-  decision: { core: '#F59E0B', glow: '#FDE68A' },
-  keyword:  { core: '#10B981', glow: '#6EE7B7' },
+// Node types → colors (cosmic palette — distinct & vivid)
+const NODE_COLORS: Record<string, { core: string; glow: string; label: string }> = {
+  event:    { core: '#DC2626', glow: '#FCA5A5', label: 'Événement' },
+  entity:   { core: '#2563EB', glow: '#93C5FD', label: 'Entité' },
+  decision: { core: '#F59E0B', glow: '#FDE68A', label: 'Décision' },
+  keyword:  { core: '#10B981', glow: '#6EE7B7', label: 'Concept' },
 };
 
 // Relation types → edge color
@@ -39,6 +39,8 @@ interface NexusNode {
   mention_count?: number;
   first_seen?: number;
   last_seen?: number;
+  _connectionCount?: number;
+  _depth?: number; // topological depth (0 = root causes)
   // Force graph internal
   x?: number;
   y?: number;
@@ -80,6 +82,139 @@ export interface NexusForceGraphProps {
   height?: number;
 }
 
+/**
+ * Intelligent node classification based on graph structure.
+ * Uses connection patterns, edge roles, and label structure — NOT word lists.
+ *
+ * Logic:
+ * - Nodes that appear as BOTH cause AND effect across multiple edges → entity (recurring actor)
+ * - Nodes that appear ONLY as cause (root sources) → decision or entity
+ * - Nodes that appear ONLY as effect (terminal outcomes) → event
+ * - Short labels (1-2 words) with no verb-like structure → keyword
+ * - Nodes matching the central entity / topic → entity
+ */
+function classifyNodesByGraphStructure(
+  nodes: { id: string; label: string; node_type: string }[],
+  edges: { cause_text: string; effect_text: string }[],
+  centralEntity?: string,
+): Map<string, string> {
+  const types = new Map<string, string>();
+  const labelToId = new Map(nodes.map(n => [n.label, n.id]));
+
+  // Count how often each node appears as cause vs effect
+  const asCause = new Map<string, number>();
+  const asEffect = new Map<string, number>();
+
+  for (const e of edges) {
+    const srcId = labelToId.get(e.cause_text);
+    const tgtId = labelToId.get(e.effect_text);
+    if (srcId) asCause.set(srcId, (asCause.get(srcId) || 0) + 1);
+    if (tgtId) asEffect.set(tgtId, (asEffect.get(tgtId) || 0) + 1);
+  }
+
+  const centralLower = centralEntity?.toLowerCase().trim();
+
+  for (const n of nodes) {
+    const causeCount = asCause.get(n.id) || 0;
+    const effectCount = asEffect.get(n.id) || 0;
+    const totalEdges = causeCount + effectCount;
+    const label = n.label;
+    const words = label.trim().split(/\s+/);
+
+    // 1. Central entity match → entity
+    if (centralLower && label.toLowerCase().includes(centralLower)) {
+      types.set(n.id, 'entity');
+      continue;
+    }
+
+    // 2. Hub nodes (connected to many edges, both as cause and effect) → entity
+    //    These are recurring actors in the causal chain
+    if (causeCount >= 1 && effectCount >= 1 && totalEdges >= 3) {
+      types.set(n.id, 'entity');
+      continue;
+    }
+
+    // 3. Pure root causes (only cause, never effect) → decision
+    //    These are originating actions/decisions that trigger chains
+    if (causeCount >= 1 && effectCount === 0) {
+      types.set(n.id, 'decision');
+      continue;
+    }
+
+    // 4. Terminal effects (only effect, never cause) with short labels → keyword
+    if (effectCount >= 1 && causeCount === 0 && words.length <= 2) {
+      types.set(n.id, 'keyword');
+      continue;
+    }
+
+    // 5. Short proper noun patterns → entity (person names, orgs)
+    const capitalizedWords = words.filter(w => w.length > 1 && /^[A-ZÀ-Ü]/.test(w));
+    if (words.length <= 3 && capitalizedWords.length >= Math.ceil(words.length * 0.6)) {
+      types.set(n.id, 'entity');
+      continue;
+    }
+
+    // 6. Default: event
+    types.set(n.id, 'event');
+  }
+
+  return types;
+}
+
+/**
+ * Compute topological depth: root causes get depth 0, their effects get 1, etc.
+ */
+function computeDepths(
+  nodeIds: string[],
+  edges: { source: string; target: string }[]
+): Map<string, number> {
+  const depths = new Map<string, number>();
+  const incoming = new Map<string, Set<string>>();
+  const outgoing = new Map<string, Set<string>>();
+
+  for (const id of nodeIds) {
+    incoming.set(id, new Set());
+    outgoing.set(id, new Set());
+  }
+
+  for (const e of edges) {
+    incoming.get(e.target)?.add(e.source);
+    outgoing.get(e.source)?.add(e.target);
+  }
+
+  // Find roots (no incoming edges)
+  const queue: string[] = [];
+  for (const id of nodeIds) {
+    if ((incoming.get(id)?.size || 0) === 0) {
+      depths.set(id, 0);
+      queue.push(id);
+    }
+  }
+
+  // BFS
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const currentDepth = depths.get(current) || 0;
+    for (const next of outgoing.get(current) || []) {
+      const existing = depths.get(next);
+      if (existing === undefined || existing < currentDepth + 1) {
+        depths.set(next, currentDepth + 1);
+        queue.push(next);
+      }
+    }
+  }
+
+  // Nodes without depth (cycles or disconnected) → assign median
+  const maxDepth = Math.max(0, ...Array.from(depths.values()));
+  for (const id of nodeIds) {
+    if (!depths.has(id)) {
+      depths.set(id, Math.floor(maxDepth / 2));
+    }
+  }
+
+  return depths;
+}
+
 export default function NexusForceGraph({
   nodes: rawNodes,
   edges: rawEdges,
@@ -95,39 +230,70 @@ export default function NexusForceGraph({
   const [hoveredNode, setHoveredNode] = useState<NexusNode | null>(null);
   const [, setTick] = useState(0);
 
-  // Build graph data with source/target as IDs
+  // Build graph data with auto-classification and topological depth
   const graphData = useMemo(() => {
     const nodeMap = new Map(rawNodes.map(n => [n.id, n]));
     const labelToId = new Map(rawNodes.map(n => [n.label, n.id]));
 
-    const graphNodes: NexusNode[] = rawNodes.map(n => ({
-      id: n.id,
-      label: n.label,
-      node_type: n.node_type || 'event',
-      mention_count: n.mention_count || 1,
-      first_seen: n.first_seen,
-      last_seen: n.last_seen,
-    }));
+    // Check if all nodes are the same type (monochrome problem)
+    const uniqueTypes = new Set(rawNodes.map(n => n.node_type || 'event'));
+    const needsAutoClassify = uniqueTypes.size <= 1;
 
-    const graphEdges: NexusEdge[] = [];
-    const edgeSet = new Set<string>();
+    // Build edges first to compute connection counts and depths
+    const validEdges: { source: string; target: string; edge: typeof rawEdges[0] }[] = [];
+    const connectionCount = new Map<string, number>();
 
     for (const e of rawEdges) {
-      // Resolve source/target from cause_text/effect_text
       const sourceId = labelToId.get(e.cause_text);
       const targetId = labelToId.get(e.effect_text);
-
       if (!sourceId || !targetId || sourceId === targetId) continue;
       if (!nodeMap.has(sourceId) || !nodeMap.has(targetId)) continue;
 
-      const edgeKey = `${sourceId}-${targetId}`;
+      validEdges.push({ source: sourceId, target: targetId, edge: e });
+      connectionCount.set(sourceId, (connectionCount.get(sourceId) || 0) + 1);
+      connectionCount.set(targetId, (connectionCount.get(targetId) || 0) + 1);
+    }
+
+    // Compute topological depths
+    const depths = computeDepths(
+      rawNodes.map(n => n.id),
+      validEdges.map(e => ({ source: e.source, target: e.target }))
+    );
+
+    // Auto-classify using graph structure if backend provides monochrome types
+    const structuralTypes = needsAutoClassify
+      ? classifyNodesByGraphStructure(rawNodes, rawEdges, centralEntity)
+      : null;
+
+    const graphNodes: NexusNode[] = rawNodes.map(n => {
+      const nodeType = structuralTypes
+        ? (structuralTypes.get(n.id) || 'event')
+        : (n.node_type || 'event');
+
+      return {
+        id: n.id,
+        label: n.label,
+        node_type: nodeType,
+        mention_count: n.mention_count || 1,
+        first_seen: n.first_seen,
+        last_seen: n.last_seen,
+        _connectionCount: connectionCount.get(n.id) || 0,
+        _depth: depths.get(n.id) || 0,
+      };
+    });
+
+    const edgeSet = new Set<string>();
+    const graphEdges: NexusEdge[] = [];
+
+    for (const { source, target, edge: e } of validEdges) {
+      const edgeKey = `${source}-${target}`;
       if (edgeSet.has(edgeKey)) continue;
       edgeSet.add(edgeKey);
 
       graphEdges.push({
         id: e.id || edgeKey,
-        source: sourceId,
-        target: targetId,
+        source,
+        target,
         relation_type: e.relation_type || 'causes',
         confidence: e.confidence || 0.5,
         cause_text: e.cause_text,
@@ -137,6 +303,11 @@ export default function NexusForceGraph({
 
     return { nodes: graphNodes, links: graphEdges };
   }, [rawNodes, rawEdges]);
+
+  // Max depth for positioning
+  const maxDepth = useMemo(() => {
+    return Math.max(1, ...graphData.nodes.map(n => n._depth || 0));
+  }, [graphData]);
 
   // Animation loop (20fps)
   useEffect(() => {
@@ -167,22 +338,60 @@ export default function NexusForceGraph({
     return () => window.removeEventListener('resize', update);
   }, [height]);
 
-  // Configure forces and freeze after simulation
+  // Configure forces: strong repulsion + temporal X positioning
+  useEffect(() => {
+    if (!graphRef.current) return;
+
+    const nodeCount = graphData.nodes.length;
+    const repulsion = Math.max(-800, -200 - nodeCount * 25);
+
+    graphRef.current.d3Force('charge')?.strength(repulsion);
+    graphRef.current.d3Force('link')?.distance(140).strength(0.3);
+
+    // Temporal X positioning via the built-in forceX
+    // react-force-graph-2d exposes d3Force which includes forceX/Y
+    // We configure the existing 'center' force and add manual positioning
+    graphRef.current.d3Force('center', null); // Remove center force for temporal layout
+
+    // Use the graph's d3Force API to set initial positions based on depth
+    // This gives a left-to-right causal flow
+    graphData.nodes.forEach((node: NexusNode) => {
+      if (node.x === undefined) {
+        const depth = node._depth || 0;
+        const ratio = maxDepth > 0 ? depth / maxDepth : 0.5;
+        node.x = (ratio - 0.5) * dimensions.width * 0.5;
+        node.y = (Math.random() - 0.5) * height * 0.4;
+      }
+    });
+  }, [graphData, dimensions.width, maxDepth]);
+
+  // Center on graph after layout
   useEffect(() => {
     if (graphRef.current) {
-      graphRef.current.d3Force('charge')?.strength(-300);
-      graphRef.current.d3Force('link')?.distance(100);
+      setTimeout(() => {
+        graphRef.current?.zoomToFit(500, 80);
+      }, 1200);
     }
   }, [graphData]);
 
-  // Center on central entity after layout
-  useEffect(() => {
-    if (graphRef.current && centralEntity) {
-      setTimeout(() => {
-        graphRef.current?.zoomToFit(500, 60);
-      }, 800);
+  // Word-wrap text helper
+  const wrapText = useCallback((text: string, maxWidth: number, ctx: CanvasRenderingContext2D): string[] => {
+    const words = text.split(' ');
+    const lines: string[] = [];
+    let currentLine = '';
+
+    for (const word of words) {
+      const testLine = currentLine ? `${currentLine} ${word}` : word;
+      if (ctx.measureText(testLine).width > maxWidth && currentLine) {
+        lines.push(currentLine);
+        currentLine = word;
+      } else {
+        currentLine = testLine;
+      }
     }
-  }, [centralEntity, graphData]);
+    if (currentLine) lines.push(currentLine);
+    return lines.slice(0, 3); // Max 3 lines
+  }, []);
 
   // Custom node renderer
   const nodeCanvasObject = useCallback((node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
@@ -194,14 +403,16 @@ export default function NexusForceGraph({
     const colors = NODE_COLORS[n.node_type] || NODE_COLORS.event;
     const { r, g, b } = hexToRgb(colors.core);
 
-    const mentionSize = Math.min(20, 6 + Math.sqrt(n.mention_count || 1) * 3);
-    const breathe = 1 + Math.sin(time / 1500 + n.id.charCodeAt(0) * 0.3) * 0.06;
+    const connections = n._connectionCount || 0;
+    const mentionSize = Math.min(22, 7 + Math.sqrt((n.mention_count || 1) + connections) * 2.5);
+    const breathe = 1 + Math.sin(time / 1500 + n.id.charCodeAt(0) * 0.3) * 0.04;
     const size = mentionSize * breathe;
+    const isHovered = hoveredNode?.id === n.id;
 
-    // Outer glow
-    const glowRadius = size * 3;
-    const glowAlpha = 0.25 + Math.sin(time / 1000 + n.id.charCodeAt(0)) * 0.1;
-    const glow = ctx.createRadialGradient(x, y, size * 0.5, x, y, glowRadius);
+    // Outer glow (stronger for hovered)
+    const glowRadius = size * (isHovered ? 4 : 2.5);
+    const glowAlpha = isHovered ? 0.5 : (0.2 + Math.sin(time / 1000 + n.id.charCodeAt(0)) * 0.08);
+    const glow = ctx.createRadialGradient(x, y, size * 0.3, x, y, glowRadius);
     glow.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${glowAlpha})`);
     glow.addColorStop(1, 'transparent');
     ctx.beginPath();
@@ -209,47 +420,88 @@ export default function NexusForceGraph({
     ctx.fillStyle = glow;
     ctx.fill();
 
-    // Node body
+    // Node body with shape based on type
+    if (n.node_type === 'decision') {
+      // Diamond shape for decisions
+      ctx.beginPath();
+      ctx.moveTo(x, y - size);
+      ctx.lineTo(x + size, y);
+      ctx.lineTo(x, y + size);
+      ctx.lineTo(x - size, y);
+      ctx.closePath();
+    } else if (n.node_type === 'keyword') {
+      // Rounded square for keywords
+      const s = size * 0.85;
+      ctx.beginPath();
+      ctx.roundRect(x - s, y - s, s * 2, s * 2, s * 0.3);
+    } else {
+      // Circle for events and entities
+      ctx.beginPath();
+      ctx.arc(x, y, size, 0, Math.PI * 2);
+    }
+
     const bodyGrad = ctx.createRadialGradient(x - size * 0.2, y - size * 0.2, 0, x, y, size);
-    bodyGrad.addColorStop(0, `rgba(${Math.min(255, r + 80)}, ${Math.min(255, g + 80)}, ${Math.min(255, b + 80)}, 1)`);
-    bodyGrad.addColorStop(0.6, colors.core);
-    bodyGrad.addColorStop(1, `rgba(${Math.floor(r * 0.7)}, ${Math.floor(g * 0.7)}, ${Math.floor(b * 0.7)}, 1)`);
-    ctx.beginPath();
-    ctx.arc(x, y, size, 0, Math.PI * 2);
+    bodyGrad.addColorStop(0, `rgba(${Math.min(255, r + 60)}, ${Math.min(255, g + 60)}, ${Math.min(255, b + 60)}, 1)`);
+    bodyGrad.addColorStop(0.5, colors.core);
+    bodyGrad.addColorStop(1, `rgba(${Math.floor(r * 0.6)}, ${Math.floor(g * 0.6)}, ${Math.floor(b * 0.6)}, 1)`);
     ctx.fillStyle = bodyGrad;
     ctx.fill();
 
-    // Inner highlight
-    const coreAlpha = 0.5 + Math.sin(time / 600 + n.id.charCodeAt(0) * 2) * 0.2;
-    const coreGrad = ctx.createRadialGradient(x - size * 0.15, y - size * 0.15, 0, x, y, size * 0.4);
+    // White ring for entities (distinguishing marker)
+    if (n.node_type === 'entity') {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+
+    // Inner core highlight
+    const coreAlpha = 0.4 + Math.sin(time / 600 + n.id.charCodeAt(0) * 2) * 0.15;
+    const coreGrad = ctx.createRadialGradient(x - size * 0.15, y - size * 0.15, 0, x, y, size * 0.35);
     coreGrad.addColorStop(0, `rgba(255, 255, 255, ${coreAlpha})`);
     coreGrad.addColorStop(1, 'transparent');
     ctx.beginPath();
-    ctx.arc(x, y, size * 0.4, 0, Math.PI * 2);
+    ctx.arc(x, y, size * 0.35, 0, Math.PI * 2);
     ctx.fillStyle = coreGrad;
     ctx.fill();
 
-    // Label (show when zoomed or hovered)
-    const isHovered = hoveredNode?.id === n.id;
-    const showLabel = globalScale > 1.2 || isHovered;
-    if (showLabel && n.label) {
-      const fontSize = Math.max(10, 12 / globalScale);
-      ctx.font = `${isHovered ? 'bold ' : ''}${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
+    // Label — always visible, with background pill
+    if (n.label) {
+      const baseFontSize = isHovered ? 13 : 11;
+      const fontSize = Math.max(8, baseFontSize / Math.max(1, globalScale * 0.7));
+      ctx.font = `${isHovered ? 'bold ' : ''}${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
       ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
+      ctx.textBaseline = 'top';
 
-      const text = n.label.length > 40 ? n.label.slice(0, 37) + '...' : n.label;
-      const textWidth = ctx.measureText(text).width;
+      const maxLabelWidth = isHovered ? 200 : 120;
+      const truncated = n.label.length > 50 ? n.label.slice(0, 47) + '...' : n.label;
+      const lines = wrapText(truncated, maxLabelWidth, ctx);
+      const lineHeight = fontSize + 2;
+      const totalHeight = lines.length * lineHeight;
+      const maxLineWidth = Math.max(...lines.map(l => ctx.measureText(l).width));
 
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+      const labelY = y + size + 6;
+      const padX = 6;
+      const padY = 3;
+
+      // Background pill
+      ctx.fillStyle = `rgba(10, 10, 26, ${isHovered ? 0.92 : 0.75})`;
       ctx.beginPath();
-      ctx.roundRect(x - textWidth / 2 - 5, y + size + 4, textWidth + 10, fontSize + 6, 3);
+      ctx.roundRect(
+        x - maxLineWidth / 2 - padX,
+        labelY - padY,
+        maxLineWidth + padX * 2,
+        totalHeight + padY * 2,
+        4
+      );
       ctx.fill();
 
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillText(text, x, y + size + fontSize / 2 + 7);
+      // Text
+      ctx.fillStyle = isHovered ? '#FFFFFF' : 'rgba(255, 255, 255, 0.85)';
+      lines.forEach((line, i) => {
+        ctx.fillText(line, x, labelY + i * lineHeight);
+      });
     }
-  }, [hoveredNode]);
+  }, [hoveredNode, wrapText]);
 
   // Custom edge renderer
   const linkCanvasObject = useCallback((link: any, ctx: CanvasRenderingContext2D) => {
@@ -266,63 +518,74 @@ export default function NexusForceGraph({
     const edgeColor = EDGE_COLORS[edge.relation_type] || '#6B7280';
     const { r, g, b } = hexToRgb(edgeColor);
 
-    const alpha = 0.15 + edge.confidence * 0.35;
-    const width = 0.8 + edge.confidence * 2;
+    const alpha = 0.2 + edge.confidence * 0.4;
+    const width = 1 + edge.confidence * 2;
 
-    // Glow
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${alpha * 0.4})`;
-    ctx.lineWidth = width + 3;
-    ctx.lineCap = 'round';
-    ctx.stroke();
-
-    // Line
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
-    ctx.lineWidth = width;
-    ctx.stroke();
-
-    // Arrow
+    // Curved line (quadratic bezier for visual interest)
     const dx = x2 - x1;
     const dy = y2 - y1;
     const len = Math.sqrt(dx * dx + dy * dy);
     if (len < 1) return;
 
-    const nodeSize = 6 + Math.sqrt((target as NexusNode).mention_count || 1) * 3;
-    const arrowLen = 8;
-    const t = Math.max(0, 1 - (nodeSize + 2) / len);
-    const ax = x1 + dx * t;
-    const ay = y1 + dy * t;
-    const angle = Math.atan2(dy, dx);
+    // Control point offset perpendicular to the line
+    const curvature = 0.15;
+    const midX = (x1 + x2) / 2 - dy * curvature;
+    const midY = (y1 + y2) / 2 + dx * curvature;
+
+    // Glow
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.quadraticCurveTo(midX, midY, x2, y2);
+    ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${alpha * 0.3})`;
+    ctx.lineWidth = width + 3;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    // Main line
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.quadraticCurveTo(midX, midY, x2, y2);
+    ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    ctx.lineWidth = width;
+    ctx.stroke();
+
+    // Arrow at target end
+    const nodeSize = 7 + Math.sqrt((target as NexusNode).mention_count || 1) * 2.5;
+    const arrowLen = 10;
+    // Get angle at the end of the curve
+    const t = Math.max(0, 1 - (nodeSize + 4) / len);
+    // Point on quadratic bezier at parameter t
+    const bx = (1 - t) * (1 - t) * x1 + 2 * (1 - t) * t * midX + t * t * x2;
+    const by = (1 - t) * (1 - t) * y1 + 2 * (1 - t) * t * midY + t * t * y2;
+    // Tangent at t
+    const tx = 2 * (1 - t) * (midX - x1) + 2 * t * (x2 - midX);
+    const ty = 2 * (1 - t) * (midY - y1) + 2 * t * (y2 - midY);
+    const angle = Math.atan2(ty, tx);
 
     ctx.beginPath();
-    ctx.moveTo(ax, ay);
+    ctx.moveTo(bx, by);
     ctx.lineTo(
-      ax - arrowLen * Math.cos(angle - Math.PI / 6),
-      ay - arrowLen * Math.sin(angle - Math.PI / 6)
+      bx - arrowLen * Math.cos(angle - Math.PI / 7),
+      by - arrowLen * Math.sin(angle - Math.PI / 7)
     );
     ctx.lineTo(
-      ax - arrowLen * Math.cos(angle + Math.PI / 6),
-      ay - arrowLen * Math.sin(angle + Math.PI / 6)
+      bx - arrowLen * Math.cos(angle + Math.PI / 7),
+      by - arrowLen * Math.sin(angle + Math.PI / 7)
     );
     ctx.closePath();
-    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha + 0.1})`;
+    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha + 0.15})`;
     ctx.fill();
 
     // Flowing particle
     const time = timeRef.current;
-    const particleT = ((time / 3000) + edge.id.charCodeAt(0) * 0.1) % 1;
-    const px = x1 + dx * particleT;
-    const py = y1 + dy * particleT;
-    const pGrad = ctx.createRadialGradient(px, py, 0, px, py, 4);
+    const particleT = ((time / 4000) + (edge.id?.charCodeAt(0) || 0) * 0.1) % 1;
+    const px = (1 - particleT) * (1 - particleT) * x1 + 2 * (1 - particleT) * particleT * midX + particleT * particleT * x2;
+    const py = (1 - particleT) * (1 - particleT) * y1 + 2 * (1 - particleT) * particleT * midY + particleT * particleT * y2;
+    const pGrad = ctx.createRadialGradient(px, py, 0, px, py, 5);
     pGrad.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.9)`);
     pGrad.addColorStop(1, 'transparent');
     ctx.beginPath();
-    ctx.arc(px, py, 4, 0, Math.PI * 2);
+    ctx.arc(px, py, 5, 0, Math.PI * 2);
     ctx.fillStyle = pGrad;
     ctx.fill();
   }, []);
@@ -333,6 +596,15 @@ export default function NexusForceGraph({
 
   const nodeCount = graphData.nodes.length;
   const edgeCount = graphData.links.length;
+
+  // Count types for legend (only show types that exist)
+  const typeCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const n of graphData.nodes) {
+      counts[n.node_type] = (counts[n.node_type] || 0) + 1;
+    }
+    return counts;
+  }, [graphData]);
 
   return (
     <div
@@ -397,6 +669,85 @@ export default function NexusForceGraph({
         </span>
       </div>
 
+      {/* Temporal flow indicator */}
+      <div style={{
+        position: 'absolute',
+        top: '50%',
+        left: '12px',
+        transform: 'translateY(-50%)',
+        zIndex: 10,
+        pointerEvents: 'none',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '4px',
+      }}>
+        <span style={{
+          fontSize: '9px',
+          color: 'rgba(255, 255, 255, 0.25)',
+          textTransform: 'uppercase',
+          letterSpacing: '1px',
+          writingMode: 'vertical-rl',
+          textOrientation: 'mixed',
+        }}>
+          CAUSES
+        </span>
+      </div>
+      <div style={{
+        position: 'absolute',
+        top: '50%',
+        right: '12px',
+        transform: 'translateY(-50%)',
+        zIndex: 10,
+        pointerEvents: 'none',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '4px',
+      }}>
+        <span style={{
+          fontSize: '9px',
+          color: 'rgba(255, 255, 255, 0.25)',
+          textTransform: 'uppercase',
+          letterSpacing: '1px',
+          writingMode: 'vertical-rl',
+          textOrientation: 'mixed',
+        }}>
+          EFFETS
+        </span>
+      </div>
+
+      {/* Subtle flow arrow at bottom */}
+      <div style={{
+        position: 'absolute',
+        bottom: '44px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 10,
+        pointerEvents: 'none',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+      }}>
+        <div style={{
+          width: '80px',
+          height: '1px',
+          background: 'linear-gradient(to right, transparent, rgba(255,255,255,0.15), transparent)',
+        }} />
+        <span style={{
+          fontSize: '9px',
+          color: 'rgba(255, 255, 255, 0.2)',
+          letterSpacing: '1px',
+        }}>
+          FLUX CAUSAL →
+        </span>
+        <div style={{
+          width: '80px',
+          height: '1px',
+          background: 'linear-gradient(to right, transparent, rgba(255,255,255,0.15), transparent)',
+        }} />
+      </div>
+
       {/* Force Graph */}
       <ForceGraph2D
         ref={graphRef}
@@ -409,7 +760,7 @@ export default function NexusForceGraph({
         nodeCanvasObject={nodeCanvasObject}
         nodePointerAreaPaint={(node: any, color: string, ctx: CanvasRenderingContext2D) => {
           const n = node as NexusNode;
-          const size = 6 + Math.sqrt(n.mention_count || 1) * 3 + 5;
+          const size = 7 + Math.sqrt(n.mention_count || 1) * 2.5 + 8;
           ctx.fillStyle = color;
           ctx.beginPath();
           ctx.arc(n.x || 0, n.y || 0, size, 0, Math.PI * 2);
@@ -421,11 +772,11 @@ export default function NexusForceGraph({
         enableNodeDrag={true}
         enableZoomInteraction={true}
         enablePanInteraction={true}
-        d3AlphaDecay={0.3}
-        d3VelocityDecay={0.85}
-        cooldownTicks={100}
-        warmupTicks={80}
-        cooldownTime={2000}
+        d3AlphaDecay={0.08}
+        d3VelocityDecay={0.6}
+        cooldownTicks={200}
+        warmupTicks={100}
+        cooldownTime={4000}
         onEngineStop={() => {
           graphData.nodes.forEach((node: NexusNode) => {
             if (node.x !== undefined && node.y !== undefined) {
@@ -440,7 +791,7 @@ export default function NexusForceGraph({
         }}
       />
 
-      {/* Legend */}
+      {/* Legend — only show types that exist */}
       <div style={{
         position: 'absolute',
         bottom: '16px',
@@ -449,21 +800,23 @@ export default function NexusForceGraph({
         gap: '16px',
         zIndex: 10,
       }}>
-        {Object.entries(NODE_COLORS).map(([type, colors]) => (
+        {Object.entries(NODE_COLORS)
+          .filter(([type]) => typeCounts[type])
+          .map(([type, colors]) => (
           <div key={type} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <div style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
+              width: type === 'decision' ? '10px' : '8px',
+              height: type === 'decision' ? '10px' : '8px',
+              borderRadius: type === 'keyword' ? '2px' : '50%',
               backgroundColor: colors.core,
               boxShadow: `0 0 6px ${colors.glow}`,
+              transform: type === 'decision' ? 'rotate(45deg)' : undefined,
             }} />
             <span style={{
               fontSize: '10px',
               color: 'rgba(255, 255, 255, 0.5)',
-              textTransform: 'capitalize',
             }}>
-              {type}
+              {colors.label} ({typeCounts[type]})
             </span>
           </div>
         ))}
@@ -507,7 +860,7 @@ export default function NexusForceGraph({
           border: '1px solid rgba(255, 255, 255, 0.15)',
           borderRadius: '8px',
           padding: '12px 16px',
-          maxWidth: '400px',
+          maxWidth: '450px',
           zIndex: 20,
           boxShadow: '0 8px 32px rgba(0, 0, 0, 0.6)',
           textAlign: 'center',
@@ -517,10 +870,11 @@ export default function NexusForceGraph({
             fontWeight: 600,
             color: '#FFFFFF',
             marginBottom: '6px',
+            lineHeight: 1.4,
           }}>
             {hoveredNode.label}
           </div>
-          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
             <span style={{
               fontSize: '11px',
               padding: '2px 8px',
@@ -528,7 +882,7 @@ export default function NexusForceGraph({
               backgroundColor: `${NODE_COLORS[hoveredNode.node_type]?.core || '#2563EB'}25`,
               color: NODE_COLORS[hoveredNode.node_type]?.glow || '#93C5FD',
             }}>
-              {hoveredNode.node_type}
+              {NODE_COLORS[hoveredNode.node_type]?.label || hoveredNode.node_type}
             </span>
             {(hoveredNode.mention_count || 0) > 1 && (
               <span style={{
@@ -538,7 +892,18 @@ export default function NexusForceGraph({
                 backgroundColor: 'rgba(255, 255, 255, 0.1)',
                 color: 'rgba(255, 255, 255, 0.7)',
               }}>
-                {hoveredNode.mention_count}x
+                {hoveredNode.mention_count}x mentions
+              </span>
+            )}
+            {(hoveredNode._connectionCount || 0) > 0 && (
+              <span style={{
+                fontSize: '11px',
+                padding: '2px 8px',
+                borderRadius: '4px',
+                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                color: 'rgba(255, 255, 255, 0.7)',
+              }}>
+                {hoveredNode._connectionCount} connexions
               </span>
             )}
           </div>

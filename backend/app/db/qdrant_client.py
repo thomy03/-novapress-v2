@@ -922,6 +922,57 @@ class QdrantService:
             node_id = 0
             seen_labels = set()
 
+            # Smart node classification using spaCy NER
+            def classify_node_type_nlp(label: str, entities_list=None) -> str:
+                """Classify node using NLP (spaCy NER) + key_entities matching."""
+                # 1. Match against known key_entities from synthesis
+                if entities_list:
+                    label_lower = label.lower().strip()
+                    for ent in entities_list:
+                        if isinstance(ent, str):
+                            ent_lower = ent.lower().strip()
+                            if ent_lower in label_lower or label_lower in ent_lower:
+                                return "entity"
+
+                # 2. Use spaCy NER for intelligent classification
+                try:
+                    import spacy
+                    nlp = spacy.load("fr_core_news_lg", disable=["parser", "textcat"])
+                    doc = nlp(label)
+                    ent_labels = {ent.label_ for ent in doc.ents}
+                    # PER, ORG, LOC, GPE → entity
+                    if ent_labels & {"PER", "ORG", "LOC", "GPE", "NORP"}:
+                        return "entity"
+                    # Check POS: if mostly proper nouns → entity
+                    proper_count = sum(1 for t in doc if t.pos_ == "PROPN")
+                    if proper_count >= len(doc) * 0.5 and len(doc) <= 5:
+                        return "entity"
+                    # If contains verbs → event
+                    has_verb = any(t.pos_ == "VERB" for t in doc)
+                    if has_verb:
+                        return "event"
+                    # Short noun phrase with no verbs → keyword
+                    if len(doc) <= 3 and not has_verb:
+                        return "keyword"
+                except Exception:
+                    pass  # spaCy not available, fallback below
+
+                # 3. Structural fallback: capitalized multi-word → entity
+                words = label.split()
+                caps = sum(1 for w in words if w and w[0].isupper())
+                if len(words) <= 4 and caps >= max(1, len(words) * 0.6):
+                    return "entity"
+
+                return "event"
+
+            # Parse key_entities for NLP classification
+            entities_for_classify = []
+            if key_entities:
+                if isinstance(key_entities, list):
+                    entities_for_classify = key_entities
+                elif isinstance(key_entities, str):
+                    entities_for_classify = [e.strip() for e in key_entities.split(",")]
+
             for item in causal_chain:
                 if isinstance(item, dict):
                     cause = item.get("cause", "")
@@ -934,7 +985,7 @@ class QdrantService:
                         nodes.append({
                             "id": f"node_{node_id}",
                             "label": cause,
-                            "node_type": "event",
+                            "node_type": classify_node_type_nlp(cause, entities_for_classify),
                             "fact_density": 0.7
                         })
                         seen_labels.add(cause)
@@ -945,7 +996,7 @@ class QdrantService:
                         nodes.append({
                             "id": f"node_{node_id}",
                             "label": effect,
-                            "node_type": "event",
+                            "node_type": classify_node_type_nlp(effect, entities_for_classify),
                             "fact_density": 0.6
                         })
                         seen_labels.add(effect)
