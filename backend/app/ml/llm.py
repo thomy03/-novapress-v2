@@ -425,9 +425,11 @@ INSTRUCTIONS DE RÉDACTION:
 3. CORPS DE L'ARTICLE (body): ⚠️ MINIMUM {min_words} MOTS OBLIGATOIRE
    - Article DÉVELOPPÉ de {min_words}-{max_words} mots (MINIMUM ABSOLU: {min_words})
    - EXACTEMENT 5-7 paragraphes de 100-150 mots chacun
-   - ⚠️ INTERTITRES OBLIGATOIRES: Insère 2-3 intertitres avec le format ## Titre
-     Exemple: ## Les faits\\n\\nParagraphe...\\n\\n## Réactions et enjeux\\n\\nParagraphe...
-     Les intertitres doivent être courts (3-6 mots), informatifs, en style journal
+   - ⚠️ INTERTITRES OBLIGATOIRES: Insère 3-5 intertitres avec le format ## Titre
+     Exemple conflit: ## L'escalade militaire\\n\\nParagraphe...\\n\\n## Washington face au dilemme\\n\\nParagraphe...
+     Exemple tech: ## La course aux puces IA\\n\\nParagraphe...\\n\\n## Ce que cela change pour l'Europe\\n\\n...
+     INTERDIT: "Les faits", "Reactions", "Perspectives", "Contexte", "Repercussions"
+     Les intertitres DOIVENT être SPÉCIFIQUES au sujet, comme un vrai journal
    - Contexte et enjeux expliqués
    - CHAQUE paragraphe DOIT avoir 1-2 citations [SOURCE:N] après les faits importants
    - Analyse des implications et perspectives
@@ -467,23 +469,21 @@ INSTRUCTIONS DE RÉDACTION:
    - "standard": actualité normale, information de fond
 
 9. CONTEXTE GÉOGRAPHIQUE (geographic_context + geo_relevance):
-   ⚠️ RÈGLES STRICTES — NE PAS AJOUTER DE CARTE INUTILE:
-   - geo_relevance: évalue si la géographie est CENTRALE au sujet:
+   - geo_relevance: évalue l'importance de la géographie:
      - "high": conflit localisé, catastrophe naturelle, événement dans un lieu précis
      - "medium": politique internationale avec lieux clés identifiables
-     - "none": sujet tech, économie abstraite, tendance globale, régulation, IA, marché boursier
-   - SI geo_relevance = "none" → geographic_context DOIT être un tableau VIDE []
-   - SI geo_relevance = "high" ou "medium":
-     - Précise les VILLES (type: "city"), PAS les pays/capitales par défaut
-     - Exemple: "Rafah" pas "Palestine", "Kharkiv" pas "Ukraine", "Toulouse" pas "France"
-     - N'ajoute un pays (type: "country") QUE si le pays ENTIER est concerné (ex: sanctions contre l'Iran)
-     - Le champ "country" = code ISO2 du pays parent (FR, US, etc.)
+     - "low": sujet tech, économie, tendance globale mais avec des lieux mentionnés
+   - TOUJOURS extraire les lieux mentionnés dans les sources, même si le sujet est tech ou abstrait
+   - Précise les VILLES (type: "city") quand possible, sinon le pays (type: "country")
+   - Chaque lieu: {{"place": "Nom", "type": "city|country|region", "role": "role dans l'article", "country": "XX", "lat": 48.86, "lon": 2.35}}
+   - OBLIGATOIRE: inclure les coordonnées lat/lon approximatives (tu connais la géographie mondiale)
+   - Minimum 2 lieux si des lieux sont mentionnés dans les sources
 
 Format JSON strict:
 {{
   "title": "Titre accrocheur et factuel",
   "introduction": "Chapô avec les faits essentiels [SOURCE:1] et le contexte [SOURCE:2]...",
-  "body": "## Les faits\n\nPremier paragraphe sur le fait principal [SOURCE:1]. Détails et contexte immédiat de l'événement [SOURCE:2].\n\nDeuxième paragraphe avec contexte supplémentaire [SOURCE:2] et réactions [SOURCE:3].\n\n## Réactions et enjeux\n\nTroisième paragraphe sur les réactions des acteurs principaux [SOURCE:3]. Implications directes.\n\nQuatrième paragraphe sur le contexte plus large [SOURCE:1].\n\n## Perspectives\n\nCinquième paragraphe sur les implications futures et les scénarios possibles [SOURCE:2].",
+  "body": "Premier paragraphe chapeau sans intertitre [SOURCE:1]. Contexte immédiat de l'événement [SOURCE:2].\n\n## L'escalade sur le terrain\n\nDeuxième paragraphe sur les faits principaux [SOURCE:1]. Détails concrets et témoignages [SOURCE:3].\n\nTroisième paragraphe avec contexte supplémentaire [SOURCE:2].\n\n## Washington face au dilemme\n\nQuatrième paragraphe sur les réactions diplomatiques [SOURCE:3]. Implications directes.\n\n## Ce que cela change pour l'Europe\n\nCinquième paragraphe sur les implications futures et les scénarios possibles [SOURCE:2].",
   "keyPoints": [
     "Premier point clé développé avec contexte",
     "Deuxième point clé avec détails importants",
@@ -495,8 +495,8 @@ Format JSON strict:
     {{"cause": "Fait déclencheur", "effect": "Conséquence observée", "type": "causes", "sources": ["Source1"]}},
     {{"cause": "Réaction", "effect": "Impact", "type": "triggers", "sources": ["Source2"]}}
   ],
-  "geographic_context": [],
-  "geo_relevance": "none",
+  "geographic_context": [{{"place": "Washington", "type": "city", "role": "lieu de la décision", "country": "US", "lat": 38.9, "lon": -77.0}}, {{"place": "Bruxelles", "type": "city", "role": "réaction européenne", "country": "BE", "lat": 50.85, "lon": 4.35}}],
+  "geo_relevance": "medium",
   "sentiment": "positive|negative|neutral|mixed",
   "topic_intensity": "breaking|hot|developing|standard",
   "readingTime": {max(3, min_words // 200)}
@@ -731,17 +731,15 @@ STRUCTURE ATTENDUE:
    - "standard": actualité normale
 
 9. CONTEXTE GÉOGRAPHIQUE (geographic_context + geo_relevance):
-   ⚠️ RÈGLES STRICTES — NE PAS AJOUTER DE CARTE INUTILE:
-   - geo_relevance: évalue si la géographie est CENTRALE au sujet:
+   - geo_relevance: évalue l'importance de la géographie:
      - "high": conflit localisé, catastrophe naturelle, événement dans un lieu précis
      - "medium": politique internationale avec lieux clés identifiables
-     - "none": sujet tech, économie abstraite, tendance globale, régulation, IA, marché boursier
-   - SI geo_relevance = "none" → geographic_context DOIT être un tableau VIDE []
-   - SI geo_relevance = "high" ou "medium":
-     - Précise les VILLES (type: "city"), PAS les pays/capitales par défaut
-     - Exemple: "Rafah" pas "Palestine", "Kharkiv" pas "Ukraine"
-     - N'ajoute un pays (type: "country") QUE si le pays ENTIER est concerné
-     - Le champ "country" = code ISO2 du pays parent (FR, US, etc.)
+     - "low": sujet tech, économie, tendance globale mais avec des lieux mentionnés
+   - TOUJOURS extraire les lieux mentionnés dans les sources, même si le sujet est tech ou abstrait
+   - Précise les VILLES (type: "city") quand possible, sinon le pays (type: "country")
+   - Chaque lieu: {{"place": "Nom", "type": "city|country|region", "role": "role dans l'article", "country": "XX", "lat": 48.86, "lon": 2.35}}
+   - OBLIGATOIRE: inclure les coordonnées lat/lon approximatives (tu connais la géographie mondiale)
+   - Minimum 2 lieux si des lieux sont mentionnés dans les sources
 
 Format JSON strict:
 {{
@@ -754,8 +752,8 @@ Format JSON strict:
     {{"cause": "Événement déclencheur", "effect": "Conséquence", "type": "causes", "sources": ["Source"]}},
     {{"cause": "Action", "effect": "Réaction", "type": "triggers", "sources": ["Source"]}}
   ],
-  "geographic_context": [],
-  "geo_relevance": "none",
+  "geographic_context": [{{"place": "Paris", "type": "city", "role": "lieu de l'annonce", "country": "FR", "lat": 48.86, "lon": 2.35}}, {{"place": "Washington", "type": "city", "role": "réaction américaine", "country": "US", "lat": 38.9, "lon": -77.0}}],
+  "geo_relevance": "medium",
   "sentiment": "positive|negative|neutral|mixed",
   "topic_intensity": "breaking|hot|developing|standard",
   "readingTime": {max(3, min_words // 200)},
@@ -1060,17 +1058,15 @@ INSTRUCTIONS SPÉCIALES
    Format: {{"value": "15%", "label": "hausse du PIB en 2025", "source": "Les Echos"}}
 
 12. 🌍 CONTEXTE GÉOGRAPHIQUE (geographic_context + geo_relevance):
-   ⚠️ RÈGLES STRICTES — NE PAS AJOUTER DE CARTE INUTILE:
-   - geo_relevance: évalue si la géographie est CENTRALE au sujet:
+   - geo_relevance: évalue l'importance de la géographie:
      - "high": conflit localisé, catastrophe naturelle, événement dans un lieu précis
      - "medium": politique internationale avec lieux clés identifiables
-     - "none": sujet tech, économie abstraite, tendance globale, régulation, IA, marché boursier
-   - SI geo_relevance = "none" → geographic_context DOIT être un tableau VIDE []
-   - SI geo_relevance = "high" ou "medium":
-     - Précise les VILLES (type: "city"), PAS les pays/capitales par défaut
-     - Exemple: "Rafah" pas "Palestine", "Kharkiv" pas "Ukraine"
-     - N'ajoute un pays (type: "country") QUE si le pays ENTIER est concerné
-     - Le champ "country" = code ISO2 du pays parent (FR, US, etc.)
+     - "low": sujet tech, économie, tendance globale mais avec des lieux mentionnés
+   - TOUJOURS extraire les lieux mentionnés dans les sources, même si le sujet est tech ou abstrait
+   - Précise les VILLES (type: "city") quand possible, sinon le pays (type: "country")
+   - Chaque lieu: {{"place": "Nom", "type": "city|country|region", "role": "role dans l'article", "country": "XX", "lat": 48.86, "lon": 2.35}}
+   - OBLIGATOIRE: inclure les coordonnées lat/lon approximatives (tu connais la géographie mondiale)
+   - Minimum 2 lieux si des lieux sont mentionnés dans les sources
 
 Format JSON (causal_chain + predictions + sentiment + topic_intensity + key_metrics OBLIGATOIRES):
 {{
@@ -1145,15 +1141,15 @@ Format JSON (causal_chain + predictions + sentiment + topic_intensity + key_metr
       "rationale": "L'interconnexion économique rend les marchés sensibles aux instabilités régionales"
     }}
   ],
-  "geographic_context": [],
-  "geo_relevance": "none",
   "sentiment": "negative",
   "topic_intensity": "hot",
   "key_metrics": [
     {{"value": "-15%", "label": "Chute de la devise locale en 24h", "source": "Les Echos"}},
     {{"value": "3", "label": "Pays concernés par les sanctions", "source": "Reuters"}},
     {{"value": "48h", "label": "Délai avant prochaine réunion du Conseil", "source": "Le Monde"}}
-  ]
+  ],
+  "geographic_context": [{{"place": "Paris", "type": "city", "role": "lieu des manifestations", "country": "FR", "lat": 48.86, "lon": 2.35}}, {{"place": "Bruxelles", "type": "city", "role": "siège du FMI européen", "country": "BE", "lat": 50.85, "lon": 4.35}}],
+  "geo_relevance": "high"
 }}
 """
 

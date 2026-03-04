@@ -145,19 +145,48 @@ def _parse_timeline(timeline_data) -> list:
     return []
 
 
-_SECTION_HEADINGS = [
-    "Les faits",
-    "Reactions et enjeux",
-    "Perspectives",
-    "Contexte et repercussions",
-    "Ce qu'il faut retenir",
-]
+def _extract_contextual_heading(paragraph: str) -> str:
+    """
+    Extract a short, contextual heading from a paragraph's first sentence.
+    Produces newspaper-style headings specific to the content.
+    """
+    import re
+
+    # Get first sentence
+    sentence = paragraph.strip()
+    # Split on sentence-ending punctuation
+    for sep in ['. ', '.\n', '.\u00a0', '? ', '! ']:
+        idx = sentence.find(sep)
+        if 0 < idx < 200:
+            sentence = sentence[:idx]
+            break
+    else:
+        # No punctuation found — take first 120 chars
+        sentence = sentence[:120]
+
+    # Remove citations like [SOURCE:1], (selon Le Monde), etc.
+    sentence = re.sub(r'\[SOURCE:\d+\]', '', sentence)
+    sentence = re.sub(r'\(selon [^)]+\)', '', sentence)
+    sentence = re.sub(r'\u00ab[^»]*\u00bb', '', sentence)  # remove quoted text
+
+    # Trim to ~6-8 words for a punchy heading
+    words = sentence.split()
+    if len(words) > 8:
+        words = words[:7]
+
+    heading = ' '.join(words).strip().rstrip(',;:')
+
+    # Capitalize first letter
+    if heading:
+        heading = heading[0].upper() + heading[1:]
+
+    return heading or "Suite"
 
 
 def _inject_headings_if_missing(text: str) -> str:
     """
-    If the body text has no ## headings, inject newspaper-style section titles
-    every 2-3 paragraphs so the frontend groupIntoSections() can structure it.
+    If the body text has no ## headings, inject contextual section titles
+    extracted from paragraph content (not generic ones).
     """
     if not text:
         return text
@@ -172,10 +201,11 @@ def _inject_headings_if_missing(text: str) -> str:
     if len(paragraphs) < 4:
         return text
 
-    # Inject headings every 2-3 paragraphs
+    # Inject contextual headings every 2-3 paragraphs
     result = []
-    heading_idx = 0
+    headings_injected = 0
     paras_since_heading = 0
+    max_headings = 5
 
     for i, para in enumerate(paragraphs):
         # First paragraph stays without heading (drop cap)
@@ -185,9 +215,10 @@ def _inject_headings_if_missing(text: str) -> str:
             continue
 
         # Inject heading every 2-3 paragraphs
-        if paras_since_heading >= 2 and heading_idx < len(_SECTION_HEADINGS):
-            result.append(f'## {_SECTION_HEADINGS[heading_idx]}')
-            heading_idx += 1
+        if paras_since_heading >= 2 and headings_injected < max_headings:
+            heading = _extract_contextual_heading(para)
+            result.append(f'## {heading}')
+            headings_injected += 1
             paras_since_heading = 0
 
         result.append(para)

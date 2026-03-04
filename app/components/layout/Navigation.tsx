@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter, usePathname } from 'next/navigation';
 import { useTheme } from '../../contexts/ThemeContext';
 import { synthesesService } from '../../lib/api/services/syntheses';
 
@@ -24,6 +25,8 @@ const CATEGORIES = [
 
 export function Navigation({ selectedCategory, onCategoryChange }: NavigationProps) {
   const { theme } = useTheme();
+  const router = useRouter();
+  const pathname = usePathname();
   const [liveCount, setLiveCount] = useState<number>(0);
   const [categoryStats, setCategoryStats] = useState<Record<string, number>>({});
 
@@ -77,7 +80,13 @@ export function Navigation({ selectedCategory, onCategoryChange }: NavigationPro
         return (
           <button
             key={item.id}
-            onClick={() => onCategoryChange(item.id)}
+            onClick={() => {
+              onCategoryChange(item.id);
+              if (pathname !== '/') {
+                const href = item.id === 'ACCUEIL' ? '/' : `/?category=${item.id}`;
+                router.push(href);
+              }
+            }}
             role="button"
             aria-current={isSelected ? 'page' : undefined}
             aria-label={`Afficher les articles de la catégorie ${item.label}${count > 0 ? `, ${count} articles` : ''}`}

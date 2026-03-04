@@ -62,6 +62,8 @@ export interface GeographicLocation {
   type: string; // "city", "country", "waterway", "region"
   role: string; // Contextual role in the story
   country?: string; // ISO 2-letter code
+  lat?: number; // Latitude from LLM
+  lon?: number; // Longitude from LLM
 }
 
 // ========== Key Metrics (Axios/Bloomberg callouts) ==========
@@ -117,7 +119,7 @@ export interface SynthesisData {
   sourceImages?: SourceImage[];
   // Phase 3A: Geographic context
   geographicContext?: GeographicLocation[];
-  geoRelevance?: 'high' | 'medium' | 'none';
+  geoRelevance?: 'high' | 'medium' | 'low' | 'none';
   // Key Metrics (Axios/Bloomberg-style callouts)
   keyMetrics?: KeyMetric[];
   // Timeline events

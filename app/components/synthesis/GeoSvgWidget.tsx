@@ -64,6 +64,33 @@ const CITY_COORDS: Record<string, [number, number]> = {
   // Oceania
   'sydney': [151.2, -33.9], 'melbourne': [144.96, -37.8],
   'canberra': [149.1, -35.3], 'auckland': [174.8, -36.9],
+  // Extra cities (common in French news)
+  'strasbourg': [7.75, 48.58], 'toulouse': [1.44, 43.6], 'bordeaux': [-0.58, 44.84],
+  'nice': [7.27, 43.7], 'nantes': [-1.55, 47.22], 'lille': [3.06, 50.63],
+  'montpellier': [3.88, 43.6], 'rennes': [-1.68, 48.11], 'grenoble': [5.72, 45.19],
+  'clermont-ferrand': [3.08, 45.78], 'metz': [6.18, 49.12], 'nancy': [6.18, 48.69],
+  'calais': [1.86, 50.95], 'dunkerque': [2.38, 51.03], 'brest': [-4.49, 48.39],
+  'detroit': [-83.05, 42.33], 'denver': [-104.99, 39.74], 'atlanta': [-84.39, 33.75],
+  'dallas': [-96.8, 32.78], 'phoenix': [-112.07, 33.45], 'philadelphia': [-75.16, 39.95],
+  'las vegas': [-115.14, 36.17], 'san diego': [-117.16, 32.72],
+  'osaka': [135.5, 34.7], 'kyoto': [135.77, 35.01], 'shenzhen': [114.06, 22.54],
+  'guangzhou': [113.26, 23.13], 'chengdu': [104.07, 30.57],
+  'saint-petersbourg': [30.32, 59.93], 'st. petersburg': [30.32, 59.93],
+  'volgograd': [44.52, 48.71], 'odessa': [30.73, 46.48],
+  'kharkiv': [36.23, 49.99], 'marioupol': [37.54, 47.1], 'mariupol': [37.54, 47.1],
+  'sebastopol': [33.52, 44.6], 'sevastopol': [33.52, 44.6],
+  'donetsk': [37.8, 48.0], 'louhansk': [39.3, 48.57], 'luhansk': [39.3, 48.57],
+  'rafah': [34.25, 31.3], 'khan younes': [34.3, 31.35], 'naplouse': [35.26, 32.22],
+  'ramallah': [35.2, 31.9], 'hebron': [35.1, 31.53],
+  'mossoul': [43.14, 36.34], 'mosul': [43.14, 36.34], 'bassorah': [47.78, 30.51], 'basra': [47.78, 30.51],
+  'ispahan': [51.68, 32.65], 'isfahan': [51.68, 32.65], 'tabriz': [46.3, 38.1],
+  'bamako': [-8.0, 12.65], 'ouagadougou': [-1.52, 12.37], 'niamey': [2.11, 13.51],
+  'dakar': [-17.44, 14.69], 'abidjan': [-4.03, 5.32], 'accra': [-0.19, 5.56],
+  'kinshasa': [15.31, -4.32], 'luanda': [13.23, -8.84],
+  'mogadiscio': [45.34, 2.05], 'mogadishu': [45.34, 2.05],
+  'panama': [-79.52, 8.98],
+  'manille': [120.98, 14.6], 'manila': [120.98, 14.6],
+  'pyongyang': [125.75, 39.02],
 };
 
 const COUNTRY_CENTERS: Record<string, [number, number]> = {
@@ -170,13 +197,42 @@ const CONTINENTS: [number, number][][] = [
 // Projection helpers
 // ==========================================
 
+// Strip accents for fuzzy matching
+function stripAccents(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
 function resolveCoords(place: string, country?: string): [number, number] | null {
   const key = place.toLowerCase().trim();
+  // Direct match
   if (CITY_COORDS[key]) return CITY_COORDS[key];
   if (COUNTRY_CENTERS[key]) return COUNTRY_CENTERS[key];
+
+  // Accent-stripped match
+  const stripped = stripAccents(key);
+  for (const [k, v] of Object.entries(CITY_COORDS)) {
+    if (stripAccents(k) === stripped) return v;
+  }
+  for (const [k, v] of Object.entries(COUNTRY_CENTERS)) {
+    if (stripAccents(k) === stripped) return v;
+  }
+
+  // Partial match — check if place contains or is contained by a known key
+  for (const [k, v] of Object.entries(CITY_COORDS)) {
+    if (key.includes(k) || k.includes(key)) return v;
+  }
+  for (const [k, v] of Object.entries(COUNTRY_CENTERS)) {
+    if (key.includes(k) || k.includes(key)) return v;
+  }
+
+  // Try country fallback
   if (country) {
     const cKey = country.toLowerCase().trim();
     if (COUNTRY_CENTERS[cKey]) return COUNTRY_CENTERS[cKey];
+    const cStripped = stripAccents(cKey);
+    for (const [k, v] of Object.entries(COUNTRY_CENTERS)) {
+      if (stripAccents(k) === cStripped) return v;
+    }
   }
   return null;
 }
@@ -290,7 +346,7 @@ export default function GeoSvgWidget({ synthesis }: GeoSvgWidgetProps) {
   const relevance = synthesis.geoRelevance || 'none';
   const locations = synthesis.geographicContext || [];
 
-  // Resolve locations to coordinates
+  // Resolve locations to coordinates — use LLM-provided lat/lon first, dictionary as fallback
   const resolved = useMemo<ResolvedLocation[]>(() => {
     const seen = new Set<string>();
     const result: ResolvedLocation[] = [];
@@ -302,6 +358,20 @@ export default function GeoSvgWidget({ synthesis }: GeoSvgWidgetProps) {
       if (seen.has(key)) continue;
       seen.add(key);
 
+      // Priority 1: LLM-provided coordinates (intelligent)
+      if (loc.lat != null && loc.lon != null && isFinite(loc.lat) && isFinite(loc.lon)) {
+        result.push({
+          place,
+          type: loc.type || 'city',
+          role: loc.role || '',
+          country: loc.country,
+          lon: loc.lon,
+          lat: loc.lat,
+        });
+        continue;
+      }
+
+      // Priority 2: Static dictionary fallback (for old syntheses)
       const coords = resolveCoords(place, loc.country);
       if (!coords) continue;
 
@@ -380,8 +450,8 @@ export default function GeoSvgWidget({ synthesis }: GeoSvgWidgetProps) {
     return result;
   }, [projected]);
 
-  // Don't render if no relevant geography
-  if (relevance === 'none' || resolved.length === 0) return null;
+  // Don't render if no locations could be resolved
+  if (resolved.length === 0) return null;
 
   // Build CSS animations for arcs (each needs unique dasharray/offset)
   const arcCss = arcs.map((arc, i) => `
