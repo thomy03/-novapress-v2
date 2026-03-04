@@ -253,17 +253,37 @@ class TopicTracker:
         """
         Check if a synthesis belongs to a recurring topic.
 
+        Priority:
+        1. Look up the LLM-generated topic name in novapress_topics (best quality)
+        2. Fall back to keyword-based matching + optional LLM naming
+
         Returns topic info if synthesis is part of a recurring topic.
         """
         if not self.qdrant:
             return None
 
         try:
+            # 1. Check stored topics first (LLM-generated names from topic_detection.py)
+            stored_topic = self.qdrant.find_topic_for_synthesis(synthesis_id)
+            if stored_topic and stored_topic.get("name"):
+                topic_name = stored_topic["name"]
+                mention_count = stored_topic.get("mention_count", 0)
+                syn_ids = stored_topic.get("synthesis_ids", [])
+                return {
+                    "topic_name": topic_name,
+                    "synthesis_count": mention_count or len(syn_ids),
+                    "is_recurring": True,
+                    "related_ids": [
+                        sid for sid in syn_ids
+                        if sid != synthesis_id
+                    ][:5]
+                }
+
+            # 2. Fallback: keyword-based search
             synthesis = self.qdrant.get_synthesis_by_id(synthesis_id)
             if not synthesis:
                 return None
 
-            # Get central topic
             central = self._get_central_topic(synthesis)
             if not central:
                 return None
@@ -272,8 +292,12 @@ class TopicTracker:
             related = await self._search_syntheses_by_topic(central)
 
             if len(related) >= self.RECURRENCE_THRESHOLD:
+                # Try to generate a smarter topic name via LLM
+                topic_name = await self._generate_smart_topic_name(
+                    related, synthesis
+                )
                 return {
-                    "topic_name": central,
+                    "topic_name": topic_name or central,
                     "synthesis_count": len(related),
                     "is_recurring": True,
                     "related_ids": [
@@ -288,6 +312,60 @@ class TopicTracker:
         except Exception as e:
             logger.error(f"Error checking topic recurrence: {e}")
             return None
+
+    async def _generate_smart_topic_name(
+        self,
+        related_syntheses: List[Dict],
+        current_synthesis: Dict
+    ) -> Optional[str]:
+        """
+        Generate an editorial-quality topic name using LLM.
+        Falls back to the central entity if LLM is unavailable.
+        """
+        try:
+            from app.ml.llm import llm_service
+            if not llm_service or not hasattr(llm_service, 'generate_raw'):
+                return None
+
+            titles = [s.get('title', '') for s in related_syntheses[:8] if s.get('title')]
+            if not titles:
+                return None
+
+            category = current_synthesis.get('category', 'MONDE')
+            titles_text = "\n".join(f"- {t}" for t in titles)
+
+            prompt = f"""Tu es editeur en chef d'un grand journal. A partir de ces titres de syntheses liees, genere UN nom de dossier/theme journalistique.
+
+Categorie : {category}
+Date : mars 2026
+
+Titres :
+{titles_text}
+
+REGLES :
+- 3 a 7 mots maximum
+- Style Le Monde / New York Times (ex: "Midterms Texas 2026", "Crise du Logement en France", "Course a l'IA Generative")
+- Utilise des noms propres, lieux, evenements concrets
+- JAMAIS de mots generiques seuls (pas "Politique", "Democratic", "Retour", "International")
+- Pas de guillemets dans la reponse
+
+Reponds UNIQUEMENT avec le nom du theme, rien d'autre."""
+
+            response = await llm_service.generate_raw(prompt, max_tokens=50)
+            if response:
+                # Clean the response
+                name = response.strip().strip('"').strip("'").strip()
+                # Validate: reject if too short or looks like a single generic word
+                if len(name) > 3 and ' ' in name:
+                    return name
+                # Also accept proper nouns (capitalized single words longer than 5 chars)
+                if len(name) > 5 and name[0].isupper():
+                    return name
+
+        except Exception as e:
+            logger.debug(f"Smart topic name generation failed: {e}")
+
+        return None
 
     # ==========================================
     # Private Helper Methods

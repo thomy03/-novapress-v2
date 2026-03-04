@@ -2797,6 +2797,74 @@ class QdrantService:
             logger.error(f"Failed to get topics with embeddings: {e}")
             return []
 
+    def find_topic_for_synthesis(self, synthesis_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Find the topic that contains a given synthesis_id in its synthesis_ids list.
+        Scrolls novapress_topics and checks each topic's synthesis_ids.
+
+        Returns:
+            Topic payload dict with 'name', 'description', 'mention_count', etc.
+            or None if not found.
+        """
+        if not self.client:
+            return None
+
+        try:
+            import json
+
+            offset = None
+            batch_size = 100
+
+            while True:
+                points, next_offset = self.client.scroll(
+                    collection_name=self.topics_collection,
+                    limit=batch_size,
+                    offset=offset,
+                    with_payload=True,
+                    with_vectors=False
+                )
+
+                for point in points:
+                    payload = point.payload or {}
+                    syn_ids_raw = payload.get("synthesis_ids", "[]")
+
+                    # Parse JSON string to list
+                    if isinstance(syn_ids_raw, str):
+                        try:
+                            syn_ids = json.loads(syn_ids_raw)
+                        except (json.JSONDecodeError, ValueError):
+                            syn_ids = []
+                    elif isinstance(syn_ids_raw, list):
+                        syn_ids = syn_ids_raw
+                    else:
+                        syn_ids = []
+
+                    if synthesis_id in syn_ids:
+                        topic = dict(payload)
+                        topic["id"] = str(point.id)
+                        topic["synthesis_ids"] = syn_ids
+
+                        # Parse other JSON fields
+                        for field in ["keywords", "entity_ids"]:
+                            field_val = topic.get(field, "[]")
+                            if isinstance(field_val, str):
+                                try:
+                                    topic[field] = json.loads(field_val)
+                                except json.JSONDecodeError:
+                                    topic[field] = []
+
+                        return topic
+
+                if next_offset is None or len(points) < batch_size:
+                    break
+                offset = next_offset
+
+            return None
+
+        except Exception as e:
+            logger.error(f"Failed to find topic for synthesis {synthesis_id}: {e}")
+            return None
+
 
 # Global instance
 qdrant_service = QdrantService()

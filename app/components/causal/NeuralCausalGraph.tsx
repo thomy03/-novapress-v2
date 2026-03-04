@@ -43,6 +43,7 @@ interface NeuralCausalGraphProps {
   narrativeFlow: NarrativeFlow;
   onNodeClick?: (nodeId: string, nodeData: CausalNode) => void;
   onEdgeClick?: (edge: CausalEdge) => void;
+  compact?: boolean;
 }
 
 // Calculate graph complexity based on data richness
@@ -142,6 +143,7 @@ function NeuralCausalGraphInner({
   narrativeFlow,
   onNodeClick,
   onEdgeClick,
+  compact = false,
 }: NeuralCausalGraphProps) {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const complexity = useMemo(
@@ -335,17 +337,19 @@ function NeuralCausalGraphInner({
 
   if (causalNodes.length === 0) {
     return (
-      <div style={styles.emptyState}>
+      <div style={{ ...styles.emptyState, ...(compact ? { minHeight: '200px', padding: '30px 16px' } : {}) }}>
         <div style={styles.emptyIcon}>
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.5">
+          <svg width={compact ? "32" : "48"} height={compact ? "32" : "48"} viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="1.5">
             <circle cx="12" cy="12" r="3" />
             <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
           </svg>
         </div>
         <p style={styles.emptyText}>Graphe neuronal en attente</p>
-        <p style={styles.emptySubtext}>
-          Les relations causales seront affichees ici apres l'execution du pipeline.
-        </p>
+        {!compact && (
+          <p style={styles.emptySubtext}>
+            Les relations causales seront affichees ici apres l'execution du pipeline.
+          </p>
+        )}
       </div>
     );
   }
@@ -353,39 +357,43 @@ function NeuralCausalGraphInner({
   const flowConfig = NARRATIVE_FLOW_CONFIG[narrativeFlow];
 
   return (
-    <div style={styles.container}>
-      {/* Header */}
-      <div style={styles.header}>
-        <h3 style={styles.title}>Nexus Causal</h3>
-        <div
-          style={{
-            ...styles.flowBadge,
-            backgroundColor: flowConfig?.color ? `${flowConfig.color}15` : '#F3F4F6',
-            color: flowConfig?.color || '#6B7280',
-          }}
-        >
-          <span>{flowConfig?.icon || '→'}</span>
-          <span>{flowConfig?.labelFr || 'Lineaire'}</span>
+    <div style={{ ...styles.container, ...(compact ? { border: 'none' } : {}) }}>
+      {/* Header — hidden in compact mode */}
+      {!compact && (
+        <div style={styles.header}>
+          <h3 style={styles.title}>Nexus Causal</h3>
+          <div
+            style={{
+              ...styles.flowBadge,
+              backgroundColor: flowConfig?.color ? `${flowConfig.color}15` : '#F3F4F6',
+              color: flowConfig?.color || '#6B7280',
+            }}
+          >
+            <span>{flowConfig?.icon || '→'}</span>
+            <span>{flowConfig?.labelFr || 'Lineaire'}</span>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Graph stats */}
-      <div style={styles.statsBar}>
-        <span style={styles.statItem}>
-          <strong>{causalNodes.length}</strong> noeuds
-        </span>
-        <span style={styles.statDivider}>|</span>
-        <span style={styles.statItem}>
-          <strong>{causalEdges.length}</strong> relations
-        </span>
-        <span style={styles.statDivider}>|</span>
-        <span style={styles.statItem}>
-          Max <strong>{complexity.cascadeDepth}</strong> niveaux
-        </span>
-      </div>
+      {/* Graph stats — hidden in compact mode */}
+      {!compact && (
+        <div style={styles.statsBar}>
+          <span style={styles.statItem}>
+            <strong>{causalNodes.length}</strong> noeuds
+          </span>
+          <span style={styles.statDivider}>|</span>
+          <span style={styles.statItem}>
+            <strong>{causalEdges.length}</strong> relations
+          </span>
+          <span style={styles.statDivider}>|</span>
+          <span style={styles.statItem}>
+            Max <strong>{complexity.cascadeDepth}</strong> niveaux
+          </span>
+        </div>
+      )}
 
       {/* React Flow Graph */}
-      <div style={styles.graphContainer}>
+      <div style={{ ...styles.graphContainer, ...(compact ? { minHeight: '280px' } : {}) }}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -397,41 +405,50 @@ function NeuralCausalGraphInner({
           edgeTypes={edgeTypes}
           connectionMode={ConnectionMode.Loose}
           fitView
-          fitViewOptions={{ padding: 0.2 }}
-          minZoom={0.3}
-          maxZoom={1.5}
+          fitViewOptions={{ padding: compact ? 0.4 : 0.2 }}
+          minZoom={compact ? 0.2 : 0.3}
+          maxZoom={compact ? 1.0 : 1.5}
           attributionPosition="bottom-left"
           proOptions={{ hideAttribution: true }}
+          panOnDrag={!compact}
+          zoomOnScroll={!compact}
+          preventScrolling={!compact}
         >
-          <Background color="#E5E5E5" gap={20} />
-          <Controls
-            showZoom={true}
-            showFitView={true}
-            showInteractive={false}
-            style={{ bottom: 10, left: 10 }}
-          />
-          <MiniMap
-            nodeColor={(node) => {
-              if (node.data?.isSource) return '#DC2626';
-              if (node.data?.isActivated) return '#3B82F6';
-              return '#E5E7EB';
-            }}
-            maskColor="rgba(255, 255, 255, 0.8)"
-            style={{ bottom: 10, right: 10 }}
-          />
+          <Background color="#E5E5E5" gap={compact ? 15 : 20} />
+          {!compact && (
+            <>
+              <Controls
+                showZoom={true}
+                showFitView={true}
+                showInteractive={false}
+                style={{ bottom: 10, left: 10 }}
+              />
+              <MiniMap
+                nodeColor={(node) => {
+                  if (node.data?.isSource) return '#DC2626';
+                  if (node.data?.isActivated) return '#3B82F6';
+                  return '#E5E7EB';
+                }}
+                maskColor="rgba(255, 255, 255, 0.8)"
+                style={{ bottom: 10, right: 10 }}
+              />
+            </>
+          )}
         </ReactFlow>
       </div>
 
-      {/* Instructions */}
-      <p style={styles.instructions}>
-        Cliquez sur un noeud pour declencher la cascade d'effets
-      </p>
+      {/* Instructions — hidden in compact mode */}
+      {!compact && (
+        <p style={styles.instructions}>
+          Cliquez sur un noeud pour declencher la cascade d'effets
+        </p>
+      )}
 
       {/* Central entity info */}
       {centralEntity && (
-        <div style={styles.centralInfo}>
+        <div style={{ ...styles.centralInfo, ...(compact ? { padding: '8px', fontSize: '11px' } : {}) }}>
           <span style={styles.centralLabel}>Entite centrale:</span>
-          <span style={styles.centralValue}>{centralEntity}</span>
+          <span style={{ ...styles.centralValue, ...(compact ? { fontSize: '12px' } : {}) }}>{centralEntity}</span>
         </div>
       )}
     </div>

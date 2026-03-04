@@ -16,9 +16,11 @@ import {
   SourcesSection,
   HistoricalContext
 } from '@/app/components/synthesis';
+import { Header } from '@/app/components/layout/Header';
 import dynamic from 'next/dynamic';
 
 const MiniCausalWidget = dynamic(() => import('./MiniCausalWidget'), { ssr: false });
+const NeuralCausalGraph = dynamic(() => import('@/app/components/causal/NeuralCausalGraph'), { ssr: false });
 import FeedbackWidget from '@/app/components/synthesis/FeedbackWidget';
 import { AudioPlayer } from '@/app/components/audio';
 import { FollowButton } from '@/app/components/ui/FollowButton';
@@ -97,6 +99,19 @@ function TopicNexusLink({
               <div style={{ fontSize: '10px', color: '#6B7280', textTransform: 'uppercase' as const, letterSpacing: '0.5px' }}>relations</div>
             </div>
           </div>
+
+          {/* Mini causal graph */}
+          {nodeCount > 0 && causalData && (
+            <div style={{ height: '280px', marginBottom: '16px', border: '1px solid #E5E5E5' }}>
+              <NeuralCausalGraph
+                nodes={causalData.nodes}
+                edges={causalData.edges}
+                centralEntity={causalData.central_entity || ''}
+                narrativeFlow={causalData.narrative_flow || 'linear'}
+                compact
+              />
+            </div>
+          )}
 
           {/* Predictions preview */}
           {causalData?.predictions && causalData.predictions.length > 0 && (
@@ -312,15 +327,19 @@ export default function SynthesisClient({ initialSynthesis }: SynthesisClientPro
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#FFFFFF', color: '#000000' }}>
-      {/* Header */}
-      <header style={styles.header}>
-        <div style={styles.headerContent}>
-          <Link href="/" style={styles.backLink}>
-            <span style={{ fontSize: '18px' }}>&larr;</span>
-            <span>Retour aux actualites</span>
-          </Link>
+      {/* Main Header */}
+      <Header />
+
+      {/* Breadcrumb */}
+      <nav style={styles.breadcrumb}>
+        <div style={styles.breadcrumbContent}>
+          <Link href="/" style={styles.breadcrumbLink}>Accueil</Link>
+          <span style={styles.breadcrumbSep}>/</span>
+          <Link href="/intelligence" style={styles.breadcrumbLink}>Intelligence</Link>
+          <span style={styles.breadcrumbSep}>/</span>
+          <span style={styles.breadcrumbCurrent}>{synthesis.category || 'Synthese'}</span>
         </div>
-      </header>
+      </nav>
 
       {/* 3-Column Layout */}
       <SynthesisLayout
@@ -487,26 +506,31 @@ export default function SynthesisClient({ initialSynthesis }: SynthesisClientPro
 
 // Styles - Newspaper Style (Light Mode)
 const styles: { [key: string]: React.CSSProperties } = {
-  header: {
+  breadcrumb: {
     borderBottom: '1px solid #E5E5E5',
-    padding: '16px 0',
-    backgroundColor: '#FFFFFF',
-    position: 'sticky',
-    top: 0,
-    zIndex: 100,
+    padding: '10px 0',
+    backgroundColor: '#F9FAFB',
   },
-  headerContent: {
+  breadcrumbContent: {
     maxWidth: '1600px',
     margin: '0 auto',
     padding: '0 24px',
-  },
-  backLink: {
-    display: 'inline-flex',
+    display: 'flex',
     alignItems: 'center',
-    gap: '8px',
+    gap: '6px',
+    fontSize: '12px',
+  },
+  breadcrumbLink: {
     color: '#6B7280',
     textDecoration: 'none',
-    fontSize: '14px',
+  },
+  breadcrumbSep: {
+    color: '#D1D5DB',
+    fontSize: '11px',
+  },
+  breadcrumbCurrent: {
+    color: '#000000',
+    fontWeight: 600,
   },
   main: {
     padding: '40px 0 80px',

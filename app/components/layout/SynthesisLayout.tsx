@@ -190,7 +190,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   leftSidebar: {
     position: 'sticky',
-    top: '100px',
+    top: '140px',
     height: 'calc(100vh - 120px)',
     backgroundColor: '#F9FAFB',
     border: '1px solid #E5E5E5',
@@ -221,7 +221,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   rightSidebar: {
     position: 'sticky',
-    top: '100px',
+    top: '140px',
     height: 'calc(100vh - 120px)',
     overflowY: 'auto',
     backgroundColor: '#F9FAFB',
@@ -242,7 +242,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   tabletLeftSidebar: {
     position: 'sticky',
-    top: '100px',
+    top: '140px',
     height: 'calc(100vh - 200px)',
     backgroundColor: '#F9FAFB',
     border: '1px solid #E5E5E5',
