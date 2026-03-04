@@ -1232,7 +1232,7 @@ Contenu existant (extrait):
                             entities=entities_list,
                         )
                         if svg:
-                            import aioredis
+                            import redis.asyncio as aioredis
                             redis_conn = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
                             await redis_conn.set(
                                 f"novapress:template_svg:{synthesis['id']}", svg,

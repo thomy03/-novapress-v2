@@ -982,7 +982,7 @@ async def get_template_svg(
 ):
     """Return the category template SVG for a synthesis (Wikimedia fallback)."""
     from fastapi.responses import Response
-    import aioredis
+    import redis.asyncio as aioredis
     from app.core.config import get_settings
 
     try:
