@@ -544,25 +544,79 @@ class PipelineEngine:
         use_search_enrichment: bool = True
     ) -> List[Dict[str, Any]]:
         """
-        Generate AI syntheses for top clusters with:
-        - Advanced RAG (chunking, contradictions, fact density)
-        - Temporal Narrative Arc (historical context, story evolution)
-        - Search Enrichment (Perplexity + Grok for web/social context)
+        Generate AI syntheses for top clusters concurrently.
+        Uses asyncio.gather with a semaphore to limit parallel LLM calls.
         """
+        MAX_CONCURRENT_CLUSTERS = 3  # Limit parallel LLM calls to avoid rate-limiting
+
+        valid_clusters = [c for c in clusters if c["size"] >= 2]
+        if not valid_clusters:
+            logger.warning("⚠️ No valid clusters (size >= 2) to process")
+            return []
+
+        logger.info(f"🚀 Processing {len(valid_clusters)} clusters with max {MAX_CONCURRENT_CLUSTERS} concurrent")
+
+        semaphore = asyncio.Semaphore(MAX_CONCURRENT_CLUSTERS)
+
+        # Periodic Redis lock renewal during parallel processing
+        renewal_task = asyncio.create_task(self._periodic_lock_renewal(interval=30))
+
+        tasks = [
+            self._process_single_cluster(
+                cluster, semaphore, i + 1, len(valid_clusters),
+                use_advanced_rag, use_temporal_narrative, use_search_enrichment
+            )
+            for i, cluster in enumerate(valid_clusters)
+        ]
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        renewal_task.cancel()
+        try:
+            await renewal_task
+        except asyncio.CancelledError:
+            pass
+
         syntheses = []
-        import numpy as np
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.error(f"❌ Cluster {i+1}/{len(valid_clusters)} failed: {result}")
+            elif isinstance(result, list):
+                syntheses.extend(result)
 
-        for cluster in clusters:
-            if cluster["size"] < 2:
-                continue
+        logger.success(f"🎉 Parallel processing complete: {len(syntheses)} syntheses from {len(valid_clusters)} clusters")
+        return syntheses
 
-            try:
-                # Renew Redis lock per-cluster (synthesis generation is slow: ~8-12 min per cluster)
+    async def _periodic_lock_renewal(self, interval: int = 30):
+        """Renew Redis lock periodically during parallel cluster processing."""
+        try:
+            while True:
                 if hasattr(self, '_manager') and self._manager:
                     self._manager._renew_redis_lock()
+                await asyncio.sleep(interval)
+        except asyncio.CancelledError:
+            pass
 
+    async def _process_single_cluster(
+        self,
+        cluster: Dict[str, Any],
+        semaphore: asyncio.Semaphore,
+        cluster_idx: int,
+        total: int,
+        use_advanced_rag: bool = True,
+        use_temporal_narrative: bool = True,
+        use_search_enrichment: bool = True,
+    ) -> List[Dict[str, Any]]:
+        """Process a single cluster: RAG + TNA + Search + LLM + Persona. Returns list of syntheses."""
+        import numpy as np
+
+        tag = f"[{cluster_idx}/{total}]"
+        syntheses = []
+
+        async with semaphore:
+            try:
                 articles = cluster["articles"]
-                logger.info(f"✍️ Generating synthesis for cluster {cluster['cluster_id']} ({cluster['size']} articles)")
+                logger.info(f"{tag} ✍️ Generating synthesis for cluster {cluster['cluster_id']} ({cluster['size']} articles)")
 
                 # === 0. DEDUPLICATION CHECK & UPDATE MODE ===
                 # Check if a similar synthesis exists - if so, UPDATE it instead of creating new
@@ -603,13 +657,13 @@ class PipelineEngine:
                                               f"'{existing_synthesis.get('title', '')[:40]}...' (ID: {existing_synthesis.get('id')})")
                                 else:
                                     # Update disabled, skip duplicate
-                                    logger.info(f"⏭️ Skipping cluster {cluster['cluster_id']}: has new articles but ENABLE_SYNTHESIS_UPDATE=False")
-                                    continue
+                                    logger.info(f"{tag} ⏭️ Skipping cluster {cluster['cluster_id']}: has new articles but ENABLE_SYNTHESIS_UPDATE=False")
+                                    return []
                             else:
                                 # SKIP: No new articles, truly duplicate
-                                logger.info(f"⏭️ Skipping cluster {cluster['cluster_id']}: duplicate of existing synthesis "
+                                logger.info(f"{tag} ⏭️ Skipping cluster {cluster['cluster_id']}: duplicate of existing synthesis "
                                           f"'{existing_synthesis.get('title', '')[:50]}...' (ID: {existing_synthesis.get('id')})")
-                                continue
+                                return []
 
                 # === 1. COMPUTE EMBEDDINGS ===
                 cluster_texts = [
@@ -652,13 +706,13 @@ class PipelineEngine:
                                           f"{len(new_articles_for_update)} new articles to add")
                             else:
                                 # Update disabled, skip duplicate
-                                logger.info(f"⏭️ Skipping cluster {cluster['cluster_id']}: has new articles but ENABLE_SYNTHESIS_UPDATE=False")
-                                continue
+                                logger.info(f"{tag} ⏭️ Skipping cluster {cluster['cluster_id']}: has new articles but ENABLE_SYNTHESIS_UPDATE=False")
+                                return []
                         else:
                             # SKIP: No new articles, truly duplicate
-                            logger.info(f"⏭️ Skipping cluster {cluster['cluster_id']}: similar to existing synthesis "
+                            logger.info(f"{tag} ⏭️ Skipping cluster {cluster['cluster_id']}: similar to existing synthesis "
                                       f"'{similar_synthesis.get('title', '')[:50]}...' (by embedding)")
-                            continue
+                            return []
 
                 # === 2. ADVANCED RAG CONTEXT ===
                 enhanced_context = {}
@@ -672,7 +726,7 @@ class PipelineEngine:
                     # Log detected contradictions
                     contradictions = enhanced_context.get('contradictions', [])
                     if contradictions:
-                        logger.warning(f"⚠️ {len(contradictions)} contradiction(s) detected in cluster {cluster['cluster_id']}")
+                        logger.warning(f"{tag} ⚠️ {len(contradictions)} contradiction(s) detected in cluster {cluster['cluster_id']}")
                         for c in contradictions:
                             logger.info(f"   - {c['type']}: {c['source1']} vs {c['source2']}")
 
@@ -687,7 +741,7 @@ class PipelineEngine:
                 if past_syntheses:
                     # Use past syntheses from clustering directly
                     narrative_arc = "developing" if cluster_type == "update" else "emerging"
-                    logger.info(f"🔄 Update cluster: {len(past_syntheses)} past synthesis(es) from clustering")
+                    logger.info(f"{tag} 🔄 Update cluster: {len(past_syntheses)} past synthesis(es) from clustering")
 
                     # Format past syntheses as context
                     past_context_parts = []
@@ -719,13 +773,13 @@ class PipelineEngine:
                     days_tracked = historical_context.days_tracked
 
                     if historical_context.related_syntheses:
-                        logger.info(f"📜 Found {len(historical_context.related_syntheses)} related syntheses "
+                        logger.info(f"{tag} 📜 Found {len(historical_context.related_syntheses)} related syntheses "
                                    f"(story: {narrative_arc}, {days_tracked} days tracked)")
                         historical_context_text = self.temporal_narrative.format_context_for_llm(
                             historical_context
                         )
                     else:
-                        logger.info(f"🆕 New story thread (no historical context)")
+                        logger.info(f"{tag} 🆕 New story thread (no historical context)")
 
                 # === 3.5 SEARCH ENRICHMENT (Perplexity + Grok) - MANDATORY ===
                 search_context_text = ""
@@ -836,7 +890,7 @@ Contenu existant (extrait):
 
                 if use_temporal_narrative and full_context_text:
                     # ULTIMATE synthesis: Advanced RAG + TNA + Search
-                    logger.info(f"🚀 Using ULTIMATE synthesis (RAG + TNA + Search) for cluster {cluster['cluster_id']}")
+                    logger.info(f"{tag} 🚀 Using ULTIMATE synthesis (RAG + TNA + Search) for cluster {cluster['cluster_id']}")
                     # Phase 6: Pass search_context_text separately to be properly injected in prompt
                     synthesis = await self.llm_service.synthesize_with_history(
                         articles,
@@ -1139,45 +1193,54 @@ Contenu existant (extrait):
                     synthesis["transparency_label"] = "N/A"
                     synthesis["transparency_breakdown"] = {}
 
-                # === IMAGE GENERATION (fal.ai) ===
-                try:
-                    from app.services.image_generator import get_image_generator
-                    img_gen = get_image_generator()
-                    if img_gen.enabled:
-                        image_url = await img_gen.generate_for_synthesis(synthesis)
-                        if image_url:
-                            synthesis["image_url"] = image_url
-                            logger.info(f"🖼️ Image generated for synthesis {base_synthesis_id[:8]}")
-                        else:
-                            synthesis["image_url"] = None
-                    else:
-                        synthesis["image_url"] = None
-                except Exception as img_error:
-                    logger.warning(f"⚠️ Image generation failed: {img_error}")
+                # === IMAGE + SVG GENERATION (parallel) ===
+                from app.services.image_generator import get_image_generator
+                from app.services.nexus_image_generator import get_nexus_image_generator
+
+                img_gen = get_image_generator()
+                nexus_gen = get_nexus_image_generator()
+
+                async def _gen_image():
+                    if not img_gen.enabled:
+                        return None
+                    return await img_gen.generate_for_synthesis(synthesis)
+
+                async def _gen_svg():
+                    if not nexus_gen.enabled:
+                        return None
+                    return await nexus_gen.generate_editorial_svg(
+                        synthesis_id=synthesis["id"],
+                        title=synthesis.get("title", ""),
+                        category=synthesis.get("category", "MONDE"),
+                        key_points=synthesis.get("keyPoints", synthesis.get("key_points", [])),
+                        key_metrics=synthesis.get("key_metrics", []),
+                        entities=[
+                            e.get("name", e) if isinstance(e, dict) else str(e)
+                            for e in synthesis.get("key_entities", [])[:5]
+                        ],
+                        sentiment=synthesis.get("sentiment", "neutral"),
+                    )
+
+                img_result, svg_result = await asyncio.gather(
+                    _gen_image(), _gen_svg(), return_exceptions=True
+                )
+
+                # Process image result
+                if isinstance(img_result, Exception):
+                    logger.warning(f"{tag} ⚠️ Image generation failed: {img_result}")
+                    synthesis["image_url"] = None
+                elif img_result:
+                    synthesis["image_url"] = img_result
+                    logger.info(f"{tag} 🖼️ Image generated for synthesis {base_synthesis_id[:8]}")
+                else:
                     synthesis["image_url"] = None
 
-                # === EDITORIAL SVG ILLUSTRATION (Gemini) ===
-                try:
-                    from app.services.nexus_image_generator import get_nexus_image_generator
-                    nexus_gen = get_nexus_image_generator()
-                    if nexus_gen.enabled:
-                        editorial_svg = await nexus_gen.generate_editorial_svg(
-                            synthesis_id=synthesis["id"],
-                            title=synthesis.get("title", ""),
-                            category=synthesis.get("category", "MONDE"),
-                            key_points=synthesis.get("keyPoints", synthesis.get("key_points", [])),
-                            key_metrics=synthesis.get("key_metrics", []),
-                            entities=[
-                                e.get("name", e) if isinstance(e, dict) else str(e)
-                                for e in synthesis.get("key_entities", [])[:5]
-                            ],
-                            sentiment=synthesis.get("sentiment", "neutral"),
-                        )
-                        if editorial_svg:
-                            synthesis["has_editorial_svg"] = True
-                            logger.info(f"🎨 Editorial SVG generated for '{synthesis.get('title', '')[:40]}'")
-                except Exception as esvg_error:
-                    logger.warning(f"⚠️ Editorial SVG generation failed: {esvg_error}")
+                # Process SVG result
+                if isinstance(svg_result, Exception):
+                    logger.warning(f"{tag} ⚠️ Editorial SVG generation failed: {svg_result}")
+                elif svg_result:
+                    synthesis["has_editorial_svg"] = True
+                    logger.info(f"{tag} 🎨 Editorial SVG generated for '{synthesis.get('title', '')[:40]}'")
 
                 # === Phase 2D: Collect source images from articles ===
                 source_images = []
@@ -1197,12 +1260,12 @@ Contenu existant (extrait):
 
                 # Add the neutral/base synthesis
                 syntheses.append(synthesis)
-                logger.info(f"📝 Base synthesis generated: {base_synthesis_id[:8]}...")
+                logger.info(f"{tag} 📝 Base synthesis generated: {base_synthesis_id[:8]}...")
 
                 # === INCREMENTAL SAVE: Store synthesis immediately to prevent data loss ===
                 try:
                     await self._store_syntheses([synthesis])
-                    logger.success(f"💾 Synthesis saved immediately: {base_synthesis_id[:8]}...")
+                    logger.success(f"{tag} 💾 Synthesis saved immediately: {base_synthesis_id[:8]}...")
 
                     # === PHASE 6: MARK ARTICLES AS USED ===
                     # After successful save, mark all articles used in this synthesis
@@ -1344,17 +1407,17 @@ Contenu existant (extrait):
                                 except Exception as save_error:
                                     logger.warning(f"⚠️ Failed to update synthesis with persona: {save_error}")
 
-                                logger.success(f"🎉 Cluster {cluster['cluster_id']}: Single synthesis with '{selected_persona.name}' persona")
+                                logger.success(f"{tag} 🎉 Cluster {cluster['cluster_id']}: Single synthesis with '{selected_persona.name}' persona")
                             else:
                                 logger.warning(f"⚠️ Persona '{selected_persona.id}' quality too low, keeping neutral version")
-                                logger.success(f"🎉 Cluster {cluster['cluster_id']}: Neutral synthesis (persona quality too low)")
+                                logger.success(f"{tag} 🎉 Cluster {cluster['cluster_id']}: Neutral synthesis (persona quality too low)")
 
                         except Exception as persona_error:
                             logger.warning(f"⚠️ Persona application failed: {persona_error}, keeping neutral version")
-                            logger.success(f"🎉 Cluster {cluster['cluster_id']}: Neutral synthesis (persona error)")
+                            logger.success(f"{tag} 🎉 Cluster {cluster['cluster_id']}: Neutral synthesis (persona error)")
                     else:
-                        logger.info(f"🎭 Category '{category}' uses neutral persona this period")
-                        logger.success(f"🎉 Cluster {cluster['cluster_id']}: Neutral synthesis")
+                        logger.info(f"{tag} 🎭 Category '{category}' uses neutral persona this period")
+                        logger.success(f"{tag} 🎉 Cluster {cluster['cluster_id']}: Neutral synthesis")
 
                 elif ENABLE_PERSONA_PREGENERATION:
                     # === LEGACY MODE: Pre-generate ALL persona versions ===
@@ -1418,16 +1481,16 @@ Contenu existant (extrait):
                             logger.warning(f"⚠️ Pre-generation failed for '{persona_id}': {persona_error}")
                             continue
 
-                    logger.success(f"🎉 Cluster {cluster['cluster_id']}: 1 base + {persona_versions_generated} persona versions")
+                    logger.success(f"{tag} 🎉 Cluster {cluster['cluster_id']}: 1 base + {persona_versions_generated} persona versions")
                 else:
-                    logger.info(f"⏭️ Persona generation disabled")
-                    logger.success(f"🎉 Cluster {cluster['cluster_id']}: Neutral synthesis only")
+                    logger.info(f"{tag} ⏭️ Persona generation disabled")
+                    logger.success(f"{tag} 🎉 Cluster {cluster['cluster_id']}: Neutral synthesis only")
 
             except Exception as e:
-                logger.error(f"❌ Failed to generate synthesis for cluster {cluster['cluster_id']}: {e}")
+                logger.error(f"{tag} ❌ Failed to generate synthesis for cluster {cluster['cluster_id']}: {e}")
                 import traceback
                 logger.error(traceback.format_exc())
-                continue
+                return []
 
         return syntheses
 
