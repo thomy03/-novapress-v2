@@ -129,6 +129,24 @@ const NARRATIVE_ARC_CONFIG: Record<string, { label: string; color: string; descr
 
 type TabId = 'causal' | 'overview' | 'timeline' | 'table' | 'predictions';
 
+// Node type legend config (matches NeuralNode colors)
+const NODE_TYPE_LEGEND: { type: string; label: string; color: string }[] = [
+  { type: 'event', label: 'Evenement', color: '#DC2626' },
+  { type: 'entity', label: 'Entite', color: '#2563EB' },
+  { type: 'decision', label: 'Decision', color: '#D97706' },
+  { type: 'keyword', label: 'Mot-cle', color: '#059669' },
+];
+
+interface SelectedNodeInfo {
+  id: string;
+  label: string;
+  type: string;
+  mentionCount: number;
+  sourceSyntheses: string[];
+  causedBy: string[];
+  causes: string[];
+}
+
 export default function TopicDashboardPageWrapper() {
   return (
     <Suspense fallback={<div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Chargement...</div>}>
@@ -147,6 +165,7 @@ function TopicDashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const initialTab = (searchParams.get('tab') as TabId) || 'overview';
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
+  const [selectedNode, setSelectedNode] = useState<SelectedNodeInfo | null>(null);
 
   useEffect(() => {
     const fetchDashboard = async () => {
@@ -330,19 +349,265 @@ function TopicDashboardPage() {
               </p>
             </div>
 
-            {hasCausalData ? (
-              <NexusScrollViewer
-                topic={dashboard.topic}
-                nodes={causalNodes}
-                edges={causalEdges}
-                centralEntity={dashboard.topic}
-                height={600}
-              />
-            ) : (
-              <div style={styles.emptyState}>
-                {'Pas de données causales disponibles. Le graphe se remplira automatiquement à mesure que de nouvelles synthèses sont générées.'}
+            <div style={{ display: 'flex', gap: '0' }}>
+              {/* Graph area */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {hasCausalData ? (
+                  <NexusScrollViewer
+                    topic={dashboard.topic}
+                    nodes={causalNodes}
+                    edges={causalEdges}
+                    centralEntity={dashboard.topic}
+                    height={600}
+                  />
+                ) : (
+                  <div style={styles.emptyState}>
+                    {'Pas de données causales disponibles. Le graphe se remplira automatiquement à mesure que de nouvelles synthèses sont générées.'}
+                  </div>
+                )}
+
+                {/* Legend bar */}
+                {hasCausalData && (
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    gap: '20px',
+                    padding: '12px 16px',
+                    backgroundColor: '#F9FAFB',
+                    borderTop: '1px solid #E5E5E5',
+                  }}>
+                    {NODE_TYPE_LEGEND.map(item => (
+                      <div key={item.type} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <div style={{
+                          width: '10px',
+                          height: '10px',
+                          borderRadius: '50%',
+                          backgroundColor: item.color,
+                        }} />
+                        <span style={{
+                          fontSize: '11px',
+                          color: '#374151',
+                          fontWeight: 500,
+                        }}>
+                          {item.label}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Clickable node list (for selecting nodes) */}
+                {hasCausalData && (
+                  <div style={{
+                    padding: '16px',
+                    borderTop: '1px solid #E5E5E5',
+                  }}>
+                    <div style={{
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      letterSpacing: '1.5px',
+                      color: '#6B7280',
+                      textTransform: 'uppercase' as const,
+                      marginBottom: '10px',
+                    }}>
+                      NOEUDS DU GRAPHE ({causalNodes.length})
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {causalNodes.slice(0, 30).map(node => {
+                        const isSelected = selectedNode?.id === node.id;
+                        const typeColor = NODE_TYPE_LEGEND.find(l => l.type === node.node_type)?.color || '#6B7280';
+                        return (
+                          <button
+                            key={node.id}
+                            onClick={() => {
+                              // Build selected node info
+                              const causedBy = causalEdges
+                                .filter(e => e.effect_text === node.label)
+                                .map(e => e.cause_text);
+                              const causesArr = causalEdges
+                                .filter(e => e.cause_text === node.label)
+                                .map(e => e.effect_text);
+                              setSelectedNode({
+                                id: node.id,
+                                label: node.label,
+                                type: node.node_type,
+                                mentionCount: node.mention_count || 1,
+                                sourceSyntheses: node.source_syntheses || [],
+                                causedBy,
+                                causes: causesArr,
+                              });
+                            }}
+                            style={{
+                              padding: '4px 10px',
+                              fontSize: '12px',
+                              backgroundColor: isSelected ? typeColor : '#F3F4F6',
+                              color: isSelected ? '#fff' : '#374151',
+                              border: `1px solid ${isSelected ? typeColor : '#E5E5E5'}`,
+                              cursor: 'pointer',
+                              fontFamily: 'inherit',
+                              borderLeft: `3px solid ${typeColor}`,
+                            }}
+                          >
+                            {node.label.length > 35 ? node.label.slice(0, 35) + '\u2026' : node.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
+
+              {/* Detail panel (right side) */}
+              {selectedNode && (
+                <div style={{
+                  width: '300px',
+                  flexShrink: 0,
+                  borderLeft: '1px solid #E5E5E5',
+                  padding: '20px',
+                  backgroundColor: '#FFFFFF',
+                  overflowY: 'auto',
+                  maxHeight: '700px',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                    <h3 style={{
+                      fontFamily: 'Georgia, "Times New Roman", serif',
+                      fontSize: '16px',
+                      fontWeight: 700,
+                      color: '#000',
+                      margin: 0,
+                      lineHeight: 1.3,
+                      flex: 1,
+                    }}>
+                      {selectedNode.label}
+                    </h3>
+                    <button
+                      onClick={() => setSelectedNode(null)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '18px',
+                        color: '#9CA3AF',
+                        padding: '0 0 0 8px',
+                        fontFamily: 'inherit',
+                      }}
+                    >
+                      &times;
+                    </button>
+                  </div>
+
+                  {/* Type badge */}
+                  <div style={{
+                    display: 'inline-block',
+                    padding: '3px 8px',
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    textTransform: 'uppercase' as const,
+                    letterSpacing: '0.5px',
+                    color: NODE_TYPE_LEGEND.find(l => l.type === selectedNode.type)?.color || '#6B7280',
+                    backgroundColor: '#F3F4F6',
+                    border: `1px solid ${NODE_TYPE_LEGEND.find(l => l.type === selectedNode.type)?.color || '#E5E5E5'}`,
+                    marginBottom: '16px',
+                  }}>
+                    {NODE_TYPE_LEGEND.find(l => l.type === selectedNode.type)?.label || selectedNode.type}
+                  </div>
+
+                  {/* Mention count */}
+                  <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '16px' }}>
+                    {selectedNode.mentionCount} mention{selectedNode.mentionCount > 1 ? 's' : ''}
+                  </div>
+
+                  {/* Causal relations: caused by */}
+                  {selectedNode.causedBy.length > 0 && (
+                    <div style={{ marginBottom: '16px' }}>
+                      <div style={{
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        letterSpacing: '1px',
+                        color: '#6B7280',
+                        textTransform: 'uppercase' as const,
+                        marginBottom: '6px',
+                      }}>
+                        Cause par
+                      </div>
+                      {selectedNode.causedBy.map((c, i) => (
+                        <div key={i} style={{
+                          fontSize: '13px',
+                          color: '#000',
+                          padding: '4px 0',
+                          borderBottom: '1px solid #F3F4F6',
+                        }}>
+                          {c}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Causal relations: causes */}
+                  {selectedNode.causes.length > 0 && (
+                    <div style={{ marginBottom: '16px' }}>
+                      <div style={{
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        letterSpacing: '1px',
+                        color: '#6B7280',
+                        textTransform: 'uppercase' as const,
+                        marginBottom: '6px',
+                      }}>
+                        Entraine
+                      </div>
+                      {selectedNode.causes.map((c, i) => (
+                        <div key={i} style={{
+                          fontSize: '13px',
+                          color: '#000',
+                          padding: '4px 0',
+                          borderBottom: '1px solid #F3F4F6',
+                        }}>
+                          {c}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Related syntheses */}
+                  {selectedNode.sourceSyntheses.length > 0 && (
+                    <div>
+                      <div style={{
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        letterSpacing: '1px',
+                        color: '#6B7280',
+                        textTransform: 'uppercase' as const,
+                        marginBottom: '6px',
+                      }}>
+                        Syntheses liees ({selectedNode.sourceSyntheses.length})
+                      </div>
+                      {selectedNode.sourceSyntheses.slice(0, 5).map((sid, i) => {
+                        const synth = dashboard.syntheses.find(s => s.id === sid);
+                        return (
+                          <Link
+                            key={i}
+                            href={`/synthesis/${sid}`}
+                            style={{
+                              display: 'block',
+                              fontSize: '13px',
+                              color: '#2563EB',
+                              textDecoration: 'none',
+                              padding: '4px 0',
+                              borderBottom: '1px solid #F3F4F6',
+                              lineHeight: 1.3,
+                            }}
+                          >
+                            {synth ? (synth.title.length > 60 ? synth.title.slice(0, 60) + '\u2026' : synth.title) : sid.slice(0, 8) + '\u2026'}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Predictions below graph */}
             {dashboard.predictions_summary.length > 0 && (

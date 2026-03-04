@@ -120,8 +120,8 @@ function calculateHierarchicalLayout(
   }
 
   const numLevels = maxDepth + 1;
-  const colSpacing = Math.max(160, 400 / numLevels);
-  const rowSpacing = 100;
+  const colSpacing = Math.max(200, 500 / numLevels);
+  const rowSpacing = 120;
 
   for (const [d, levelNodes] of levels.entries()) {
     const x = 60 + d * colSpacing;
@@ -405,7 +405,7 @@ function NeuralCausalGraphInner({
           edgeTypes={edgeTypes}
           connectionMode={ConnectionMode.Loose}
           fitView
-          fitViewOptions={{ padding: compact ? 0.4 : 0.2 }}
+          fitViewOptions={{ padding: compact ? 0.4 : 0.3 }}
           minZoom={compact ? 0.2 : 0.3}
           maxZoom={compact ? 1.0 : 1.5}
           attributionPosition="bottom-left"

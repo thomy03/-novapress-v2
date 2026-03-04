@@ -37,8 +37,8 @@ function NeuralNodeComponent({ data: rawData, selected }: NodeProps) {
   // DYNAMIC: More sources = More dendrites (3-8)
   const dendritesCount = Math.min(8, Math.max(3, data.sourcesCount || 4));
 
-  // Node size based on connections (more connections = bigger node)
-  const nodeSize = 50 + Math.min(data.sourcesCount || 1, 6) * 6;
+  // Node size based on connections (more connections = bigger node) — increased for readability
+  const nodeSize = 60 + Math.min(data.sourcesCount || 1, 6) * 7;
 
   // Color based on activation level
   const activeColor = isSource ? '#DC2626' : getCascadeColor(activationLevel);
@@ -93,6 +93,7 @@ function NeuralNodeComponent({ data: rawData, selected }: NodeProps) {
       {/* Soma (central circle) */}
       <div
         className={isActive ? 'neural-node-activated' : ''}
+        title={`${data.label}\n${data.nodeType === 'event' ? 'Evenement' : data.nodeType === 'entity' ? 'Entite' : data.nodeType === 'decision' ? 'Decision' : 'Mot-cle'}${data.confidence ? ` | Confiance: ${Math.round(data.confidence * 100)}%` : ''}`}
         style={{
           position: 'absolute',
           top: '50%',
@@ -119,13 +120,13 @@ function NeuralNodeComponent({ data: rawData, selected }: NodeProps) {
         <span
           style={{
             color: isActive ? '#FFFFFF' : '#374151',
-            fontSize: '11px',
+            fontSize: '12px',
             fontFamily: 'Georgia, serif',
             textAlign: 'center',
-            padding: '4px',
+            padding: '6px',
             lineHeight: 1.2,
-            fontWeight: isActive ? 600 : 400,
-            maxWidth: `${nodeSize - 8}px`,
+            fontWeight: isActive ? 600 : 500,
+            maxWidth: `${nodeSize - 10}px`,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             display: '-webkit-box',
@@ -133,7 +134,7 @@ function NeuralNodeComponent({ data: rawData, selected }: NodeProps) {
             WebkitBoxOrient: 'vertical' as const,
           }}
         >
-          {data.label?.length > 45 ? `${data.label.slice(0, 45)}...` : data.label}
+          {data.label?.length > 55 ? `${data.label.slice(0, 55)}...` : data.label}
         </span>
       </div>
 

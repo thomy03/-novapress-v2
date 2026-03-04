@@ -20,7 +20,7 @@ import { Header } from '@/app/components/layout/Header';
 import dynamic from 'next/dynamic';
 
 const MiniCausalWidget = dynamic(() => import('./MiniCausalWidget'), { ssr: false });
-const NeuralCausalGraph = dynamic(() => import('@/app/components/causal/NeuralCausalGraph'), { ssr: false });
+import MiniNexusPreview from '@/app/components/causal/MiniNexusPreview';
 import FeedbackWidget from '@/app/components/synthesis/FeedbackWidget';
 import { AudioPlayer } from '@/app/components/audio';
 import { FollowButton } from '@/app/components/ui/FollowButton';
@@ -40,8 +40,16 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 /**
  * Phase 4A: TopicNexusLink — Replaces the CausalSection sidebar.
- * Shows a summary of causal relations + a link to the full theme Nexus page.
+ * Shows a summary of causal relations + a mini SVG preview of the theme's nexus.
  */
+
+interface ThemeDashboardGraph {
+  nodes: { id: string; label: string; type: string; source_syntheses?: string[] }[];
+  edges: { source?: string; target?: string; cause_text?: string; effect_text?: string; relation_type?: string; confidence?: number; source_syntheses?: string[] }[];
+  total_nodes: number;
+  total_edges: number;
+}
+
 function TopicNexusLink({
   synthesisId,
   causalData,
@@ -52,7 +60,9 @@ function TopicNexusLink({
   causalLoading: boolean;
 }) {
   const [topicInfo, setTopicInfo] = useState<{ topic_name: string | null; is_recurring: boolean } | null>(null);
+  const [themeGraph, setThemeGraph] = useState<ThemeDashboardGraph | null>(null);
 
+  // Fetch topic info
   useEffect(() => {
     fetch(`${API_URL}/api/trending/syntheses/${synthesisId}/topic-info`)
       .then(r => r.ok ? r.json() : null)
@@ -60,10 +70,40 @@ function TopicNexusLink({
       .catch(() => {});
   }, [synthesisId]);
 
-  const nodeCount = causalData?.nodes?.length || 0;
-  const edgeCount = causalData?.edges?.length || 0;
+  // Fetch theme dashboard graph when we have a topic name
   const topicName = topicInfo?.topic_name;
   const isRecurring = topicInfo?.is_recurring;
+
+  useEffect(() => {
+    if (!topicName) return;
+    fetch(`${API_URL}/api/trending/topics/${encodeURIComponent(topicName)}/dashboard`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.aggregated_causal_graph) {
+          setThemeGraph(data.aggregated_causal_graph);
+        }
+      })
+      .catch(() => {});
+  }, [topicName]);
+
+  const nodeCount = causalData?.nodes?.length || 0;
+  const edgeCount = causalData?.edges?.length || 0;
+
+  // Determine which graph to show in the SVG preview:
+  // Prefer theme-level graph if available, else fall back to synthesis-level causal data
+  const previewNodes = themeGraph?.nodes || (causalData?.nodes || []).map(n => ({
+    id: n.id,
+    label: n.label,
+    type: n.node_type,
+    source_syntheses: [] as string[],
+  }));
+  const previewEdges = themeGraph?.edges || (causalData?.edges || []).map(e => ({
+    cause_text: e.cause_text,
+    effect_text: e.effect_text,
+    relation_type: e.relation_type,
+    confidence: e.confidence,
+    source_syntheses: [] as string[],
+  }));
 
   return (
     <div style={{
@@ -100,15 +140,15 @@ function TopicNexusLink({
             </div>
           </div>
 
-          {/* Mini causal graph */}
-          {nodeCount > 0 && causalData && (
-            <div style={{ height: '280px', marginBottom: '16px', border: '1px solid #E5E5E5' }}>
-              <NeuralCausalGraph
-                nodes={causalData.nodes}
-                edges={causalData.edges}
-                centralEntity={causalData.central_entity || ''}
-                narrativeFlow={causalData.narrative_flow || 'linear'}
-                compact
+          {/* Mini SVG graph preview — theme-level with synthesis highlight */}
+          {previewNodes.length > 0 && topicName && (
+            <div style={{ marginBottom: '16px' }}>
+              <MiniNexusPreview
+                nodes={previewNodes}
+                edges={previewEdges}
+                topicName={topicName}
+                synthesisId={synthesisId}
+                height={280}
               />
             </div>
           )}

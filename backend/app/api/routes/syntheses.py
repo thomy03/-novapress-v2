@@ -121,6 +121,57 @@ def _reformat_monolithic_text(text: str, min_paragraph_sentences: int = 3) -> st
     return '\n\n'.join(paragraphs)
 
 
+_SECTION_HEADINGS = [
+    "Les faits",
+    "Reactions et enjeux",
+    "Perspectives",
+    "Contexte et repercussions",
+    "Ce qu'il faut retenir",
+]
+
+
+def _inject_headings_if_missing(text: str) -> str:
+    """
+    If the body text has no ## headings, inject newspaper-style section titles
+    every 2-3 paragraphs so the frontend groupIntoSections() can structure it.
+    """
+    if not text:
+        return text
+
+    # Already has headings — leave as-is
+    if '## ' in text:
+        return text
+
+    paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
+
+    # Too few paragraphs — no need to inject headings
+    if len(paragraphs) < 4:
+        return text
+
+    # Inject headings every 2-3 paragraphs
+    result = []
+    heading_idx = 0
+    paras_since_heading = 0
+
+    for i, para in enumerate(paragraphs):
+        # First paragraph stays without heading (drop cap)
+        if i == 0:
+            result.append(para)
+            paras_since_heading = 1
+            continue
+
+        # Inject heading every 2-3 paragraphs
+        if paras_since_heading >= 2 and heading_idx < len(_SECTION_HEADINGS):
+            result.append(f'## {_SECTION_HEADINGS[heading_idx]}')
+            heading_idx += 1
+            paras_since_heading = 0
+
+        result.append(para)
+        paras_since_heading += 1
+
+    return '\n\n'.join(result)
+
+
 def _clean_technical_markers(text: str) -> str:
     """
     Remove technical markers from synthesis text.
@@ -339,7 +390,7 @@ def format_synthesis_for_frontend(synthesis: Dict[str, Any]) -> Dict[str, Any]:
     # Get introduction, body, analysis fields and clean technical markers
     # Also reformat monolithic text into proper paragraphs
     introduction = _clean_technical_markers(synthesis.get("introduction", ""))
-    body = _reformat_monolithic_text(_clean_technical_markers(synthesis.get("body", "")))
+    body = _inject_headings_if_missing(_reformat_monolithic_text(_clean_technical_markers(synthesis.get("body", ""))))
     analysis = _clean_technical_markers(synthesis.get("analysis", ""))
     summary = _reformat_monolithic_text(_clean_technical_markers(synthesis.get("summary", "")))
 
