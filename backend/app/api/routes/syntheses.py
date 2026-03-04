@@ -558,8 +558,12 @@ def format_synthesis_for_frontend(synthesis: Dict[str, Any]) -> Dict[str, Any]:
         "hasTemplateSvg": bool(synthesis.get("has_template_svg", False)),
         # Phase 2D: Source images from original articles
         "sourceImages": synthesis.get("source_images", []),
-        # Phase 3A: Geographic context
-        "geographicContext": synthesis.get("geographic_context", []),
+        # Phase 3A: Geographic context (backend stores "name", frontend expects "place")
+        "geographicContext": [
+            {**loc, "place": loc.get("place") or loc.get("name", "")}
+            for loc in (synthesis.get("geographic_context") or [])
+            if isinstance(loc, dict)
+        ],
         "geoRelevance": synthesis.get("geo_relevance", "none"),
         # Key Metrics (Axios/Bloomberg-style callouts)
         "keyMetrics": synthesis.get("key_metrics", []),
