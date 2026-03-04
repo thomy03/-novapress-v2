@@ -109,8 +109,10 @@ export interface SynthesisData {
   // Feedback
   avgRating?: number;
   feedbackCount?: number;
-  // Image (fal.ai generated)
+  // Image (Wikimedia Commons or legacy fal.ai)
   imageUrl?: string;
+  imageSource?: 'wikimedia' | 'svg_template' | 'fal' | 'none' | '';
+  hasTemplateSvg?: boolean;
   // Phase 2D: Source images from original articles
   sourceImages?: SourceImage[];
   // Phase 3A: Geographic context

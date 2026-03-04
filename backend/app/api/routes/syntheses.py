@@ -528,8 +528,10 @@ def format_synthesis_for_frontend(synthesis: Dict[str, Any]) -> Dict[str, Any]:
         # Feedback
         "avgRating": float(synthesis.get("avg_rating", 0)),
         "feedbackCount": int(synthesis.get("feedback_count", 0)),
-        # Image (fal.ai generated)
+        # Image (Wikimedia Commons or legacy fal.ai)
         "imageUrl": synthesis.get("image_url") or None,
+        "imageSource": synthesis.get("image_source", "") or "fal",  # "wikimedia" | "svg_template" | "fal" | "none"
+        "hasTemplateSvg": bool(synthesis.get("has_template_svg", False)),
         # Phase 2D: Source images from original articles
         "sourceImages": synthesis.get("source_images", []),
         # Phase 3A: Geographic context
@@ -969,6 +971,33 @@ async def get_editorial_svg(
         raise
     except Exception as e:
         logger.error(f"Failed to fetch editorial SVG for {synthesis_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/by-id/{synthesis_id}/template-svg")
+@limiter.limit("60/minute")
+async def get_template_svg(
+    request: Request,
+    synthesis_id: str = Path(..., description="Synthesis UUID"),
+):
+    """Return the category template SVG for a synthesis (Wikimedia fallback)."""
+    from fastapi.responses import Response
+    import aioredis
+    from app.core.config import get_settings
+
+    try:
+        settings = get_settings()
+        redis_conn = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+        svg = await redis_conn.get(f"novapress:template_svg:{synthesis_id}")
+        await redis_conn.aclose()
+
+        if not svg:
+            raise HTTPException(status_code=404, detail="No template SVG available")
+        return Response(content=svg, media_type="image/svg+xml")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to fetch template SVG for {synthesis_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 

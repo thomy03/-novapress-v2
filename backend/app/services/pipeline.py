@@ -1194,16 +1194,60 @@ Contenu existant (extrait):
                     synthesis["transparency_breakdown"] = {}
 
                 # === IMAGE + SVG GENERATION (parallel) ===
-                from app.services.image_generator import get_image_generator
                 from app.services.nexus_image_generator import get_nexus_image_generator
 
-                img_gen = get_image_generator()
                 nexus_gen = get_nexus_image_generator()
 
+                entities_list = [
+                    e.get("name", e) if isinstance(e, dict) else str(e)
+                    for e in synthesis.get("key_entities", [])[:5]
+                ]
+
                 async def _gen_image():
-                    if not img_gen.enabled:
-                        return None
-                    return await img_gen.generate_for_synthesis(synthesis)
+                    """Wikimedia Commons → SVG template fallback (replaces fal.ai)"""
+                    from app.services.wikimedia_image import get_wikimedia_service
+                    from app.services.svg_template_generator import get_svg_template_generator
+
+                    wiki = get_wikimedia_service()
+
+                    # 1. Wikimedia Commons (free)
+                    try:
+                        url = await wiki.find_best_image(
+                            entities=entities_list,
+                            title=synthesis.get("title", ""),
+                            category=synthesis.get("category", "MONDE"),
+                        )
+                        if url:
+                            synthesis["image_source"] = "wikimedia"
+                            return url
+                    except Exception as e:
+                        logger.warning(f"{tag} Wikimedia search failed: {e}")
+
+                    # 2. SVG template fallback (free, deterministic)
+                    try:
+                        svg_gen = get_svg_template_generator()
+                        svg = svg_gen.generate(
+                            category=synthesis.get("category", "MONDE"),
+                            title=synthesis.get("title", ""),
+                            entities=entities_list,
+                        )
+                        if svg:
+                            import aioredis
+                            redis_conn = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+                            await redis_conn.set(
+                                f"novapress:template_svg:{synthesis['id']}", svg,
+                                ex=90 * 24 * 3600
+                            )
+                            await redis_conn.aclose()
+                            synthesis["image_source"] = "svg_template"
+                            synthesis["has_template_svg"] = True
+                            logger.info(f"{tag} SVG template generated for '{synthesis.get('title', '')[:40]}'")
+                            return None  # No URL, SVG is in Redis
+                    except Exception as e:
+                        logger.warning(f"{tag} SVG template fallback failed: {e}")
+
+                    synthesis["image_source"] = "none"
+                    return None
 
                 async def _gen_svg():
                     if not nexus_gen.enabled:
@@ -1214,10 +1258,7 @@ Contenu existant (extrait):
                         category=synthesis.get("category", "MONDE"),
                         key_points=synthesis.get("keyPoints", synthesis.get("key_points", [])),
                         key_metrics=synthesis.get("key_metrics", []),
-                        entities=[
-                            e.get("name", e) if isinstance(e, dict) else str(e)
-                            for e in synthesis.get("key_entities", [])[:5]
-                        ],
+                        entities=entities_list,
                         sentiment=synthesis.get("sentiment", "neutral"),
                     )
 
@@ -1231,7 +1272,7 @@ Contenu existant (extrait):
                     synthesis["image_url"] = None
                 elif img_result:
                     synthesis["image_url"] = img_result
-                    logger.info(f"{tag} 🖼️ Image generated for synthesis {base_synthesis_id[:8]}")
+                    logger.info(f"{tag} 🖼️ Wikimedia image found for synthesis {base_synthesis_id[:8]}")
                 else:
                     synthesis["image_url"] = None
 

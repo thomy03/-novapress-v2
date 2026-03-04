@@ -1100,8 +1100,10 @@ class QdrantService:
                 "transparency_score": int(synthesis.get("transparency_score", 0)),
                 "transparency_label": str(synthesis.get("transparency_label", "N/A"))[:20],
                 "transparency_breakdown": synthesis.get("transparency_breakdown", {}),
-                # Image (fal.ai generated) — was missing, causing image_url loss
+                # Image (Wikimedia Commons or fal.ai legacy)
                 "image_url": str(synthesis.get("image_url", ""))[:500] if synthesis.get("image_url") else "",
+                "image_source": str(synthesis.get("image_source", ""))[:20],  # "wikimedia" | "svg_template" | "fal" | "none"
+                "has_template_svg": bool(synthesis.get("has_template_svg", False)),
                 # Key Metrics (Axios/Bloomberg-style callouts)
                 "key_metrics": synthesis.get("key_metrics", []),
                 # Phase 2D: Source images from original articles

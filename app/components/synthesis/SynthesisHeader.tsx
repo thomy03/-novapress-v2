@@ -58,16 +58,28 @@ function sanitizeSvg(raw: string): string {
  */
 export function SynthesisHeader({ synthesis, formatDate }: SynthesisHeaderProps) {
   const [editorialSvg, setEditorialSvg] = useState<string>('');
+  const [templateSvg, setTemplateSvg] = useState<string>('');
 
   useEffect(() => {
     if (!synthesis.id) return;
+    // Fetch editorial SVG (causal graph)
     fetch(`${API_URL}/api/syntheses/by-id/${synthesis.id}/editorial-svg`)
       .then(res => res.ok ? res.text() : '')
       .then(svg => {
         if (svg) setEditorialSvg(sanitizeSvg(svg));
       })
       .catch(() => {});
-  }, [synthesis.id]);
+
+    // Fetch template SVG (category fallback) if applicable
+    if (synthesis.hasTemplateSvg) {
+      fetch(`${API_URL}/api/syntheses/by-id/${synthesis.id}/template-svg`)
+        .then(res => res.ok ? res.text() : '')
+        .then(svg => {
+          if (svg) setTemplateSvg(sanitizeSvg(svg));
+        })
+        .catch(() => {});
+    }
+  }, [synthesis.id, synthesis.hasTemplateSvg]);
 
   return (
     <>
@@ -136,14 +148,14 @@ export function SynthesisHeader({ synthesis, formatDate }: SynthesisHeaderProps)
         )}
       </div>
 
-      {/* Editorial Illustration: SVG first, fallback to fal.ai image */}
+      {/* Editorial Illustration: editorial SVG > Wikimedia image > template SVG */}
       {editorialSvg ? (
         <div style={styles.imageContainer}>
           <div
             style={styles.editorialSvg}
             dangerouslySetInnerHTML={{ __html: editorialSvg }}
           />
-          <span style={styles.imageCaption}>Illustration editoriale generee par IA</span>
+          <span style={styles.imageCaption}>Infographie editoriale NovaPress</span>
         </div>
       ) : synthesis.imageUrl ? (
         <div style={styles.imageContainer}>
@@ -153,7 +165,19 @@ export function SynthesisHeader({ synthesis, formatDate }: SynthesisHeaderProps)
             alt={`Illustration: ${synthesis.title}`}
             style={styles.editorialImage}
           />
-          <span style={styles.imageCaption}>Illustration generee par IA</span>
+          <span style={styles.imageCaption}>
+            {synthesis.imageSource === 'wikimedia'
+              ? 'Photo: Wikimedia Commons (CC)'
+              : 'Illustration generee par IA'}
+          </span>
+        </div>
+      ) : templateSvg ? (
+        <div style={styles.imageContainer}>
+          <div
+            style={styles.editorialSvg}
+            dangerouslySetInnerHTML={{ __html: templateSvg }}
+          />
+          <span style={styles.imageCaption}>Illustration NovaPress</span>
         </div>
       ) : null}
 
