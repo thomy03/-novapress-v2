@@ -121,6 +121,30 @@ def _reformat_monolithic_text(text: str, min_paragraph_sentences: int = 3) -> st
     return '\n\n'.join(paragraphs)
 
 
+def _parse_timeline(timeline_data) -> list:
+    """Parse timeline from various stored formats into a list of strings."""
+    if not timeline_data:
+        return []
+    if isinstance(timeline_data, list):
+        return [str(item) for item in timeline_data if item]
+    if isinstance(timeline_data, str):
+        # Try JSON parse first
+        try:
+            import json
+            parsed = json.loads(timeline_data)
+            if isinstance(parsed, list):
+                return [str(item) for item in parsed if item]
+        except (json.JSONDecodeError, ValueError):
+            pass
+        # Split by " | " separator
+        items = [item.strip() for item in timeline_data.split(" | ") if item.strip()]
+        if len(items) > 1:
+            return items
+        # Single item
+        return [timeline_data] if timeline_data.strip() else []
+    return []
+
+
 _SECTION_HEADINGS = [
     "Les faits",
     "Reactions et enjeux",
@@ -539,6 +563,8 @@ def format_synthesis_for_frontend(synthesis: Dict[str, Any]) -> Dict[str, Any]:
         "geoRelevance": synthesis.get("geo_relevance", "none"),
         # Key Metrics (Axios/Bloomberg-style callouts)
         "keyMetrics": synthesis.get("key_metrics", []),
+        # Timeline events (parsed from pipeline)
+        "timeline": _parse_timeline(synthesis.get("timeline", "")),
     }
 
 

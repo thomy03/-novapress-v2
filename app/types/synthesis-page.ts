@@ -120,6 +120,8 @@ export interface SynthesisData {
   geoRelevance?: 'high' | 'medium' | 'none';
   // Key Metrics (Axios/Bloomberg-style callouts)
   keyMetrics?: KeyMetric[];
+  // Timeline events
+  timeline?: string[];
 }
 
 // ========== Related Synthesis Type ==========

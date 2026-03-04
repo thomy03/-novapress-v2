@@ -694,7 +694,14 @@ STRUCTURE ATTENDUE:
 
 2. INTRODUCTION (introduction): 2-3 phrases, 50-80 mots, avec [SOURCE:N]
 
-3. CORPS (body): {min_words}-{max_words} mots, paragraphes thématiques, citations [SOURCE:N]
+3. CORPS (body): MINIMUM {min_words} MOTS
+   - Structure avec 3-5 INTERTITRES CONTEXTUELS au format: ## Titre
+   - Premier paragraphe SANS intertitre (chapeau/drop cap)
+   - Chaque intertitre DOIT etre SPECIFIQUE au sujet, comme un vrai journal
+     EXEMPLE conflit: "## L'escalade militaire", "## Washington face au dilemme"
+     EXEMPLE tech: "## La course aux puces IA", "## Ce que ca change pour l'Europe"
+   - INTERDIT: "Les faits", "Reactions", "Perspectives", "Contexte", "Repercussions"
+   - Chaque section: 1-3 paragraphes avec citations [SOURCE:N]
    - PLUS de sources et chunks = article PLUS LONG
    {"- INCLURE une section sur les contradictions entre sources" if contradictions else ""}
 
@@ -740,7 +747,7 @@ Format JSON strict:
 {{
   "title": "...",
   "introduction": "...",
-  "body": "...",
+  "body": "Premier paragraphe sans intertitre...\\n\\n## Intertitre contextuel 1\\n\\nParagraphe...\\n\\n## Intertitre 2\\n\\n...",
   "keyPoints": ["...", "...", "...", "..."],
   "analysis": "...",
   "causal_chain": [
@@ -945,12 +952,15 @@ INSTRUCTIONS SPÉCIALES
    - 60-100 mots avec [SOURCE:N]
 
 3. CORPS (body): ⚠️ MINIMUM {min_words} MOTS OBLIGATOIRE ⚠️
-   - EXACTEMENT 6-8 paragraphes de 100-150 mots chacun
-   - Paragraphe 1: Rappel contexte + nouveautés
-   - Paragraphe 2-3: Détails des faits principaux
-   - Paragraphe 4: Réactions et positions des acteurs
-   - Paragraphe 5-6: Analyse et implications
-   - Paragraphe 7-8: Perspectives et enjeux futurs
+   - Structure avec 3-5 INTERTITRES CONTEXTUELS au format: ## Titre
+   - Premier paragraphe SANS intertitre (chapeau/drop cap)
+   - Chaque intertitre DOIT etre SPECIFIQUE au sujet, comme un vrai journal
+     EXEMPLE conflit: "## L'escalade militaire", "## Washington face au dilemme"
+     EXEMPLE tech: "## La course aux puces IA", "## Ce que ca change pour l'Europe"
+     EXEMPLE economie: "## Le marche retient son souffle", "## Les menages en premiere ligne"
+   - INTERDIT: "Les faits", "Reactions", "Perspectives", "Contexte", "Repercussions", "Ce qu'il faut retenir"
+   - Chaque section: 1-3 paragraphes de 100-150 mots avec citations [SOURCE:N]
+   - EXACTEMENT 6-8 paragraphes au total
    - ⚠️ DERNIER PARAGRAPHE: Inclure une phrase prospective du type:
      "À court terme, [scénario A] apparaît comme le plus probable (X%).
      À plus long terme, [scénario B] pourrait se concrétiser si [condition]."
@@ -1066,7 +1076,7 @@ Format JSON (causal_chain + predictions + sentiment + topic_intensity + key_metr
 {{
   "title": "...",
   "introduction": "...",
-  "body": "...",
+  "body": "Premier paragraphe sans intertitre...\\n\\n## Intertitre contextuel 1\\n\\nParagraphe...\\n\\n## Intertitre 2\\n\\n...",
   "keyPoints": ["...", "..."],
   "analysis": "...",
   "timeline": ["[Date] Événement 1", "[Date] Événement 2"],

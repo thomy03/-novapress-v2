@@ -1204,14 +1204,25 @@ Contenu existant (extrait):
                 ]
 
                 async def _gen_image():
-                    """Wikimedia Commons → SVG template fallback (replaces fal.ai)"""
+                    """fal.ai z-image/turbo → Wikimedia Commons → SVG template fallback"""
+                    from app.services.image_generator import get_image_generator
                     from app.services.wikimedia_image import get_wikimedia_service
                     from app.services.svg_template_generator import get_svg_template_generator
 
-                    wiki = get_wikimedia_service()
+                    # 1. fal.ai z-image/turbo (~$0.003/image)
+                    fal_gen = get_image_generator()
+                    if fal_gen.enabled:
+                        try:
+                            url = await fal_gen.generate_for_synthesis(synthesis)
+                            if url:
+                                synthesis["image_source"] = "fal"
+                                return url
+                        except Exception as e:
+                            logger.warning(f"{tag} fal.ai image generation failed: {e}")
 
-                    # 1. Wikimedia Commons (free)
+                    # 2. Wikimedia Commons fallback (free)
                     try:
+                        wiki = get_wikimedia_service()
                         url = await wiki.find_best_image(
                             entities=entities_list,
                             title=synthesis.get("title", ""),
@@ -1223,7 +1234,7 @@ Contenu existant (extrait):
                     except Exception as e:
                         logger.warning(f"{tag} Wikimedia search failed: {e}")
 
-                    # 2. SVG template fallback (free, deterministic)
+                    # 3. SVG template fallback (free, deterministic)
                     try:
                         svg_gen = get_svg_template_generator()
                         svg = svg_gen.generate(

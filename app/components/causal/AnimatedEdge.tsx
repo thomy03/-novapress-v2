@@ -50,7 +50,7 @@ function AnimatedEdgeComponent({
   const isAnimated = d?.isAnimated || false;
   const cascadeLevel = d?.cascadeLevel || 0;
 
-  // Dynamic thickness based on confidence and sources count (2-5px) - MORE VISIBLE
+  // Dynamic thickness based on confidence and sources count (2-5px)
   const strokeWidth = Math.min(5, Math.max(2, 2 + confidence * 2 + sourcesCount * 0.3));
 
   // Get color - use cascade color if animated, otherwise relation color
@@ -70,15 +70,20 @@ function AnimatedEdgeComponent({
     curvature: 0.25,
   });
 
-  // Opacity based on confidence - HIGHER MINIMUM for visibility
+  // Opacity based on confidence
   const opacity = 0.6 + confidence * 0.4;
 
   // Highlight high-confidence edges
   const isHighConfidence = confidence >= 0.7;
 
+  // French label + confidence for display
+  const labelFr = relationConfig?.labelFr || 'Relation';
+  const confidencePct = `${Math.round(confidence * 100)}%`;
+  const tooltipText = `${labelFr} (${confidencePct} confiance)`;
+
   return (
     <>
-      {/* Background glow for ALL edges - base visibility */}
+      {/* Background glow for ALL edges */}
       <path
         d={edgePath}
         fill="none"
@@ -140,7 +145,7 @@ function AnimatedEdgeComponent({
         </>
       )}
 
-      {/* Edge label with relation type */}
+      {/* Edge label with relation type in French */}
       <EdgeLabelRenderer>
         <div
           style={{
@@ -149,6 +154,7 @@ function AnimatedEdgeComponent({
             pointerEvents: 'all',
             zIndex: 1000,
           }}
+          title={tooltipText}
         >
           <div
             style={{
@@ -156,11 +162,9 @@ function AnimatedEdgeComponent({
               color: isAnimated ? '#FFFFFF' : edgeColor,
               border: `1px solid ${edgeColor}`,
               borderRadius: '4px',
-              padding: '2px 6px',
-              fontSize: '9px',
+              padding: '4px 8px',
+              fontSize: '11px',
               fontWeight: 600,
-              textTransform: 'uppercase',
-              letterSpacing: '0.5px',
               display: 'flex',
               alignItems: 'center',
               gap: '4px',
@@ -168,10 +172,12 @@ function AnimatedEdgeComponent({
                 ? `0 0 10px ${edgeColor}40`
                 : '0 1px 3px rgba(0,0,0,0.1)',
               transition: 'all 0.3s ease',
+              whiteSpace: 'nowrap',
             }}
           >
-            <span>{relationConfig?.icon || '→'}</span>
-            <span>{Math.round(confidence * 100)}%</span>
+            <span>{relationConfig?.icon || '\u2192'}</span>
+            <span>{labelFr}</span>
+            <span style={{ opacity: 0.7, fontSize: '10px' }}>{confidencePct}</span>
           </div>
         </div>
       </EdgeLabelRenderer>

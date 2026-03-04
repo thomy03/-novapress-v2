@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useState, useMemo } from 'react';
 import {
   ReactFlow,
   Node,
@@ -59,14 +59,14 @@ function calculateGraphComplexity(nodes: CausalNode[], edges: CausalEdge[]) {
   };
 }
 
-// Calculate hierarchical layout (left → right by topological depth)
+// Calculate hierarchical layout (left -> right by topological depth)
 function calculateHierarchicalLayout(
   nodes: CausalNode[],
   edges: CausalEdge[],
 ): Record<string, { x: number; y: number }> {
   const positions: Record<string, { x: number; y: number }> = {};
 
-  // Build adjacency: label → node id
+  // Build adjacency: label -> node id
   const labelToId = new Map(nodes.map(n => [n.label, n.id]));
 
   // Compute in-degree and out-adjacency
@@ -120,8 +120,8 @@ function calculateHierarchicalLayout(
   }
 
   const numLevels = maxDepth + 1;
-  const colSpacing = Math.max(200, 500 / numLevels);
-  const rowSpacing = 120;
+  const colSpacing = Math.max(250, 600 / numLevels);
+  const rowSpacing = 140;
 
   for (const [d, levelNodes] of levels.entries()) {
     const x = 60 + d * colSpacing;
@@ -136,6 +136,26 @@ function calculateHierarchicalLayout(
   return positions;
 }
 
+// Legend configuration
+const LEGEND_NODES = [
+  { type: 'event', label: 'Evenement', color: '#DC2626', shape: 'circle' },
+  { type: 'entity', label: 'Entite', color: '#2563EB', shape: 'roundedRect' },
+  { type: 'decision', label: 'Decision', color: '#D97706', shape: 'diamond' },
+  { type: 'keyword', label: 'Mot-cle', color: '#059669', shape: 'hexagon' },
+];
+
+const LEGEND_EDGES = [
+  { type: 'causes', label: 'Cause', dash: '0', color: '#000' },
+  { type: 'triggers', label: 'Declenche', dash: '8,4', color: '#374151' },
+  { type: 'enables', label: 'Permet', dash: '4,2', color: '#374151' },
+  { type: 'prevents', label: 'Empeche', dash: '12,4,4,4', color: '#374151' },
+];
+
+// Cascade colors for trail display
+const CASCADE_COLORS = [
+  '#DC2626', '#F97316', '#FBBF24', '#22C55E', '#3B82F6', '#8B5CF6',
+];
+
 function NeuralCausalGraphInner({
   nodes: causalNodes,
   edges: causalEdges,
@@ -146,6 +166,7 @@ function NeuralCausalGraphInner({
   compact = false,
 }: NeuralCausalGraphProps) {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [cascadeTrail, setCascadeTrail] = useState<string[]>([]);
   const complexity = useMemo(
     () => calculateGraphComplexity(causalNodes, causalEdges),
     [causalNodes, causalEdges]
@@ -218,6 +239,7 @@ function NeuralCausalGraphInner({
 
   // Reset cascade effect
   const resetCascade = useCallback(() => {
+    setCascadeTrail([]);
     setNodes((nds) =>
       nds.map((n) => ({
         ...n,
@@ -252,6 +274,12 @@ function NeuralCausalGraphInner({
       const activationDelay = currentDepth * 400;
 
       setTimeout(() => {
+        // Add to cascade trail
+        const nodeLabel = causalNodes.find(n => n.id === nodeId)?.label;
+        if (nodeLabel) {
+          setCascadeTrail(prev => [...prev, nodeLabel]);
+        }
+
         // Activate the current node
         setNodes((nds) =>
           nds.map((n) =>
@@ -272,7 +300,7 @@ function NeuralCausalGraphInner({
         // Find outgoing edges
         const outgoingEdges = edges.filter((e) => e.source === nodeId);
 
-        outgoingEdges.forEach((edge, index) => {
+        outgoingEdges.forEach((edge) => {
           const edgeDelay = 200 + (1 - (Number(edge.data?.confidence) || 0.5)) * 300;
 
           setTimeout(() => {
@@ -298,7 +326,7 @@ function NeuralCausalGraphInner({
         });
       }, activationDelay);
     },
-    [edges, complexity.cascadeDepth, setNodes, setEdges]
+    [edges, complexity.cascadeDepth, setNodes, setEdges, causalNodes]
   );
 
   // Handle node click
@@ -347,7 +375,7 @@ function NeuralCausalGraphInner({
         <p style={styles.emptyText}>Graphe neuronal en attente</p>
         {!compact && (
           <p style={styles.emptySubtext}>
-            Les relations causales seront affichees ici apres l'execution du pipeline.
+            Les relations causales seront affichees ici apres l&apos;execution du pipeline.
           </p>
         )}
       </div>
@@ -369,7 +397,7 @@ function NeuralCausalGraphInner({
               color: flowConfig?.color || '#6B7280',
             }}
           >
-            <span>{flowConfig?.icon || '→'}</span>
+            <span>{flowConfig?.icon || '\u2192'}</span>
             <span>{flowConfig?.labelFr || 'Lineaire'}</span>
           </div>
         </div>
@@ -393,7 +421,7 @@ function NeuralCausalGraphInner({
       )}
 
       {/* React Flow Graph */}
-      <div style={{ ...styles.graphContainer, ...(compact ? { minHeight: '280px' } : {}) }}>
+      <div style={{ ...styles.graphContainer, ...(compact ? { minHeight: '280px' } : {}), position: 'relative' }}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -406,8 +434,8 @@ function NeuralCausalGraphInner({
           connectionMode={ConnectionMode.Loose}
           fitView
           fitViewOptions={{ padding: compact ? 0.4 : 0.3 }}
-          minZoom={compact ? 0.2 : 0.3}
-          maxZoom={compact ? 1.0 : 1.5}
+          minZoom={compact ? 0.2 : 0.4}
+          maxZoom={compact ? 1.0 : 2.0}
           attributionPosition="bottom-left"
           proOptions={{ hideAttribution: true }}
           panOnDrag={!compact}
@@ -435,12 +463,75 @@ function NeuralCausalGraphInner({
             </>
           )}
         </ReactFlow>
+
+        {/* Floating Legend (bottom-left, above Controls) — hidden in compact */}
+        {!compact && (
+          <div style={styles.legend}>
+            <div style={styles.legendTitle}>LEGENDE</div>
+            <div style={styles.legendSection}>
+              {LEGEND_NODES.map(item => (
+                <div key={item.type} style={styles.legendItem}>
+                  <svg width="14" height="14" viewBox="0 0 14 14">
+                    {item.shape === 'circle' && (
+                      <circle cx="7" cy="7" r="6" fill={item.color} opacity={0.7} />
+                    )}
+                    {item.shape === 'roundedRect' && (
+                      <rect x="1" y="1" width="12" height="12" rx="3" fill={item.color} opacity={0.7} />
+                    )}
+                    {item.shape === 'diamond' && (
+                      <polygon points="7,0.5 13.5,7 7,13.5 0.5,7" fill={item.color} opacity={0.7} />
+                    )}
+                    {item.shape === 'hexagon' && (
+                      <polygon points="3.5,0.5 10.5,0.5 14,7 10.5,13.5 3.5,13.5 0,7" fill={item.color} opacity={0.7} />
+                    )}
+                  </svg>
+                  <span style={styles.legendLabel}>{item.label}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ borderTop: '1px solid #E5E5E5', margin: '6px 0' }} />
+            <div style={styles.legendSection}>
+              {LEGEND_EDGES.map(item => (
+                <div key={item.type} style={styles.legendItem}>
+                  <svg width="24" height="8" viewBox="0 0 24 8">
+                    <line
+                      x1="0" y1="4" x2="24" y2="4"
+                      stroke={item.color}
+                      strokeWidth="2"
+                      strokeDasharray={item.dash === '0' ? undefined : item.dash}
+                    />
+                  </svg>
+                  <span style={styles.legendLabel}>{item.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
+      {/* Cascade Trail — shown when a node is clicked */}
+      {!compact && cascadeTrail.length > 1 && (
+        <div style={styles.cascadeTrail}>
+          <span style={styles.cascadeLabel}>Cascade:</span>
+          {cascadeTrail.map((label, i) => (
+            <React.Fragment key={i}>
+              {i > 0 && <span style={{ color: CASCADE_COLORS[Math.min(i, CASCADE_COLORS.length - 1)], margin: '0 4px', fontWeight: 700 }}>&rarr;</span>}
+              <span style={{
+                fontSize: '12px',
+                color: CASCADE_COLORS[Math.min(i, CASCADE_COLORS.length - 1)],
+                fontWeight: i === 0 ? 700 : 500,
+              }}>
+                {label.length > 30 ? label.slice(0, 30) + '\u2026' : label}
+              </span>
+            </React.Fragment>
+          ))}
+        </div>
+      )}
+
       {/* Instructions — hidden in compact mode */}
-      {!compact && (
+      {!compact && cascadeTrail.length === 0 && (
         <p style={styles.instructions}>
-          Cliquez sur un noeud pour declencher la cascade d'effets
+          Cliquez sur un noeud pour declencher la cascade d&apos;effets
         </p>
       )}
 
@@ -574,5 +665,57 @@ const styles: { [key: string]: React.CSSProperties } = {
     margin: 0,
     textAlign: 'center',
     maxWidth: '250px',
+  },
+  // Legend styles
+  legend: {
+    position: 'absolute',
+    bottom: '50px',
+    left: '50px',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    border: '1px solid #E5E5E5',
+    padding: '10px 14px',
+    zIndex: 20,
+    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+    maxWidth: '180px',
+  },
+  legendTitle: {
+    fontSize: '9px',
+    fontWeight: 700,
+    letterSpacing: '1.5px',
+    color: '#6B7280',
+    marginBottom: '6px',
+  },
+  legendSection: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  legendItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+  },
+  legendLabel: {
+    fontSize: '11px',
+    color: '#374151',
+  },
+  // Cascade trail
+  cascadeTrail: {
+    display: 'flex',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: '2px',
+    padding: '8px 16px',
+    borderTop: '1px solid #E5E5E5',
+    backgroundColor: '#FAFAFA',
+    minHeight: '36px',
+  },
+  cascadeLabel: {
+    fontSize: '10px',
+    fontWeight: 700,
+    letterSpacing: '1px',
+    color: '#6B7280',
+    textTransform: 'uppercase',
+    marginRight: '8px',
   },
 };

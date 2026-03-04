@@ -54,10 +54,16 @@ function TopicNexusLink({
   synthesisId,
   causalData,
   causalLoading,
+  narrativeArc,
+  timeline,
+  relatedSyntheses,
 }: {
   synthesisId: string;
   causalData: CausalGraphResponse | null;
   causalLoading: boolean;
+  narrativeArc?: string;
+  timeline?: string[];
+  relatedSyntheses?: { id: string; title: string; createdAt: string }[];
 }) {
   const [topicInfo, setTopicInfo] = useState<{ topic_name: string | null; is_recurring: boolean } | null>(null);
   const [themeGraph, setThemeGraph] = useState<ThemeDashboardGraph | null>(null);
@@ -148,7 +154,10 @@ function TopicNexusLink({
                 edges={previewEdges}
                 topicName={topicName}
                 synthesisId={synthesisId}
-                height={280}
+                height={400}
+                narrativeArc={narrativeArc}
+                timeline={timeline}
+                relatedSyntheses={relatedSyntheses}
               />
             </div>
           )}
@@ -394,6 +403,9 @@ export default function SynthesisClient({ initialSynthesis }: SynthesisClientPro
             synthesisId={synthesis.id}
             causalData={causalData}
             causalLoading={causalLoading}
+            narrativeArc={synthesis.historicalContext?.narrativeArc}
+            timeline={synthesis.timeline}
+            relatedSyntheses={synthesis.historicalContext?.relatedSyntheses}
           />
         }
       >

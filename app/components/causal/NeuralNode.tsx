@@ -5,7 +5,7 @@ import { Handle, Position, NodeProps } from '@xyflow/react';
 
 export interface NeuralNodeData {
   label: string;
-  nodeType: 'event' | 'entity' | 'decision' | 'keyword';  // Added 'keyword' for causal types
+  nodeType: 'event' | 'entity' | 'decision' | 'keyword';
   factDensity: number;
   sourcesCount: number;
   isActivated?: boolean;
@@ -13,6 +13,47 @@ export interface NeuralNodeData {
   activationLevel?: number;
   confidence?: number;
 }
+
+// Shape configuration per node type
+const NODE_SHAPE_CONFIG: Record<string, {
+  borderRadius: string;
+  clipPath?: string;
+  inactiveBg: string;
+  inactiveBorder: string;
+  activeColor: string;
+  labelFr: string;
+}> = {
+  event: {
+    borderRadius: '50%',
+    inactiveBg: '#FEF2F2',
+    inactiveBorder: '#FCA5A5',
+    activeColor: '#DC2626',
+    labelFr: 'Evenement',
+  },
+  entity: {
+    borderRadius: '8px',
+    inactiveBg: '#EFF6FF',
+    inactiveBorder: '#93C5FD',
+    activeColor: '#2563EB',
+    labelFr: 'Entite',
+  },
+  decision: {
+    borderRadius: '4px',
+    clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)',
+    inactiveBg: '#FFFBEB',
+    inactiveBorder: '#FCD34D',
+    activeColor: '#D97706',
+    labelFr: 'Decision',
+  },
+  keyword: {
+    borderRadius: '4px',
+    clipPath: 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)',
+    inactiveBg: '#ECFDF5',
+    inactiveBorder: '#6EE7B7',
+    activeColor: '#059669',
+    labelFr: 'Mot-cle',
+  },
+};
 
 // Color gradient for cascade depth
 const CASCADE_COLORS = [
@@ -34,14 +75,21 @@ function NeuralNodeComponent({ data: rawData, selected }: NodeProps) {
   const isSource = data.isSource;
   const activationLevel = data.activationLevel || 0;
 
+  const shapeConfig = NODE_SHAPE_CONFIG[data.nodeType] || NODE_SHAPE_CONFIG.event;
+
   // DYNAMIC: More sources = More dendrites (3-8)
   const dendritesCount = Math.min(8, Math.max(3, data.sourcesCount || 4));
 
-  // Node size based on connections (more connections = bigger node) — increased for readability
-  const nodeSize = 60 + Math.min(data.sourcesCount || 1, 6) * 7;
+  // Node size — increased for readability
+  const nodeSize = 70 + Math.min(data.sourcesCount || 1, 6) * 7;
 
   // Color based on activation level
   const activeColor = isSource ? '#DC2626' : getCascadeColor(activationLevel);
+
+  // For diamond/hexagon shapes, use a larger container to avoid clipping dendrites
+  const hasClipPath = !!shapeConfig.clipPath;
+  // Diamond needs more space due to rotation
+  const somaSize = hasClipPath ? nodeSize + 10 : nodeSize;
 
   return (
     <div
@@ -80,7 +128,7 @@ function NeuralNodeComponent({ data: rawData, selected }: NodeProps) {
               height: '2px',
               background: isActive
                 ? `linear-gradient(90deg, ${activeColor} 0%, transparent 100%)`
-                : 'linear-gradient(90deg, #9CA3AF 0%, transparent 100%)',
+                : `linear-gradient(90deg, ${shapeConfig.inactiveBorder} 0%, transparent 100%)`,
               transformOrigin: '0 50%',
               transform: `rotate(${angle}deg)`,
               transition: 'all 0.4s ease',
@@ -90,28 +138,29 @@ function NeuralNodeComponent({ data: rawData, selected }: NodeProps) {
         );
       })}
 
-      {/* Soma (central circle) */}
+      {/* Soma (central shape — varies by type) */}
       <div
         className={isActive ? 'neural-node-activated' : ''}
-        title={`${data.label}\n${data.nodeType === 'event' ? 'Evenement' : data.nodeType === 'entity' ? 'Entite' : data.nodeType === 'decision' ? 'Decision' : 'Mot-cle'}${data.confidence ? ` | Confiance: ${Math.round(data.confidence * 100)}%` : ''}`}
+        title={`${data.label}\n${shapeConfig.labelFr}${data.confidence ? ` | Confiance: ${Math.round(data.confidence * 100)}%` : ''}`}
         style={{
           position: 'absolute',
           top: '50%',
           left: '50%',
           transform: 'translate(-50%, -50%)',
-          width: `${nodeSize}px`,
-          height: `${nodeSize}px`,
-          borderRadius: '50%',
+          width: `${somaSize}px`,
+          height: `${somaSize}px`,
+          borderRadius: hasClipPath ? undefined : shapeConfig.borderRadius,
+          clipPath: shapeConfig.clipPath || undefined,
           background: isActive
             ? `radial-gradient(circle, ${activeColor} 0%, ${adjustColor(activeColor, -30)} 100%)`
-            : 'radial-gradient(circle, #F9FAFB 0%, #E5E7EB 100%)',
-          border: `3px solid ${isActive ? adjustColor(activeColor, -20) : '#D1D5DB'}`,
+            : shapeConfig.inactiveBg,
+          border: hasClipPath ? undefined : `3px solid ${isActive ? adjustColor(activeColor, -20) : shapeConfig.inactiveBorder}`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           boxShadow: isActive
             ? `0 0 30px ${hexToRgba(activeColor, 0.6)}, inset 0 0 15px rgba(255,255,255,0.3)`
-            : '0 4px 12px rgba(0,0,0,0.1)',
+            : `0 4px 12px rgba(0,0,0,0.08)`,
           transition: 'all 0.4s ease',
           cursor: 'pointer',
           zIndex: 10,
@@ -120,13 +169,13 @@ function NeuralNodeComponent({ data: rawData, selected }: NodeProps) {
         <span
           style={{
             color: isActive ? '#FFFFFF' : '#374151',
-            fontSize: '12px',
+            fontSize: '14px',
             fontFamily: 'Georgia, serif',
             textAlign: 'center',
-            padding: '6px',
+            padding: '8px',
             lineHeight: 1.2,
             fontWeight: isActive ? 600 : 500,
-            maxWidth: `${nodeSize - 10}px`,
+            maxWidth: `${somaSize - 16}px`,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             display: '-webkit-box',
@@ -134,7 +183,7 @@ function NeuralNodeComponent({ data: rawData, selected }: NodeProps) {
             WebkitBoxOrient: 'vertical' as const,
           }}
         >
-          {data.label?.length > 55 ? `${data.label.slice(0, 55)}...` : data.label}
+          {data.label?.length > 70 ? `${data.label.slice(0, 70)}...` : data.label}
         </span>
       </div>
 
@@ -173,25 +222,37 @@ function NeuralNodeComponent({ data: rawData, selected }: NodeProps) {
         </>
       )}
 
-      {/* Node type indicator */}
+      {/* Node type indicator — mini colored shape instead of text badge */}
       <div
         style={{
           position: 'absolute',
           bottom: 0,
           left: '50%',
           transform: 'translateX(-50%)',
-          fontSize: '8px',
-          fontWeight: 600,
-          textTransform: 'uppercase',
-          letterSpacing: '0.5px',
-          color: isActive ? activeColor : '#9CA3AF',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '4px',
           backgroundColor: '#FFFFFF',
           padding: '2px 6px',
           borderRadius: '2px',
           border: `1px solid ${isActive ? activeColor : '#E5E5E5'}`,
         }}
       >
-        {data.nodeType === 'event' ? 'EVT' : data.nodeType === 'entity' ? 'ENT' : 'DEC'}
+        {/* Mini shape icon */}
+        <svg width="12" height="12" viewBox="0 0 12 12">
+          {data.nodeType === 'event' && (
+            <circle cx="6" cy="6" r="5" fill={isActive ? activeColor : shapeConfig.activeColor} opacity={isActive ? 1 : 0.6} />
+          )}
+          {data.nodeType === 'entity' && (
+            <rect x="1" y="1" width="10" height="10" rx="2" fill={isActive ? activeColor : shapeConfig.activeColor} opacity={isActive ? 1 : 0.6} />
+          )}
+          {data.nodeType === 'decision' && (
+            <polygon points="6,0.5 11.5,6 6,11.5 0.5,6" fill={isActive ? activeColor : shapeConfig.activeColor} opacity={isActive ? 1 : 0.6} />
+          )}
+          {data.nodeType === 'keyword' && (
+            <polygon points="3,0.5 9,0.5 12,6 9,11.5 3,11.5 0,6" fill={isActive ? activeColor : shapeConfig.activeColor} opacity={isActive ? 1 : 0.6} />
+          )}
+        </svg>
       </div>
 
       <Handle

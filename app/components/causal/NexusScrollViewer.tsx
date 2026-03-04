@@ -27,12 +27,40 @@ interface NexusSvg {
   has_metrics?: boolean;
 }
 
+type ThemeMode = 'light' | 'dark';
+
+interface ThemeConfig {
+  bg: string;
+  text: string;
+  textMuted: string;
+  track: string;
+  accent: string;
+}
+
+const THEMES: Record<ThemeMode, ThemeConfig> = {
+  light: {
+    bg: '#FFFFFF',
+    text: '#000000',
+    textMuted: '#6B7280',
+    track: '#E5E5E5',
+    accent: '#2563EB',
+  },
+  dark: {
+    bg: '#0A0A1A',
+    text: '#FFFFFF',
+    textMuted: 'rgba(255, 255, 255, 0.4)',
+    track: 'rgba(255, 255, 255, 0.15)',
+    accent: '#2563EB',
+  },
+};
+
 interface NexusScrollViewerProps {
   topic: string;
   nodes: NexusForceGraphProps['nodes'];
   edges: NexusForceGraphProps['edges'];
   centralEntity?: string;
   height?: number;
+  theme?: ThemeMode;
 }
 
 // ==========================================
@@ -128,13 +156,17 @@ export default function NexusScrollViewer({
   edges,
   centralEntity,
   height = 600,
+  theme: initialTheme = 'light',
 }: NexusScrollViewerProps) {
   const [svgs, setSvgs] = useState<NexusSvg[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [scrollProgress, setScrollProgress] = useState(0);
+  const [theme, setTheme] = useState<ThemeMode>(initialTheme);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+  const t = THEMES[theme];
 
   // Fetch timeline SVGs
   useEffect(() => {
@@ -198,11 +230,15 @@ export default function NexusScrollViewer({
     }
   };
 
+  const toggleTheme = useCallback(() => {
+    setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  }, []);
+
   if (loading) {
     return (
       <div style={{
         height: `${height}px`,
-        backgroundColor: '#0A0A1A',
+        backgroundColor: t.bg,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -213,17 +249,17 @@ export default function NexusScrollViewer({
           width: '32px',
           height: '32px',
           borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(37, 99, 235, 0.8) 0%, rgba(37, 99, 235, 0.2) 70%, transparent 100%)',
+          background: `radial-gradient(circle, rgba(37, 99, 235, 0.8) 0%, rgba(37, 99, 235, 0.2) 70%, transparent 100%)`,
           animation: 'pulse 1.5s ease-in-out infinite',
         }} />
-        <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '13px' }}>
+        <span style={{ color: t.textMuted, fontSize: '13px' }}>
           Chargement du nexus...
         </span>
       </div>
     );
   }
 
-  // No SVGs → fallback to force graph
+  // No SVGs -> fallback to force graph
   if (sanitizedSvgs.length === 0 || sanitizedSvgs.every(s => !s._sanitized)) {
     return (
       <NexusForceGraph
@@ -244,11 +280,32 @@ export default function NexusScrollViewer({
         position: 'relative',
         width: '100%',
         height: `${height}px`,
-        backgroundColor: '#0A0A1A',
+        backgroundColor: t.bg,
         overflow: 'hidden',
       }}
     >
-      {/* Scrollable area (invisible — drives the animation) */}
+      {/* Theme toggle button */}
+      <button
+        onClick={(e) => { e.stopPropagation(); toggleTheme(); }}
+        style={{
+          position: 'absolute',
+          top: '12px',
+          right: '12px',
+          zIndex: 15,
+          backgroundColor: theme === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.1)',
+          border: `1px solid ${theme === 'light' ? '#E5E5E5' : 'rgba(255,255,255,0.2)'}`,
+          color: t.text,
+          padding: '4px 10px',
+          fontSize: '11px',
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+          fontWeight: 500,
+        }}
+      >
+        {theme === 'light' ? 'Mode sombre' : 'Mode clair'}
+      </button>
+
+      {/* Scrollable area (invisible - drives the animation) */}
       <div
         ref={scrollAreaRef}
         onScroll={handleScroll}
@@ -309,7 +366,7 @@ export default function NexusScrollViewer({
           fontSize: '10px',
           fontWeight: 700,
           letterSpacing: '0.2em',
-          color: 'rgba(255, 255, 255, 0.5)',
+          color: t.textMuted,
           textTransform: 'uppercase',
         }}>
           NEXUS CAUSAL
@@ -317,10 +374,10 @@ export default function NexusScrollViewer({
         <div style={{
           fontSize: '22px',
           fontWeight: 700,
-          color: '#FFFFFF',
+          color: t.text,
           fontFamily: 'Georgia, "Times New Roman", serif',
           marginTop: '4px',
-          textShadow: '0 2px 8px rgba(0,0,0,0.5)',
+          textShadow: theme === 'dark' ? '0 2px 8px rgba(0,0,0,0.5)' : 'none',
         }}>
           {topic}
         </div>
@@ -330,7 +387,7 @@ export default function NexusScrollViewer({
       {sanitizedSvgs[currentIndex] && (
         <div style={{
           position: 'absolute',
-          top: '16px',
+          top: '48px',
           right: '24px',
           zIndex: 10,
           textAlign: 'right',
@@ -338,18 +395,18 @@ export default function NexusScrollViewer({
         }}>
           <div style={{
             fontSize: '12px',
-            color: 'rgba(255, 255, 255, 0.7)',
+            color: t.textMuted,
           }}>
             {sanitizedSvgs[currentIndex].node_count} noeuds
             {sanitizedSvgs[currentIndex].edge_count ? `  ${sanitizedSvgs[currentIndex].edge_count} relations` : ''}
           </div>
           <div style={{
             fontSize: '13px',
-            color: '#FFFFFF',
+            color: t.text,
             maxWidth: '300px',
             lineHeight: 1.3,
             marginTop: '4px',
-            textShadow: '0 1px 4px rgba(0,0,0,0.5)',
+            textShadow: theme === 'dark' ? '0 1px 4px rgba(0,0,0,0.5)' : 'none',
           }}>
             {sanitizedSvgs[currentIndex].synthesis_title.length > 80
               ? sanitizedSvgs[currentIndex].synthesis_title.slice(0, 77) + '...'
@@ -371,7 +428,7 @@ export default function NexusScrollViewer({
         <div style={{
           position: 'relative',
           height: '2px',
-          backgroundColor: 'rgba(255, 255, 255, 0.15)',
+          backgroundColor: t.track,
           borderRadius: '1px',
         }}>
           {/* Progress fill */}
@@ -381,7 +438,7 @@ export default function NexusScrollViewer({
             top: 0,
             height: '100%',
             width: `${scrollProgress * 100}%`,
-            backgroundColor: '#2563EB',
+            backgroundColor: t.accent,
             borderRadius: '1px',
             transition: 'width 0.1s ease-out',
           }} />
@@ -402,8 +459,8 @@ export default function NexusScrollViewer({
                   width: isActive ? '10px' : '6px',
                   height: isActive ? '10px' : '6px',
                   borderRadius: '50%',
-                  backgroundColor: isActive ? '#2563EB' : 'rgba(255, 255, 255, 0.4)',
-                  boxShadow: isActive ? '0 0 8px rgba(37, 99, 235, 0.6)' : 'none',
+                  backgroundColor: isActive ? t.accent : t.textMuted,
+                  boxShadow: isActive ? `0 0 8px rgba(37, 99, 235, 0.6)` : 'none',
                   transition: 'all 0.2s ease',
                 }}
               />
@@ -418,12 +475,12 @@ export default function NexusScrollViewer({
           marginTop: '8px',
         }}>
           {sanitizedSvgs.length > 0 && (
-            <span style={{ fontSize: '10px', color: 'rgba(255, 255, 255, 0.4)' }}>
+            <span style={{ fontSize: '10px', color: t.textMuted }}>
               {formatDate(sanitizedSvgs[0].timestamp)}
             </span>
           )}
           {sanitizedSvgs.length > 1 && (
-            <span style={{ fontSize: '10px', color: 'rgba(255, 255, 255, 0.4)' }}>
+            <span style={{ fontSize: '10px', color: t.textMuted }}>
               {formatDate(sanitizedSvgs[sanitizedSvgs.length - 1].timestamp)}
             </span>
           )}
@@ -445,13 +502,13 @@ export default function NexusScrollViewer({
         alignItems: 'center',
         gap: '4px',
       }}>
-        <span style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.5)' }}>
+        <span style={{ fontSize: '11px', color: t.textMuted }}>
           Scrollez pour naviguer
         </span>
         <div style={{
           width: '1px',
           height: '20px',
-          backgroundColor: 'rgba(255, 255, 255, 0.3)',
+          backgroundColor: t.track,
           animation: 'scrollHint 1.5s ease-in-out infinite',
         }} />
       </div>
@@ -463,7 +520,7 @@ export default function NexusScrollViewer({
         right: '24px',
         zIndex: 10,
         fontSize: '11px',
-        color: 'rgba(255, 255, 255, 0.4)',
+        color: t.textMuted,
         pointerEvents: 'none',
       }}>
         {currentIndex + 1} / {sanitizedSvgs.length}

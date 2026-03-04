@@ -27,16 +27,17 @@ const NexusScrollViewer = dynamic(
         justifyContent: 'center',
         flexDirection: 'column',
         gap: '12px',
-        backgroundColor: '#0A0A1A',
+        backgroundColor: '#FFFFFF',
       }}>
         <div style={{
           width: '32px',
           height: '32px',
           borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(37, 99, 235, 0.8) 0%, rgba(37, 99, 235, 0.2) 70%, transparent 100%)',
-          animation: 'pulse 1.5s ease-in-out infinite',
+          border: '3px solid #E5E5E5',
+          borderTopColor: '#2563EB',
+          animation: 'spin 1s linear infinite',
         }} />
-        <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '13px' }}>
+        <span style={{ color: '#6B7280', fontSize: '13px' }}>
           Chargement du nexus causal...
         </span>
       </div>
@@ -129,13 +130,15 @@ const NARRATIVE_ARC_CONFIG: Record<string, { label: string; color: string; descr
 
 type TabId = 'causal' | 'overview' | 'timeline' | 'table' | 'predictions';
 
-// Node type legend config (matches NeuralNode colors)
-const NODE_TYPE_LEGEND: { type: string; label: string; color: string }[] = [
-  { type: 'event', label: 'Evenement', color: '#DC2626' },
-  { type: 'entity', label: 'Entite', color: '#2563EB' },
-  { type: 'decision', label: 'Decision', color: '#D97706' },
-  { type: 'keyword', label: 'Mot-cle', color: '#059669' },
+// Node type legend config with distinct shapes
+const NODE_TYPE_LEGEND: { type: string; label: string; color: string; shape: 'circle' | 'roundedRect' | 'diamond' | 'hexagon' }[] = [
+  { type: 'event', label: 'Evenement', color: '#DC2626', shape: 'circle' },
+  { type: 'entity', label: 'Entite', color: '#2563EB', shape: 'roundedRect' },
+  { type: 'decision', label: 'Decision', color: '#D97706', shape: 'diamond' },
+  { type: 'keyword', label: 'Mot-cle', color: '#059669', shape: 'hexagon' },
 ];
+
+const NODES_PER_PAGE = 20;
 
 interface SelectedNodeInfo {
   id: string;
@@ -166,6 +169,7 @@ function TopicDashboardPage() {
   const initialTab = (searchParams.get('tab') as TabId) || 'overview';
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
   const [selectedNode, setSelectedNode] = useState<SelectedNodeInfo | null>(null);
+  const [nodeListPage, setNodeListPage] = useState(0);
 
   useEffect(() => {
     const fetchDashboard = async () => {
@@ -246,7 +250,7 @@ function TopicDashboardPage() {
   }
   allTabs.push({ id: 'predictions', label: 'Pr\u00e9dictions', count: dashboard.predictions_summary.length });
 
-  // Transform causal graph data for LivingCausalGraph
+  // Transform causal graph data
   const causalNodes = dashboard.aggregated_causal_graph.nodes.map(n => ({
     id: n.id,
     label: n.label,
@@ -270,11 +274,9 @@ function TopicDashboardPage() {
     source_syntheses: e.source_syntheses || [],
   }));
 
-  const synthesesForPanel = dashboard.syntheses.map(s => ({
-    id: s.id,
-    title: s.title,
-    date: s.date,
-  }));
+  // Pagination for node list
+  const totalNodePages = Math.ceil(causalNodes.length / NODES_PER_PAGE);
+  const pagedNodes = causalNodes.slice(nodeListPage * NODES_PER_PAGE, (nodeListPage + 1) * NODES_PER_PAGE);
 
   return (
     <div style={styles.page}>
@@ -345,9 +347,49 @@ function TopicDashboardPage() {
                 color: '#6B7280',
                 margin: 0,
               }}>
-                {'Scrollez pour naviguer dans le temps. Chaque image montre le nexus causal au moment de la synthèse.'}
+                {'Scrollez pour naviguer dans le temps. Chaque image montre le nexus causal au moment de la synth\u00e8se.'}
               </p>
             </div>
+
+            {/* Legend bar ABOVE the graph */}
+            {hasCausalData && (
+              <div style={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: '24px',
+                padding: '12px 16px',
+                backgroundColor: '#F9FAFB',
+                border: '1px solid #E5E5E5',
+                borderBottom: 'none',
+              }}>
+                {NODE_TYPE_LEGEND.map(item => (
+                  <div key={item.type} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <svg width="14" height="14" viewBox="0 0 14 14">
+                      {item.shape === 'circle' && (
+                        <circle cx="7" cy="7" r="6" fill={item.color} opacity={0.7} />
+                      )}
+                      {item.shape === 'roundedRect' && (
+                        <rect x="1" y="1" width="12" height="12" rx="3" fill={item.color} opacity={0.7} />
+                      )}
+                      {item.shape === 'diamond' && (
+                        <polygon points="7,0.5 13.5,7 7,13.5 0.5,7" fill={item.color} opacity={0.7} />
+                      )}
+                      {item.shape === 'hexagon' && (
+                        <polygon points="3.5,0.5 10.5,0.5 14,7 10.5,13.5 3.5,13.5 0,7" fill={item.color} opacity={0.7} />
+                      )}
+                    </svg>
+                    <span style={{
+                      fontSize: '12px',
+                      color: '#374151',
+                      fontWeight: 500,
+                    }}>
+                      {item.label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div style={{ display: 'flex', gap: '0' }}>
               {/* Graph area */}
@@ -359,69 +401,71 @@ function TopicDashboardPage() {
                     edges={causalEdges}
                     centralEntity={dashboard.topic}
                     height={600}
+                    theme="light"
                   />
                 ) : (
                   <div style={styles.emptyState}>
-                    {'Pas de données causales disponibles. Le graphe se remplira automatiquement à mesure que de nouvelles synthèses sont générées.'}
+                    {'Pas de donn\u00e9es causales disponibles. Le graphe se remplira automatiquement \u00e0 mesure que de nouvelles synth\u00e8ses sont g\u00e9n\u00e9r\u00e9es.'}
                   </div>
                 )}
 
-                {/* Legend bar */}
-                {hasCausalData && (
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    gap: '20px',
-                    padding: '12px 16px',
-                    backgroundColor: '#F9FAFB',
-                    borderTop: '1px solid #E5E5E5',
-                  }}>
-                    {NODE_TYPE_LEGEND.map(item => (
-                      <div key={item.type} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <div style={{
-                          width: '10px',
-                          height: '10px',
-                          borderRadius: '50%',
-                          backgroundColor: item.color,
-                        }} />
-                        <span style={{
-                          fontSize: '11px',
-                          color: '#374151',
-                          fontWeight: 500,
-                        }}>
-                          {item.label}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Clickable node list (for selecting nodes) */}
+                {/* Clickable node list with pagination */}
                 {hasCausalData && (
                   <div style={{
                     padding: '16px',
                     borderTop: '1px solid #E5E5E5',
                   }}>
                     <div style={{
-                      fontSize: '10px',
-                      fontWeight: 700,
-                      letterSpacing: '1.5px',
-                      color: '#6B7280',
-                      textTransform: 'uppercase' as const,
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
                       marginBottom: '10px',
                     }}>
-                      NOEUDS DU GRAPHE ({causalNodes.length})
+                      <div style={{
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        letterSpacing: '1.5px',
+                        color: '#6B7280',
+                        textTransform: 'uppercase' as const,
+                      }}>
+                        NOEUDS DU GRAPHE ({causalNodes.length})
+                      </div>
+                      {totalNodePages > 1 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <button
+                            onClick={() => setNodeListPage(p => Math.max(0, p - 1))}
+                            disabled={nodeListPage === 0}
+                            style={{
+                              ...styles.paginationBtn,
+                              opacity: nodeListPage === 0 ? 0.3 : 1,
+                            }}
+                          >
+                            &larr;
+                          </button>
+                          <span style={{ fontSize: '11px', color: '#6B7280' }}>
+                            {nodeListPage + 1} / {totalNodePages}
+                          </span>
+                          <button
+                            onClick={() => setNodeListPage(p => Math.min(totalNodePages - 1, p + 1))}
+                            disabled={nodeListPage >= totalNodePages - 1}
+                            style={{
+                              ...styles.paginationBtn,
+                              opacity: nodeListPage >= totalNodePages - 1 ? 0.3 : 1,
+                            }}
+                          >
+                            &rarr;
+                          </button>
+                        </div>
+                      )}
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                      {causalNodes.slice(0, 30).map(node => {
+                      {pagedNodes.map(node => {
                         const isSelected = selectedNode?.id === node.id;
                         const typeColor = NODE_TYPE_LEGEND.find(l => l.type === node.node_type)?.color || '#6B7280';
                         return (
                           <button
                             key={node.id}
                             onClick={() => {
-                              // Build selected node info
                               const causedBy = causalEdges
                                 .filter(e => e.effect_text === node.label)
                                 .map(e => e.cause_text);
@@ -449,7 +493,7 @@ function TopicDashboardPage() {
                               borderLeft: `3px solid ${typeColor}`,
                             }}
                           >
-                            {node.label.length > 35 ? node.label.slice(0, 35) + '\u2026' : node.label}
+                            {node.label.length > 50 ? node.label.slice(0, 50) + '\u2026' : node.label}
                           </button>
                         );
                       })}
@@ -458,12 +502,13 @@ function TopicDashboardPage() {
                 )}
               </div>
 
-              {/* Detail panel (right side) */}
+              {/* Detail panel (right side) — 360px inline */}
               {selectedNode && (
                 <div style={{
-                  width: '300px',
+                  width: '360px',
                   flexShrink: 0,
                   borderLeft: '1px solid #E5E5E5',
+                  boxShadow: '-4px 0 20px rgba(0,0,0,0.1)',
                   padding: '20px',
                   backgroundColor: '#FFFFFF',
                   overflowY: 'auto',
@@ -497,20 +542,27 @@ function TopicDashboardPage() {
                     </button>
                   </div>
 
-                  {/* Type badge */}
-                  <div style={{
-                    display: 'inline-block',
-                    padding: '3px 8px',
-                    fontSize: '10px',
-                    fontWeight: 700,
-                    textTransform: 'uppercase' as const,
-                    letterSpacing: '0.5px',
-                    color: NODE_TYPE_LEGEND.find(l => l.type === selectedNode.type)?.color || '#6B7280',
-                    backgroundColor: '#F3F4F6',
-                    border: `1px solid ${NODE_TYPE_LEGEND.find(l => l.type === selectedNode.type)?.color || '#E5E5E5'}`,
-                    marginBottom: '16px',
-                  }}>
-                    {NODE_TYPE_LEGEND.find(l => l.type === selectedNode.type)?.label || selectedNode.type}
+                  {/* Type badge with shape */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                    <svg width="14" height="14" viewBox="0 0 14 14">
+                      {(() => {
+                        const legendItem = NODE_TYPE_LEGEND.find(l => l.type === selectedNode.type);
+                        const c = legendItem?.color || '#6B7280';
+                        if (legendItem?.shape === 'roundedRect') return <rect x="1" y="1" width="12" height="12" rx="3" fill={c} opacity={0.7} />;
+                        if (legendItem?.shape === 'diamond') return <polygon points="7,0.5 13.5,7 7,13.5 0.5,7" fill={c} opacity={0.7} />;
+                        if (legendItem?.shape === 'hexagon') return <polygon points="3.5,0.5 10.5,0.5 14,7 10.5,13.5 3.5,13.5 0,7" fill={c} opacity={0.7} />;
+                        return <circle cx="7" cy="7" r="6" fill={c} opacity={0.7} />;
+                      })()}
+                    </svg>
+                    <span style={{
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      textTransform: 'uppercase' as const,
+                      letterSpacing: '0.5px',
+                      color: NODE_TYPE_LEGEND.find(l => l.type === selectedNode.type)?.color || '#6B7280',
+                    }}>
+                      {NODE_TYPE_LEGEND.find(l => l.type === selectedNode.type)?.label || selectedNode.type}
+                    </span>
                   </div>
 
                   {/* Mention count */}
@@ -620,7 +672,7 @@ function TopicDashboardPage() {
                   marginBottom: '12px',
                   textTransform: 'uppercase' as const,
                 }}>
-                  {'SCÉNARIOS PROSPECTIFS'}
+                  {'SC\u00c9NARIOS PROSPECTIFS'}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {dashboard.predictions_summary.slice(0, 5).map((pred, i) => {
@@ -722,21 +774,21 @@ function TopicDashboardPage() {
               gridTemplateColumns: '1fr 1fr',
               gap: '40px',
             }}>
-              {/* Left column (60%) — entities + recent syntheses */}
+              {/* Left column — entities + recent syntheses */}
               <div>
                 {/* Entities */}
                 {dashboard.key_entities.length > 0 && (
                   <div style={{ marginBottom: '32px' }}>
-                    <h2 style={styles.sectionTitle}>{'Entités clés'}</h2>
+                    <h2 style={styles.sectionTitle}>{'Entit\u00e9s cl\u00e9s'}</h2>
                     <TopicEntityCards entities={dashboard.key_entities} />
                   </div>
                 )}
 
                 {/* Recent Syntheses */}
                 <div>
-                  <h2 style={styles.sectionTitle}>{'Dernières synthèses'}</h2>
+                  <h2 style={styles.sectionTitle}>{'Derni\u00e8res synth\u00e8ses'}</h2>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
-                    {dashboard.syntheses.slice(0, 5).map((synthesis, i) => (
+                    {dashboard.syntheses.slice(0, 5).map((synthesis) => (
                       <Link
                         key={synthesis.id}
                         href={`/synthesis/${synthesis.id}`}
@@ -798,7 +850,7 @@ function TopicDashboardPage() {
                 </div>
               </div>
 
-              {/* Right column (40%) — sentiment, geo, arc */}
+              {/* Right column — sentiment, geo, arc */}
               <div>
                 {/* Sentiment Sparkline */}
                 {dashboard.sentiment_evolution.length > 0 && (
@@ -823,7 +875,7 @@ function TopicDashboardPage() {
                       textTransform: 'uppercase',
                       marginBottom: '10px',
                     }}>
-                      {'FOCUS GÉOGRAPHIQUE'}
+                      {'FOCUS G\u00c9OGRAPHIQUE'}
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                       {dashboard.geo_focus.map((g, i) => (
@@ -890,7 +942,7 @@ function TopicDashboardPage() {
           <section style={styles.section}>
             <h2 style={styles.sectionTitle}>Chronologie du Dossier</h2>
             <p style={styles.sectionSubtitle}>
-              {'Chaque point représente une synthèse. La taille est proportionnelle au nombre de sources,'}
+              {'Chaque point repr\u00e9sente une synth\u00e8se. La taille est proportionnelle au nombre de sources,'}
               la couleur indique le sentiment.
             </p>
             <TopicTimeline syntheses={dashboard.syntheses} />
@@ -908,12 +960,12 @@ function TopicDashboardPage() {
         {/* === TAB: Predictions === */}
         {activeTab === 'predictions' && (
           <section style={styles.section}>
-            <h2 style={styles.sectionTitle}>{'Suivi des Prédictions'}</h2>
+            <h2 style={styles.sectionTitle}>{'Suivi des Pr\u00e9dictions'}</h2>
             {dashboard.predictions_summary.length > 0 ? (
               <PredictionTracker predictions={dashboard.predictions_summary} />
             ) : (
               <div style={styles.emptyState}>
-                {'Aucune prédiction disponible pour ce dossier.'}
+                {'Aucune pr\u00e9diction disponible pour ce dossier.'}
               </div>
             )}
           </section>
@@ -922,7 +974,7 @@ function TopicDashboardPage() {
         {/* Back Link */}
         <div style={styles.backSection}>
           <Link href="/" style={{ color: '#000', textDecoration: 'none', fontSize: '14px', fontWeight: 500 }}>
-            {'← Retour à la page d\u0027accueil'}
+            {'\u2190 Retour \u00e0 la page d\u0027accueil'}
           </Link>
         </div>
       </div>
@@ -1062,5 +1114,14 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginTop: '60px',
     paddingTop: '24px',
     borderTop: '1px solid #E5E5E5',
+  },
+  paginationBtn: {
+    background: 'none',
+    border: '1px solid #E5E5E5',
+    padding: '2px 8px',
+    fontSize: '12px',
+    cursor: 'pointer',
+    color: '#374151',
+    fontFamily: 'inherit',
   },
 };

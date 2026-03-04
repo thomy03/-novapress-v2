@@ -1,15 +1,7 @@
 """
 Image generation service for NovaPress AI v2.
-Uses fal.ai API with multi-model selection per category.
+Uses fal.ai z-image/turbo — fast & cheap (~$0.003/image at 16:9).
 Phase 2A: LLM scene description for contextual images.
-
-Models:
-  - Nano Banana Pro (photorealistic): MONDE, POLITIQUE, SPORT (~$0.04/image)
-  - Recraft V4 (design): ECONOMIE, SCIENCES (~$0.04/image)
-  - Flux 2 Flex (default): TECH, CULTURE (~$0.03/image)
-  - Flux Schnell (fast): fallback (~$0.003/image)
-
-Graceful fallback: if primary model fails, retry with Flux Schnell.
 """
 import httpx
 from typing import Optional, Dict, Any
@@ -18,53 +10,6 @@ from loguru import logger
 from app.core.config import settings
 from app.core.circuit_breaker import get_circuit_breaker, CircuitOpenError
 
-
-# Category → model tier mapping
-# Phase 2B: MONDE/POLITIQUE use photorealistic for concrete scenes
-CATEGORY_MODEL_MAP: Dict[str, str] = {
-    "MONDE": "photorealistic",
-    "POLITIQUE": "photorealistic",
-    "ECONOMIE": "design",
-    "SCIENCES": "design",
-    "SPORT": "photorealistic",
-    "TECH": "default",
-    "CULTURE": "default",
-}
-
-# Per-model API parameters (each fal.ai model has a different schema)
-MODEL_CONFIGS: Dict[str, Dict[str, Any]] = {
-    "fal-ai/nano-banana-pro": {
-        "params": {
-            "aspect_ratio": "16:9",
-            "num_images": 1,
-            "safety_tolerance": "2",
-            "enable_safety_checker": True,
-        },
-    },
-    "fal-ai/recraft/v4/text-to-image": {
-        "params": {
-            "image_size": {"width": 1024, "height": 576},
-            "style": "vector_illustration",
-        },
-    },
-    "fal-ai/flux-2-flex": {
-        "params": {
-            "image_size": "landscape_16_9",
-            "num_inference_steps": 20,
-            "guidance_scale": 3.5,
-            "num_images": 1,
-            "enable_safety_checker": True,
-        },
-    },
-    "fal-ai/flux/schnell": {
-        "params": {
-            "image_size": "landscape_16_9",
-            "num_inference_steps": 4,
-            "num_images": 1,
-            "enable_safety_checker": True,
-        },
-    },
-}
 
 # Category-specific style prompts — photojournalistic editorial, NO abstract art
 STYLE_PROMPTS: Dict[str, str] = {
@@ -81,35 +26,25 @@ NO_TEXT_SUFFIX = "absolutely no text, no letters, no words, no numbers, no logos
 
 
 class FalImageGenerator:
-    """Generate editorial illustrations via fal.ai API with multi-model support."""
+    """Generate editorial illustrations via fal.ai z-image/turbo."""
+
+    MODEL = "fal-ai/z-image/turbo"
 
     def __init__(self):
         self.api_key = settings.FAL_API_KEY
-        self.base_url = "https://fal.run"  # Synchronous endpoint (queue.fal.run returns IN_QUEUE)
+        self.base_url = "https://fal.run"
         self.circuit_breaker = get_circuit_breaker("fal_ai")
         self.enabled = bool(self.api_key)
 
         if self.enabled:
-            logger.info("fal.ai multi-model image generation enabled")
+            logger.info(f"fal.ai image generation enabled (model: {self.MODEL})")
         else:
             logger.info("fal.ai image generation disabled (no FAL_API_KEY)")
 
-    def _get_model_for_category(self, category: str) -> str:
-        """Select the best fal.ai model based on synthesis category."""
-        tier = CATEGORY_MODEL_MAP.get(category, "default")
-        if tier == "design":
-            return settings.FAL_MODEL_DESIGN
-        elif tier == "photorealistic":
-            return settings.FAL_MODEL_PHOTOREALISTIC
-        elif tier == "default":
-            return settings.FAL_MODEL_DEFAULT
-        return settings.FAL_MODEL_FAST
-
     async def generate_for_synthesis(self, synthesis: Dict[str, Any]) -> Optional[str]:
         """
-        Generate an editorial illustration based on synthesis content.
-        Phase 2A: Uses LLM scene description for contextual images.
-        Uses category-appropriate model with fallback to Flux Schnell.
+        Generate an editorial illustration for a synthesis.
+        Uses LLM scene description for contextual prompts, falls back to basic prompt.
 
         Returns:
             Image URL string (hosted by fal.ai) or None on failure.
@@ -118,35 +53,25 @@ class FalImageGenerator:
             return None
 
         category = synthesis.get("category", "MONDE")
-        primary_model = self._get_model_for_category(category)
-
-        # Phase 2A: Try LLM scene description first for richer prompts
         prompt = await self._build_scene_prompt(synthesis, category)
 
-        # Try primary model first
-        url = await self._call_model(primary_model, prompt, category)
-        if url:
-            return url
+        return await self._call_model(prompt, category)
 
-        # Fallback to Flux Schnell
-        fallback_model = settings.FAL_MODEL_FAST
-        if fallback_model != primary_model:
-            logger.warning(f"Primary model {primary_model} failed for {category}, falling back to {fallback_model}")
-            url = await self._call_model(fallback_model, prompt, category)
-            if url:
-                return url
-
-        return None
-
-    async def _call_model(self, model: str, prompt: str, category: str) -> Optional[str]:
-        """Call a specific fal.ai model and return the image URL."""
-        config = MODEL_CONFIGS.get(model, MODEL_CONFIGS["fal-ai/flux/schnell"])
-        params = {**config["params"], "prompt": prompt}
+    async def _call_model(self, prompt: str, category: str) -> Optional[str]:
+        """Call fal.ai z-image/turbo and return the image URL."""
+        params = {
+            "prompt": prompt,
+            "image_size": "landscape_16_9",
+            "num_inference_steps": 8,
+            "num_images": 1,
+            "output_format": "jpeg",
+            "enable_safety_checker": True,
+        }
 
         async def _do_call() -> Optional[str]:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
-                    f"{self.base_url}/{model}",
+                    f"{self.base_url}/{self.MODEL}",
                     headers={
                         "Authorization": f"Key {self.api_key}",
                         "Content-Type": "application/json",
@@ -160,7 +85,7 @@ class FalImageGenerator:
                     if images:
                         url = images[0].get("url", "")
                         if url:
-                            logger.info(f"[{model}] Generated image for category={category}")
+                            logger.info(f"[z-image/turbo] Generated image for category={category}")
                             return url
 
                     raise ValueError(f"fal.ai returned no images: {data}")
@@ -173,13 +98,12 @@ class FalImageGenerator:
             logger.warning("fal.ai circuit breaker is open, skipping image generation")
             return None
         except Exception as e:
-            logger.error(f"[{model}] Image generation failed: {e}")
+            logger.error(f"[z-image/turbo] Image generation failed: {e}")
             return None
 
     async def _build_scene_prompt(self, synthesis: Dict[str, Any], category: str) -> str:
         """
         Phase 2A: Build an image prompt using LLM scene description.
-        The LLM generates a concrete visual scene description based on article content.
         Falls back to basic prompt if LLM fails.
         """
         try:
@@ -195,7 +119,6 @@ class FalImageGenerator:
         except Exception as e:
             logger.warning(f"LLM scene description failed, using fallback: {e}")
 
-        # Fallback to basic prompt
         return self._build_basic_prompt(synthesis, category)
 
     async def _get_llm_scene_description(self, synthesis: Dict[str, Any]) -> Optional[str]:
@@ -245,7 +168,6 @@ Réponds UNIQUEMENT avec la description de la scène, rien d'autre."""
             )
             text = response.choices[0].message.content
             if text:
-                # Clean up — remove quotes, newlines
                 text = text.strip().strip('"').strip("'").replace("\n", " ")
                 logger.info(f"🖼️ LLM scene description: {text[:100]}...")
                 return text
@@ -255,12 +177,9 @@ Réponds UNIQUEMENT avec la description de la scène, rien d'autre."""
         return None
 
     def _build_basic_prompt(self, synthesis: Dict[str, Any], category: str) -> str:
-        """
-        Fallback: Build a basic prompt from title and entities.
-        """
+        """Fallback: Build a basic prompt from title and entities."""
         title = synthesis.get("title", "")
 
-        # Extract key entities for specificity
         entities = synthesis.get("key_entities", [])
         entity_text = ""
         if entities:

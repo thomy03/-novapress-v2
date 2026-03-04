@@ -4,9 +4,9 @@ import React, { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 
 /**
- * MiniNexusPreview — Pure SVG mini-graph for synthesis sidebar.
- * Replaces the ReactFlow compact graph with a lightweight circular layout.
- * Highlights nodes linked to the current synthesis in red.
+ * MiniNexusPreview — Vertical SVG mini-nexus for synthesis sidebar.
+ * Shows a topologically-sorted flow with distinct node shapes per type,
+ * Bezier curve connections, predictions, and narrative arc indicator.
  */
 
 interface MiniNode {
@@ -14,6 +14,7 @@ interface MiniNode {
   label: string;
   type: string;
   source_syntheses?: string[];
+  date?: string;
 }
 
 interface MiniEdge {
@@ -32,12 +33,9 @@ interface MiniNexusPreviewProps {
   topicName: string;
   synthesisId: string;
   height?: number;
-}
-
-// Truncate label to max chars
-function truncLabel(label: string, max: number = 22): string {
-  if (!label) return '';
-  return label.length > max ? label.slice(0, max - 1) + '\u2026' : label;
+  narrativeArc?: string;
+  timeline?: string[];
+  relatedSyntheses?: { id: string; title: string; createdAt: string }[];
 }
 
 // Type colors (newspaper palette)
@@ -48,78 +46,194 @@ const TYPE_COLORS: Record<string, string> = {
   keyword: '#059669',
 };
 
+// Narrative arc phases
+const ARC_PHASES = ['emerging', 'developing', 'peak', 'declining', 'resolved'];
+const ARC_LABELS: Record<string, string> = {
+  emerging: 'Emergent',
+  developing: 'En cours',
+  peak: 'Pic',
+  declining: 'Declin',
+  resolved: 'Resolu',
+};
+
+// Relation type colors for edges
+const RELATION_COLORS: Record<string, string> = {
+  causes: '#DC2626',
+  triggers: '#D97706',
+  enables: '#059669',
+  prevents: '#6B7280',
+  relates_to: '#9CA3AF',
+};
+
+function truncLabel(label: string, max: number = 28): string {
+  if (!label) return '';
+  return label.length > max ? label.slice(0, max - 1) + '\u2026' : label;
+}
+
 export default function MiniNexusPreview({
   nodes,
   edges,
   topicName,
   synthesisId,
-  height = 300,
+  height = 550,
+  narrativeArc,
+  timeline,
+  relatedSyntheses,
 }: MiniNexusPreviewProps) {
   const router = useRouter();
 
-  // Build positions for circular layout
   const layout = useMemo(() => {
-    const displayNodes = nodes.slice(0, 25);
-    const n = displayNodes.length;
-    if (n === 0) return { nodes: [], edges: [] };
+    if (nodes.length === 0) return null;
 
-    const cx = 200;
-    const cy = height / 2;
-    const rx = 150;
-    const ry = (height / 2) - 40;
-
-    // Build label-to-id map for edge resolution
-    const labelToId = new Map(displayNodes.map(nd => [nd.label, nd.id]));
-    const idSet = new Set(displayNodes.map(nd => nd.id));
-
-    const positioned = displayNodes.map((node, i) => {
-      const angle = (2 * Math.PI * i) / n - Math.PI / 2;
-      const x = cx + rx * Math.cos(angle);
-      const y = cy + ry * Math.sin(angle);
-
-      // Check if this node is linked to the current synthesis
-      const isHighlighted = node.source_syntheses?.includes(synthesisId) ?? false;
-
-      return { ...node, x, y, isHighlighted };
-    });
+    // Build adjacency
+    const labelToId = new Map(nodes.map(nd => [nd.label, nd.id]));
+    const idSet = new Set(nodes.map(nd => nd.id));
 
     // Resolve edges
-    const posById = new Map(positioned.map(p => [p.id, p]));
-
     const resolvedEdges = edges
       .map(e => {
-        // Edges can reference by id (source/target) or by label (cause_text/effect_text)
         let srcId = e.source || '';
         let tgtId = e.target || '';
-
-        if (!idSet.has(srcId) && e.cause_text) {
-          srcId = labelToId.get(e.cause_text) || '';
-        }
-        if (!idSet.has(tgtId) && e.effect_text) {
-          tgtId = labelToId.get(e.effect_text) || '';
-        }
-
-        const src = posById.get(srcId);
-        const tgt = posById.get(tgtId);
-        if (!src || !tgt || srcId === tgtId) return null;
-
-        const isHighlighted = e.source_syntheses?.includes(synthesisId) ?? false;
-
-        return {
-          x1: src.x,
-          y1: src.y,
-          x2: tgt.x,
-          y2: tgt.y,
-          confidence: e.confidence || 0.5,
-          isHighlighted,
-        };
+        if (!idSet.has(srcId) && e.cause_text) srcId = labelToId.get(e.cause_text) || '';
+        if (!idSet.has(tgtId) && e.effect_text) tgtId = labelToId.get(e.effect_text) || '';
+        if (!srcId || !tgtId || srcId === tgtId) return null;
+        return { srcId, tgtId, confidence: e.confidence || 0.5, type: e.relation_type || 'causes' };
       })
-      .filter(Boolean) as { x1: number; y1: number; x2: number; y2: number; confidence: number; isHighlighted: boolean }[];
+      .filter(Boolean) as { srcId: string; tgtId: string; confidence: number; type: string }[];
 
-    return { nodes: positioned, edges: resolvedEdges };
-  }, [nodes, edges, synthesisId, height]);
+    // Compute in-degree for topological sort
+    const incoming = new Map<string, Set<string>>();
+    const outgoing = new Map<string, Set<string>>();
+    for (const n of nodes) {
+      incoming.set(n.id, new Set());
+      outgoing.set(n.id, new Set());
+    }
+    for (const e of resolvedEdges) {
+      outgoing.get(e.srcId)?.add(e.tgtId);
+      incoming.get(e.tgtId)?.add(e.srcId);
+    }
 
-  if (layout.nodes.length === 0) {
+    // BFS topological sort
+    const depth = new Map<string, number>();
+    const queue: string[] = [];
+    for (const n of nodes) {
+      if ((incoming.get(n.id)?.size || 0) === 0) {
+        depth.set(n.id, 0);
+        queue.push(n.id);
+      }
+    }
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      const d = depth.get(current) || 0;
+      for (const next of outgoing.get(current) || []) {
+        const existing = depth.get(next);
+        if (existing === undefined || existing < d + 1) {
+          depth.set(next, d + 1);
+          queue.push(next);
+        }
+      }
+    }
+    // Unplaced nodes
+    const maxDepth = Math.max(0, ...Array.from(depth.values()));
+    for (const n of nodes) {
+      if (!depth.has(n.id)) depth.set(n.id, Math.floor(maxDepth / 2));
+    }
+
+    // Find longest chain (main path) — max 8 nodes
+    const chainNodes: string[] = [];
+    const roots = nodes.filter(n => (incoming.get(n.id)?.size || 0) === 0);
+    if (roots.length > 0) {
+      // DFS for longest path from first root
+      function findLongest(id: string, visited: Set<string>): string[] {
+        if (visited.has(id)) return [];
+        visited.add(id);
+        let best: string[] = [id];
+        for (const next of outgoing.get(id) || []) {
+          const path = [id, ...findLongest(next, new Set(visited))];
+          if (path.length > best.length) best = path;
+        }
+        return best;
+      }
+      const longestPath = findLongest(roots[0].id, new Set());
+      chainNodes.push(...longestPath.slice(0, 8));
+    }
+
+    // If no chain found, take first 8 nodes by depth
+    if (chainNodes.length === 0) {
+      const sorted = [...nodes].sort((a, b) => (depth.get(a.id) || 0) - (depth.get(b.id) || 0));
+      chainNodes.push(...sorted.slice(0, 8).map(n => n.id));
+    }
+
+    // Find branch nodes (connected to chain but not in it)
+    const chainSet = new Set(chainNodes);
+    const branchNodes: { id: string; parentIdx: number; side: 'left' | 'right' }[] = [];
+    let branchSide: 'left' | 'right' = 'right';
+    for (let i = 0; i < chainNodes.length && branchNodes.length < 4; i++) {
+      const nodeId = chainNodes[i];
+      for (const child of outgoing.get(nodeId) || []) {
+        if (!chainSet.has(child) && branchNodes.length < 4) {
+          branchNodes.push({ id: child, parentIdx: i, side: branchSide });
+          branchSide = branchSide === 'right' ? 'left' : 'right';
+        }
+      }
+    }
+
+    // Position nodes vertically
+    const viewWidth = 400;
+    const topMargin = 40;
+    const bottomReserved = narrativeArc ? 80 : 30;
+    const availableHeight = height - topMargin - bottomReserved;
+    const ySpacing = Math.min(60, availableHeight / (chainNodes.length + 1));
+    const centerX = viewWidth / 2;
+
+    const positioned: { id: string; x: number; y: number; node: MiniNode; isHighlighted: boolean; isBranch: boolean }[] = [];
+
+    // Main chain
+    chainNodes.forEach((nodeId, i) => {
+      const node = nodes.find(n => n.id === nodeId);
+      if (!node) return;
+      const isHighlighted = node.source_syntheses?.includes(synthesisId) ?? false;
+      positioned.push({
+        id: nodeId,
+        x: centerX,
+        y: topMargin + (i + 1) * ySpacing,
+        node,
+        isHighlighted,
+        isBranch: false,
+      });
+    });
+
+    // Branch nodes
+    branchNodes.forEach(({ id: branchId, parentIdx, side }) => {
+      const node = nodes.find(n => n.id === branchId);
+      if (!node) return;
+      const parentPos = positioned.find(p => p.id === chainNodes[parentIdx]);
+      if (!parentPos) return;
+      const isHighlighted = node.source_syntheses?.includes(synthesisId) ?? false;
+      positioned.push({
+        id: branchId,
+        x: side === 'right' ? centerX + 120 : centerX - 120,
+        y: parentPos.y + ySpacing * 0.6,
+        node,
+        isHighlighted,
+        isBranch: true,
+      });
+    });
+
+    // Filter edges to only positioned nodes
+    const posById = new Map(positioned.map(p => [p.id, p]));
+    const visibleEdges = resolvedEdges
+      .filter(e => posById.has(e.srcId) && posById.has(e.tgtId))
+      .map(e => {
+        const src = posById.get(e.srcId)!;
+        const tgt = posById.get(e.tgtId)!;
+        return { ...e, x1: src.x, y1: src.y, x2: tgt.x, y2: tgt.y };
+      });
+
+    return { positioned, edges: visibleEdges };
+  }, [nodes, edges, synthesisId, height, narrativeArc]);
+
+  if (!layout || layout.positioned.length === 0) {
     return (
       <div style={{
         height: `${height}px`,
@@ -139,6 +253,9 @@ export default function MiniNexusPreview({
   const handleClick = () => {
     router.push(`/topics/${encodeURIComponent(topicName)}?tab=causal`);
   };
+
+  // Current arc phase index
+  const arcIdx = narrativeArc ? ARC_PHASES.indexOf(narrativeArc) : -1;
 
   return (
     <div
@@ -166,58 +283,140 @@ export default function MiniNexusPreview({
         preserveAspectRatio="xMidYMid meet"
         style={{ display: 'block' }}
       >
-        {/* Edges */}
-        {layout.edges.map((edge, i) => (
-          <line
-            key={`e-${i}`}
-            x1={edge.x1}
-            y1={edge.y1}
-            x2={edge.x2}
-            y2={edge.y2}
-            stroke={edge.isHighlighted ? '#DC2626' : '#D1D5DB'}
-            strokeWidth={edge.isHighlighted ? 1.5 : 0.8}
-            strokeOpacity={edge.isHighlighted ? 0.7 : 0.3}
-          />
-        ))}
+        {/* Title */}
+        <text x="200" y="20" textAnchor="middle" fontSize="10" fontWeight="700" letterSpacing="2" fill="#6B7280" fontFamily="Georgia, serif">
+          NEXUS CAUSAL
+        </text>
 
-        {/* Nodes */}
-        {layout.nodes.map((node) => {
-          const color = node.isHighlighted
-            ? '#DC2626'
-            : (TYPE_COLORS[node.type] || '#6B7280');
+        {/* Edges — Bezier curves */}
+        {layout.edges.map((edge, i) => {
+          const dx = edge.x2 - edge.x1;
+          const dy = edge.y2 - edge.y1;
+          const cx1 = edge.x1 + dx * 0.1;
+          const cy1 = edge.y1 + dy * 0.5;
+          const cx2 = edge.x2 - dx * 0.1;
+          const cy2 = edge.y2 - dy * 0.5;
+          const isHighlighted = layout.positioned.find(p => p.id === edge.srcId)?.isHighlighted;
+          const edgeColor = isHighlighted
+            ? RELATION_COLORS[edge.type] || '#DC2626'
+            : '#D1D5DB';
+          const strokeW = 1 + edge.confidence * 1.5;
 
           return (
-            <g key={node.id}>
-              {/* Node circle */}
-              <circle
-                cx={node.x}
-                cy={node.y}
-                r={node.isHighlighted ? 7 : 5}
-                fill={node.isHighlighted ? color : '#FFFFFF'}
-                stroke={color}
-                strokeWidth={node.isHighlighted ? 2 : 1.5}
+            <g key={`e-${i}`}>
+              <path
+                d={`M ${edge.x1} ${edge.y1} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${edge.x2} ${edge.y2}`}
+                fill="none"
+                stroke={edgeColor}
+                strokeWidth={strokeW}
+                strokeOpacity={isHighlighted ? 0.7 : 0.35}
+                markerEnd="url(#arrow)"
               />
+            </g>
+          );
+        })}
+
+        {/* Arrow marker */}
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#9CA3AF" />
+          </marker>
+        </defs>
+
+        {/* Nodes */}
+        {layout.positioned.map((item) => {
+          const color = item.isHighlighted
+            ? '#DC2626'
+            : (TYPE_COLORS[item.node.type] || '#6B7280');
+          const r = item.isHighlighted ? 8 : 6;
+
+          return (
+            <g key={item.id}>
+              {/* Node shape by type */}
+              {item.node.type === 'event' && (
+                <circle cx={item.x} cy={item.y} r={r}
+                  fill={item.isHighlighted ? color : '#FFFFFF'}
+                  stroke={color} strokeWidth={item.isHighlighted ? 2 : 1.5}
+                />
+              )}
+              {item.node.type === 'entity' && (
+                <rect x={item.x - r} y={item.y - r} width={r * 2} height={r * 2} rx={3}
+                  fill={item.isHighlighted ? color : '#FFFFFF'}
+                  stroke={color} strokeWidth={item.isHighlighted ? 2 : 1.5}
+                />
+              )}
+              {item.node.type === 'decision' && (
+                <polygon
+                  points={`${item.x},${item.y - r} ${item.x + r},${item.y} ${item.x},${item.y + r} ${item.x - r},${item.y}`}
+                  fill={item.isHighlighted ? color : '#FFFFFF'}
+                  stroke={color} strokeWidth={item.isHighlighted ? 2 : 1.5}
+                />
+              )}
+              {(item.node.type === 'keyword' || !['event', 'entity', 'decision'].includes(item.node.type)) && (
+                <polygon
+                  points={`${item.x - r * 0.5},${item.y - r} ${item.x + r * 0.5},${item.y - r} ${item.x + r},${item.y} ${item.x + r * 0.5},${item.y + r} ${item.x - r * 0.5},${item.y + r} ${item.x - r},${item.y}`}
+                  fill={item.isHighlighted ? color : '#FFFFFF'}
+                  stroke={color} strokeWidth={item.isHighlighted ? 2 : 1.5}
+                />
+              )}
+
               {/* Label */}
               <text
-                x={node.x}
-                y={node.y + (node.isHighlighted ? 16 : 14)}
-                textAnchor="middle"
-                fontSize="9"
+                x={item.isBranch ? (item.x > 200 ? item.x + 14 : item.x - 14) : item.x + 14}
+                y={item.y + 4}
+                textAnchor={item.isBranch && item.x < 200 ? 'end' : 'start'}
+                fontSize="12"
                 fontFamily="Georgia, serif"
-                fill={node.isHighlighted ? '#000' : '#6B7280'}
-                fontWeight={node.isHighlighted ? 600 : 400}
+                fill={item.isHighlighted ? '#000' : '#374151'}
+                fontWeight={item.isHighlighted ? 600 : 400}
               >
-                {truncLabel(node.label)}
+                {truncLabel(item.node.label)}
               </text>
             </g>
           );
         })}
+
+        {/* Narrative Arc indicator at bottom */}
+        {narrativeArc && arcIdx >= 0 && (
+          <g>
+            {/* Separator */}
+            <line x1="40" y1={height - 55} x2="360" y2={height - 55} stroke="#E5E5E5" strokeWidth="1" strokeDasharray="4,3" />
+
+            {/* Arc dots */}
+            {ARC_PHASES.map((phase, i) => {
+              const dotX = 80 + i * 60;
+              const dotY = height - 35;
+              const isActive = i <= arcIdx;
+              const isCurrent = i === arcIdx;
+              return (
+                <g key={phase}>
+                  <circle
+                    cx={dotX}
+                    cy={dotY}
+                    r={isCurrent ? 6 : 4}
+                    fill={isActive ? '#000' : '#D1D5DB'}
+                    stroke={isCurrent ? '#000' : 'none'}
+                    strokeWidth={isCurrent ? 2 : 0}
+                  />
+                  {isCurrent && (
+                    <text x={dotX} y={dotY + 16} textAnchor="middle" fontSize="9" fill="#000" fontWeight="600" fontFamily="Georgia, serif">
+                      {ARC_LABELS[phase] || phase}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+
+            {/* Connecting line between dots */}
+            <line x1="80" y1={height - 35} x2={80 + 4 * 60} y2={height - 35} stroke="#E5E5E5" strokeWidth="1" />
+          </g>
+        )}
       </svg>
 
       {/* Overlay hint */}
       <div style={{
         position: 'absolute',
-        bottom: '8px',
+        bottom: '4px',
         left: '0',
         right: '0',
         textAlign: 'center',
