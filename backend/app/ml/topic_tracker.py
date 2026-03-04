@@ -7,6 +7,7 @@ from typing import List, Dict, Optional, Union
 from datetime import datetime, timedelta
 from collections import defaultdict
 import json
+import re
 from loguru import logger
 
 from app.db.qdrant_client import get_qdrant_service
@@ -544,12 +545,23 @@ class TopicTracker:
         logger.info(f"TopicTracker: found {len(matched)} syntheses matching '{topic_name}'")
         return matched
 
+    def _normalize_label(self, text: str) -> str:
+        """Normalize label for deduplication — ignores articles, case, minor diffs."""
+        t = text.lower().strip()
+        for article in ['le ', 'la ', 'les ', "l'", 'un ', 'une ', 'des ', 'du ', 'de ',
+                         'the ', 'a ', 'an ']:
+            if t.startswith(article):
+                t = t[len(article):]
+        t = re.sub(r'[^\w\s]', '', t)
+        t = ' '.join(t.split())
+        return t[:50]
+
     def _aggregate_causal_graphs(self, syntheses: List[Dict]) -> Dict:
-        """Aggregate causal graphs from multiple syntheses."""
-        all_edges = []
-        edge_keys = set()
-        # Collect unique edges first
+        """Aggregate causal graphs from multiple syntheses with deduplication."""
+        # Collect all raw edges with synthesis tracking
+        raw_edges = []
         for s in syntheses:
+            sid = s.get('id', '')
             causal_graph = s.get('causal_graph', {})
             if isinstance(causal_graph, str):
                 try:
@@ -560,31 +572,84 @@ class TopicTracker:
             for edge in causal_graph.get('edges', []):
                 cause = edge.get('cause_text', '')
                 effect = edge.get('effect_text', '')
-                edge_key = f"{cause}_{effect}"
-                if edge_key not in edge_keys and cause and effect:
-                    edge_keys.add(edge_key)
-                    all_edges.append(edge)
+                if cause and effect:
+                    raw_edges.append({**edge, '_synthesis_id': sid})
 
-        # Build unique nodes from edge texts (ensures labels match edge cause_text/effect_text)
-        seen_labels = set()
-        all_nodes = []
-        node_id = 0
+        # Build canonical label mapping via normalization
+        norm_to_canonical: Dict[str, str] = {}  # normalized → shortest raw label
+        for edge in raw_edges:
+            for text in [edge.get('cause_text', ''), edge.get('effect_text', '')]:
+                if not text:
+                    continue
+                norm = self._normalize_label(text)
+                if norm not in norm_to_canonical or len(text) < len(norm_to_canonical[norm]):
+                    norm_to_canonical[norm] = text
+
+        def canonicalize(text: str) -> str:
+            return norm_to_canonical.get(self._normalize_label(text), text)
+
+        # Remap edges to canonical labels and deduplicate
+        edge_map: Dict[str, Dict] = {}  # "cause_effect" → merged edge
+        for edge in raw_edges:
+            cause = canonicalize(edge.get('cause_text', ''))
+            effect = canonicalize(edge.get('effect_text', ''))
+            if cause == effect:
+                continue
+            edge_key = f"{cause}_{effect}"
+            sid = edge.get('_synthesis_id', '')
+            if edge_key in edge_map:
+                existing = edge_map[edge_key]
+                existing['mention_count'] = existing.get('mention_count', 1) + 1
+                if sid and sid not in existing.get('source_syntheses', []):
+                    existing.setdefault('source_syntheses', []).append(sid)
+                # Keep highest confidence
+                existing['confidence'] = max(
+                    existing.get('confidence', 0.5),
+                    edge.get('confidence', 0.5)
+                )
+            else:
+                edge_map[edge_key] = {
+                    'cause_text': cause,
+                    'effect_text': effect,
+                    'relation_type': edge.get('relation_type', 'causes'),
+                    'confidence': edge.get('confidence', 0.5),
+                    'mention_count': 1,
+                    'source_syntheses': [sid] if sid else [],
+                }
+
+        all_edges = list(edge_map.values())
+
+        # Build unique nodes from edges with mention_count
+        node_mentions: Dict[str, int] = {}  # label → count
+        node_syntheses: Dict[str, set] = {}  # label → synthesis ids
         for edge in all_edges:
-            for text, density in [(edge.get('cause_text', ''), 0.7), (edge.get('effect_text', ''), 0.6)]:
-                if text and text not in seen_labels:
-                    seen_labels.add(text)
-                    all_nodes.append({
-                        "id": f"agg_node_{node_id}",
-                        "label": text,
-                        "node_type": "event",
-                        "fact_density": density,
-                    })
-                    node_id += 1
+            for text in [edge['cause_text'], edge['effect_text']]:
+                node_mentions[text] = node_mentions.get(text, 0) + edge.get('mention_count', 1)
+                for sid in edge.get('source_syntheses', []):
+                    node_syntheses.setdefault(text, set()).add(sid)
+
+        # Remove isolated nodes (0 edges) — impossible here since built from edges
+        all_nodes = []
+        for idx, label in enumerate(node_mentions.keys()):
+            all_nodes.append({
+                "id": f"agg_node_{idx}",
+                "label": label,
+                "node_type": "event",
+                "fact_density": 0.6,
+                "mention_count": node_mentions[label],
+                "source_syntheses": list(node_syntheses.get(label, set())),
+            })
+
+        # Sort nodes by mention_count (most referenced first) and cap
+        all_nodes.sort(key=lambda n: n.get('mention_count', 0), reverse=True)
+        capped_nodes = all_nodes[:25]
+        kept_labels = {n['label'] for n in capped_nodes}
+        all_edges = [e for e in all_edges if e['cause_text'] in kept_labels and e['effect_text'] in kept_labels]
 
         return {
-            "nodes": all_nodes[:30],
+            "nodes": capped_nodes,
             "edges": all_edges[:50],
-            "total_nodes": len(all_nodes),
+            "total_nodes": len(capped_nodes),
             "total_edges": len(all_edges)
         }
 

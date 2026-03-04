@@ -265,7 +265,7 @@ export default function NexusForceGraph({
       ? classifyNodesByGraphStructure(rawNodes, rawEdges, centralEntity)
       : null;
 
-    const graphNodes: NexusNode[] = rawNodes.map(n => {
+    let graphNodes: NexusNode[] = rawNodes.map(n => {
       const nodeType = structuralTypes
         ? (structuralTypes.get(n.id) || 'event')
         : (n.node_type || 'event');
@@ -282,10 +282,19 @@ export default function NexusForceGraph({
       };
     });
 
+    // Cap at 12 most-connected nodes for readability
+    const MAX_VISIBLE_NODES = 12;
+    if (graphNodes.length > MAX_VISIBLE_NODES) {
+      graphNodes.sort((a, b) => (b._connectionCount || 0) - (a._connectionCount || 0));
+      graphNodes = graphNodes.slice(0, MAX_VISIBLE_NODES);
+    }
+    const keptNodeIds = new Set(graphNodes.map(n => n.id));
+
     const edgeSet = new Set<string>();
     const graphEdges: NexusEdge[] = [];
 
     for (const { source, target, edge: e } of validEdges) {
+      if (!keptNodeIds.has(source) || !keptNodeIds.has(target)) continue;
       const edgeKey = `${source}-${target}`;
       if (edgeSet.has(edgeKey)) continue;
       edgeSet.add(edgeKey);

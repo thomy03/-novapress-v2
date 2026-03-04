@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import type { NexusForceGraphProps } from './NexusForceGraph';
 
@@ -11,23 +11,116 @@ const NexusForceGraph = dynamic(
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
-interface NexusImage {
-  url: string;
+// ==========================================
+// Types
+// ==========================================
+
+interface NexusSvg {
+  svg_content: string;
   timestamp: number;
   synthesis_id: string;
   synthesis_title: string;
   node_count: number;
+  edge_count?: number;
   topic: string;
+  has_geo?: boolean;
+  has_metrics?: boolean;
 }
 
 interface NexusScrollViewerProps {
   topic: string;
-  // Force graph fallback props
   nodes: NexusForceGraphProps['nodes'];
   edges: NexusForceGraphProps['edges'];
   centralEntity?: string;
   height?: number;
 }
+
+// ==========================================
+// SVG Sanitizer (client-side defense in depth)
+// ==========================================
+
+const DANGEROUS_ELEMENTS = new Set([
+  'script', 'foreignobject', 'iframe', 'embed', 'object',
+  'applet', 'form', 'input', 'textarea', 'button',
+  'link', 'meta', 'base',
+]);
+
+const DANGEROUS_CSS_RE = /url\s*\(|expression\s*\(|@import|behavior\s*:|javascript:/gi;
+
+function sanitizeSvg(raw: string): string {
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(raw, 'image/svg+xml');
+
+    // Check for parse errors
+    const parserError = doc.querySelector('parsererror');
+    if (parserError) {
+      console.warn('SVG parse error:', parserError.textContent);
+      return '';
+    }
+
+    // Recursive sanitizer
+    function sanitizeNode(node: Element) {
+      const children = Array.from(node.children);
+      for (const child of children) {
+        const tag = child.tagName.toLowerCase();
+
+        // Remove dangerous elements
+        if (DANGEROUS_ELEMENTS.has(tag)) {
+          child.remove();
+          continue;
+        }
+
+        // Remove on* event handler attributes
+        const attrs = Array.from(child.attributes);
+        for (const attr of attrs) {
+          if (attr.name.toLowerCase().startsWith('on')) {
+            child.removeAttribute(attr.name);
+          }
+          // Remove href with javascript:
+          if (
+            (attr.name === 'href' || attr.name === 'xlink:href') &&
+            /javascript\s*:/i.test(attr.value)
+          ) {
+            child.removeAttribute(attr.name);
+          }
+        }
+
+        // Sanitize <style> content
+        if (tag === 'style' && child.textContent) {
+          child.textContent = child.textContent.replace(DANGEROUS_CSS_RE, '/* removed */');
+        }
+
+        // Recurse
+        sanitizeNode(child);
+      }
+    }
+
+    const svg = doc.documentElement;
+    sanitizeNode(svg);
+
+    // Ensure viewBox and preserveAspectRatio
+    if (!svg.getAttribute('viewBox')) {
+      svg.setAttribute('viewBox', '0 0 1280 720');
+    }
+    if (!svg.getAttribute('preserveAspectRatio')) {
+      svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    }
+    // Make SVG fill its container
+    svg.setAttribute('width', '100%');
+    svg.setAttribute('height', '100%');
+
+    const serializer = new XMLSerializer();
+    return serializer.serializeToString(svg);
+  } catch (err) {
+    console.error('SVG sanitization failed:', err);
+    return '';
+  }
+}
+
+// ==========================================
+// Component
+// ==========================================
 
 export default function NexusScrollViewer({
   topic,
@@ -36,23 +129,23 @@ export default function NexusScrollViewer({
   centralEntity,
   height = 600,
 }: NexusScrollViewerProps) {
-  const [images, setImages] = useState<NexusImage[]>([]);
+  const [svgs, setSvgs] = useState<NexusSvg[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [scrollProgress, setScrollProgress] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
-  // Fetch timeline images
+  // Fetch timeline SVGs
   useEffect(() => {
-    const fetchImages = async () => {
+    const fetchSvgs = async () => {
       try {
         const response = await fetch(
           `${API_URL}/api/causal/topics/${encodeURIComponent(topic)}/nexus-timeline`
         );
         if (response.ok) {
           const data = await response.json();
-          setImages(data.images || []);
+          setSvgs(data.entries || []);
         }
       } catch (err) {
         console.error('Failed to fetch nexus timeline:', err);
@@ -61,12 +154,20 @@ export default function NexusScrollViewer({
       }
     };
 
-    fetchImages();
+    fetchSvgs();
   }, [topic]);
+
+  // Pre-sanitize SVGs
+  const sanitizedSvgs = useMemo(() => {
+    return svgs.map(svg => ({
+      ...svg,
+      _sanitized: sanitizeSvg(svg.svg_content),
+    }));
+  }, [svgs]);
 
   // Scroll-driven animation handler
   const handleScroll = useCallback(() => {
-    if (!scrollAreaRef.current || images.length < 2) return;
+    if (!scrollAreaRef.current || sanitizedSvgs.length < 2) return;
 
     const el = scrollAreaRef.current;
     const scrollTop = el.scrollTop;
@@ -77,13 +178,12 @@ export default function NexusScrollViewer({
     const progress = Math.min(1, Math.max(0, scrollTop / maxScroll));
     setScrollProgress(progress);
 
-    // Map scroll progress to image index
     const idx = Math.min(
-      images.length - 1,
-      Math.floor(progress * images.length)
+      sanitizedSvgs.length - 1,
+      Math.floor(progress * sanitizedSvgs.length)
     );
     setCurrentIndex(idx);
-  }, [images.length]);
+  }, [sanitizedSvgs.length]);
 
   // Format timestamp
   const formatDate = (ts: number) => {
@@ -123,8 +223,8 @@ export default function NexusScrollViewer({
     );
   }
 
-  // No images → fallback to force graph
-  if (images.length === 0) {
+  // No SVGs → fallback to force graph
+  if (sanitizedSvgs.length === 0 || sanitizedSvgs.every(s => !s._sanitized)) {
     return (
       <NexusForceGraph
         nodes={nodes}
@@ -157,36 +257,34 @@ export default function NexusScrollViewer({
           inset: 0,
           overflowY: 'scroll',
           zIndex: 5,
-          /* Hide scrollbar but keep functionality */
           scrollbarWidth: 'none',
-          msOverflowStyle: 'none',
+          msOverflowStyle: 'none' as React.CSSProperties['msOverflowStyle'],
         }}
       >
-        {/* Spacer to create scroll room: each image = 1 viewport height */}
-        <div style={{ height: `${images.length * 100}%`, pointerEvents: 'none' }} />
+        {/* Spacer to create scroll room */}
+        <div style={{ height: `${sanitizedSvgs.length * 100}%`, pointerEvents: 'none' }} />
       </div>
 
-      {/* Stacked images with opacity crossfade */}
-      {images.map((img, idx) => {
-        // Calculate opacity based on current scroll position
+      {/* Stacked SVGs with opacity crossfade */}
+      {sanitizedSvgs.map((svg, idx) => {
+        if (!svg._sanitized) return null;
+
         let opacity = 0;
         if (idx === currentIndex) {
           opacity = 1;
         } else if (idx === currentIndex - 1) {
-          // Fading out — compute residual
-          const segmentSize = 1 / images.length;
+          const segmentSize = 1 / sanitizedSvgs.length;
           const segmentProgress = (scrollProgress - idx * segmentSize) / segmentSize;
           opacity = Math.max(0, 1 - segmentProgress);
         } else if (idx === currentIndex + 1) {
-          // Fading in
-          const segmentSize = 1 / images.length;
+          const segmentSize = 1 / sanitizedSvgs.length;
           const segmentProgress = (scrollProgress - currentIndex * segmentSize) / segmentSize;
           opacity = Math.max(0, segmentProgress);
         }
 
         return (
           <div
-            key={img.synthesis_id + idx}
+            key={svg.synthesis_id + idx}
             style={{
               position: 'absolute',
               inset: 0,
@@ -194,31 +292,10 @@ export default function NexusScrollViewer({
               transition: 'opacity 0.15s ease-out',
               pointerEvents: 'none',
             }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={img.url}
-              alt={`Nexus ${img.synthesis_title}`}
-              loading={idx <= 2 ? 'eager' : 'lazy'}
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                display: 'block',
-              }}
-            />
-          </div>
+            dangerouslySetInnerHTML={{ __html: svg._sanitized }}
+          />
         );
       })}
-
-      {/* Dark overlay for text readability */}
-      <div style={{
-        position: 'absolute',
-        inset: 0,
-        background: 'linear-gradient(to bottom, rgba(10,10,26,0.4) 0%, transparent 30%, transparent 60%, rgba(10,10,26,0.8) 100%)',
-        pointerEvents: 'none',
-        zIndex: 2,
-      }} />
 
       {/* Title + metadata overlay */}
       <div style={{
@@ -249,8 +326,8 @@ export default function NexusScrollViewer({
         </div>
       </div>
 
-      {/* Current image info */}
-      {images[currentIndex] && (
+      {/* Current SVG info */}
+      {sanitizedSvgs[currentIndex] && (
         <div style={{
           position: 'absolute',
           top: '16px',
@@ -263,7 +340,8 @@ export default function NexusScrollViewer({
             fontSize: '12px',
             color: 'rgba(255, 255, 255, 0.7)',
           }}>
-            {images[currentIndex].node_count} noeuds
+            {sanitizedSvgs[currentIndex].node_count} noeuds
+            {sanitizedSvgs[currentIndex].edge_count ? `  ${sanitizedSvgs[currentIndex].edge_count} relations` : ''}
           </div>
           <div style={{
             fontSize: '13px',
@@ -273,9 +351,9 @@ export default function NexusScrollViewer({
             marginTop: '4px',
             textShadow: '0 1px 4px rgba(0,0,0,0.5)',
           }}>
-            {images[currentIndex].synthesis_title.length > 80
-              ? images[currentIndex].synthesis_title.slice(0, 77) + '...'
-              : images[currentIndex].synthesis_title}
+            {sanitizedSvgs[currentIndex].synthesis_title.length > 80
+              ? sanitizedSvgs[currentIndex].synthesis_title.slice(0, 77) + '...'
+              : sanitizedSvgs[currentIndex].synthesis_title}
           </div>
         </div>
       )}
@@ -307,10 +385,10 @@ export default function NexusScrollViewer({
             borderRadius: '1px',
             transition: 'width 0.1s ease-out',
           }} />
-          {/* Dot markers for each image */}
-          {images.map((img, idx) => {
-            const dotLeft = images.length > 1
-              ? (idx / (images.length - 1)) * 100
+          {/* Dot markers */}
+          {sanitizedSvgs.map((svg, idx) => {
+            const dotLeft = sanitizedSvgs.length > 1
+              ? (idx / (sanitizedSvgs.length - 1)) * 100
               : 50;
             const isActive = idx === currentIndex;
             return (
@@ -339,14 +417,14 @@ export default function NexusScrollViewer({
           justifyContent: 'space-between',
           marginTop: '8px',
         }}>
-          {images.length > 0 && (
+          {sanitizedSvgs.length > 0 && (
             <span style={{ fontSize: '10px', color: 'rgba(255, 255, 255, 0.4)' }}>
-              {formatDate(images[0].timestamp)}
+              {formatDate(sanitizedSvgs[0].timestamp)}
             </span>
           )}
-          {images.length > 1 && (
+          {sanitizedSvgs.length > 1 && (
             <span style={{ fontSize: '10px', color: 'rgba(255, 255, 255, 0.4)' }}>
-              {formatDate(images[images.length - 1].timestamp)}
+              {formatDate(sanitizedSvgs[sanitizedSvgs.length - 1].timestamp)}
             </span>
           )}
         </div>
@@ -378,7 +456,7 @@ export default function NexusScrollViewer({
         }} />
       </div>
 
-      {/* Image counter */}
+      {/* SVG counter */}
       <div style={{
         position: 'absolute',
         bottom: '52px',
@@ -388,7 +466,7 @@ export default function NexusScrollViewer({
         color: 'rgba(255, 255, 255, 0.4)',
         pointerEvents: 'none',
       }}>
-        {currentIndex + 1} / {images.length}
+        {currentIndex + 1} / {sanitizedSvgs.length}
       </div>
 
       <style jsx>{`

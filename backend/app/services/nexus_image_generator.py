@@ -182,15 +182,36 @@ def _topological_sort(nodes: List[Dict], edges: List[Dict]) -> List[List[str]]:
 
 
 def _find_node_id_by_text(text: str, id_to_node: Dict[str, Dict]) -> str:
-    """Find a node ID by matching cause/effect text to node labels."""
+    """Find a node ID by matching cause/effect text to node labels.
+    Uses exact substring match first, then word overlap as fallback.
+    """
     text_lower = text.lower().strip()
     if not text_lower:
         return ""
+
+    # 1. Exact substring match
     for nid, node in id_to_node.items():
         label = node.get("label", "").lower().strip()
         if label and (text_lower in label or label in text_lower):
             return nid
-    return ""
+
+    # 2. Word overlap match (Jaccard >= 0.4)
+    text_words = {w for w in text_lower.split() if len(w) > 3}
+    if not text_words:
+        return ""
+
+    best_match = ""
+    best_score = 0.0
+    for nid, node in id_to_node.items():
+        label_words = {w for w in node.get("label", "").lower().split() if len(w) > 3}
+        if not label_words:
+            continue
+        overlap = len(text_words & label_words) / max(len(text_words | label_words), 1)
+        if overlap > best_score and overlap >= 0.4:
+            best_score = overlap
+            best_match = nid
+
+    return best_match
 
 
 def _compute_node_positions(
@@ -711,6 +732,7 @@ class NexusSvgGenerator:
                 synthesis_id=synthesis_id,
                 synthesis_title=synthesis_title,
                 node_count=len(nodes),
+                edge_count=len(edge_paths),
                 has_geo=has_geo,
                 has_metrics=len(metrics) > 0,
             )
@@ -771,8 +793,9 @@ class NexusSvgGenerator:
         synthesis_id: str,
         synthesis_title: str,
         node_count: int,
-        has_geo: bool,
-        has_metrics: bool,
+        edge_count: int = 0,
+        has_geo: bool = False,
+        has_metrics: bool = False,
     ):
         """Store nexus SVG in Redis ZSET (score = unix timestamp)."""
         try:
@@ -788,6 +811,7 @@ class NexusSvgGenerator:
                 "synthesis_id": synthesis_id,
                 "synthesis_title": synthesis_title,
                 "node_count": node_count,
+                "edge_count": edge_count,
                 "topic": topic,
                 "has_geo": has_geo,
                 "has_metrics": has_metrics,
@@ -1066,6 +1090,292 @@ Each connection line: stroke-dashoffset: 200, animation: drawLine 1s ease forwar
 
         except Exception as e:
             logger.warning(f"[geo] Failed to read geo SVG from Redis: {e}")
+            return None
+
+    # ==========================================
+    # Editorial SVG Illustrations
+    # ==========================================
+
+    def _build_editorial_svg_prompt(
+        self,
+        title: str,
+        category: str,
+        date_str: str,
+        key_points: List[str],
+        key_metrics: List[Dict],
+        entities: List[str],
+        sentiment: str,
+    ) -> str:
+        """Build prompt for editorial SVG illustration. Gemini is a rendering engine."""
+
+        # Category-specific accent color
+        cat_colors = {
+            "MONDE": "#DC2626", "POLITIQUE": "#DC2626",
+            "ECONOMIE": "#F59E0B", "TECH": "#2563EB",
+            "CULTURE": "#8B5CF6", "SPORT": "#10B981",
+            "SCIENCES": "#06B6D4",
+        }
+        accent = cat_colors.get(category.upper(), "#DC2626")
+
+        # Build entities section (max 5)
+        entities_section = ""
+        entity_positions = []
+        num_entities = min(len(entities), 5)
+        if num_entities > 0:
+            # Distribute entities in the illustration zone
+            cx_start = 200
+            cx_step = 400 // max(num_entities, 1)
+            for i, entity in enumerate(entities[:5]):
+                cx = cx_start + i * cx_step
+                cy = 180 + (i % 2) * 60  # Stagger vertically
+                radius = 35 if i == 0 else 28  # Main entity larger
+                entity_positions.append({"cx": cx, "cy": cy, "r": radius, "name": entity})
+                entities_section += (
+                    f'  - Entity circle: cx={cx}, cy={cy}, r={radius}, '
+                    f'fill="{accent}22", stroke="{accent}", stroke-width=1.5\n'
+                    f'    Label: "{entity[:20]}" in Georgia 11px bold fill="#FFFFFF", centered at ({cx}, {cy})\n'
+                    f'    Animation: fadeIn 0.5s ease forwards, delay={0.3 + i * 0.2}s\n'
+                )
+
+        # Build connections between entities
+        connections_section = ""
+        if len(entity_positions) >= 2:
+            connections_section = "\nConnections between entities:\n"
+            for i in range(len(entity_positions) - 1):
+                p1 = entity_positions[i]
+                p2 = entity_positions[i + 1]
+                connections_section += (
+                    f'  - Line: x1={p1["cx"]}, y1={p1["cy"]}, x2={p2["cx"]}, y2={p2["cy"]}, '
+                    f'stroke="{accent}", stroke-opacity=0.2, stroke-width=1, stroke-dasharray="4,4"\n'
+                )
+
+        # Build key points section (as visual elements)
+        points_section = ""
+        for i, point in enumerate(key_points[:3]):
+            short = point[:50]
+            y = 250 + i * 30
+            points_section += (
+                f'  - Key point {i+1}: small diamond (8px) fill="{accent}" at (80, {y}), '
+                f'text "{short}" in 11px fill="#CCCCCC" at (100, {y})\n'
+            )
+
+        # Build metrics section
+        metrics_section = ""
+        if key_metrics:
+            metrics_section = "\n=== METRICS BAR (y=380..440) ===\n"
+            metrics_section += 'Background: rect x=30, y=375, width=740, height=65, rx=4, fill="#111122"\n'
+            num_m = min(3, len(key_metrics))
+            for i, m in enumerate(key_metrics[:3]):
+                mx = 80 + i * (660 // num_m)
+                val = str(m.get("value", ""))[:15]
+                label = str(m.get("label", ""))[:25]
+                metrics_section += (
+                    f'  - Metric {i+1}: value="{val}" in Georgia 22px bold fill="#FFFFFF" at ({mx}, 405), '
+                    f'label="{label}" in 10px fill="#888888" at ({mx}, 425), '
+                    f'animation: fadeIn 0.5s ease forwards, delay={1.2 + i * 0.2}s\n'
+                )
+
+        # Sentiment indicator
+        sentiment_colors = {
+            "positive": "#10B981", "negative": "#DC2626",
+            "neutral": "#6B7280", "mixed": "#F59E0B",
+        }
+        sent_color = sentiment_colors.get(sentiment.lower(), "#6B7280")
+        sentiment_section = (
+            f'\n=== SENTIMENT INDICATOR (top-right) ===\n'
+            f'Small bar: rect x=710, y=16, width=60, height=4, rx=2, fill="{sent_color}"\n'
+            f'Label: "{sentiment.upper()}" in 8px fill="{sent_color}", x=710, y=32\n'
+        )
+
+        prompt = f"""You are an SVG code generator. Generate ONE valid SVG element.
+Viewport: width="800" height="450" viewBox="0 0 800 450"
+
+=== BACKGROUND ===
+Full background: rect 0,0 800x450 fill="#0F1118"
+Subtle grid: 6 horizontal lines full width, stroke="#FFFFFF" stroke-opacity=0.03, stroke-width=0.5
+             6 vertical lines full height, stroke="#FFFFFF" stroke-opacity=0.03, stroke-width=0.5
+
+=== HEADER (y=0..55) ===
+- Title: "{title}" in Georgia 16px bold fill="#FFFFFF", x=30, y=30, max-width 650px
+  If title is longer than ~60 chars, truncate with "..."
+- Category badge: rect rx=3 fill="{accent}22" + text "{category}" 9px uppercase fill="{accent}", x=30, y=48
+- Date: "{date_str}" 10px fill="#555555", x=200, y=48
+- Horizontal separator: line y=55, stroke="#1E293B", stroke-width=0.5
+{sentiment_section}
+
+=== ILLUSTRATION ZONE (y=65..370) ===
+This is a conceptual editorial illustration — NOT a chart or graph.
+Use geometric shapes to represent the subject matter symbolically.
+
+Entities (main actors/concepts):
+{entities_section}
+{connections_section}
+
+Key narrative points:
+{points_section}
+
+Decorative elements:
+  - 2-3 small accent circles (r=3-5) scattered, fill="{accent}", opacity=0.15
+  - A subtle horizontal trend arrow if sentiment is positive (up) or negative (down), stroke="{accent}", opacity=0.3
+{metrics_section}
+
+=== ANIMATIONS (in <style> inside the SVG) ===
+@keyframes fadeIn {{
+  from {{ opacity: 0; transform: translateY(6px); }}
+  to {{ opacity: 1; transform: translateY(0); }}
+}}
+@keyframes pulse {{
+  0%, 100% {{ opacity: 0.6; }}
+  50% {{ opacity: 1; }}
+}}
+Each element: opacity: 0, animation: fadeIn 0.5s ease forwards
+Metrics values: animation: pulse 3s ease-in-out infinite (after fadeIn)
+
+=== ABSOLUTE RULES ===
+1. Output ONLY the SVG code. No markdown fences, no explanation, no comments outside SVG.
+2. Start with <svg and end with </svg>.
+3. All labels must be readable: white/light text on dark background.
+4. Font: Georgia for title and metric values, system-ui for labels.
+5. Keep total output under 8000 characters.
+6. Use <style> inside the SVG for all animations.
+7. The SVG must be self-contained (no external resources).
+8. Do NOT include any article body text — only title, entity names, metrics.
+9. Style: newspaper editorial infographic, data-driven, professional.
+"""
+        return prompt
+
+    async def generate_editorial_svg(
+        self,
+        synthesis_id: str,
+        title: str,
+        category: str,
+        key_points: List[str],
+        key_metrics: List[Dict],
+        entities: List[str],
+        sentiment: str,
+    ) -> Optional[str]:
+        """
+        Generate an editorial SVG illustration for a synthesis.
+        Returns SVG content string or None on failure.
+        """
+        if not self.enabled:
+            return None
+
+        # Guard: skip if already generated this run
+        edit_key = f"editorial:{synthesis_id}"
+        if edit_key in self._generated_this_run:
+            return None
+
+        date_str = datetime.now().strftime("%d %b %Y").upper()
+
+        prompt = self._build_editorial_svg_prompt(
+            title=title[:80],
+            category=category.upper()[:20] if category else "MONDE",
+            date_str=date_str,
+            key_points=key_points or [],
+            key_metrics=key_metrics or [],
+            entities=entities or [],
+            sentiment=sentiment or "neutral",
+        )
+
+        async def _do_call() -> Optional[str]:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                        "HTTP-Referer": "https://novapressai.com",
+                        "X-Title": "NovaPress AI",
+                    },
+                    json={
+                        "model": self.model,
+                        "messages": [
+                            {
+                                "role": "system",
+                                "content": "You are an SVG code generator. Output ONLY valid SVG code, nothing else. No markdown, no explanation."
+                            },
+                            {
+                                "role": "user",
+                                "content": prompt,
+                            }
+                        ],
+                        "temperature": 0.2,
+                        "max_tokens": 8000,
+                    },
+                )
+
+                if response.status_code != 200:
+                    raise ValueError(f"OpenRouter error {response.status_code}: {response.text[:300]}")
+
+                data = response.json()
+                content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                if not content:
+                    raise ValueError("OpenRouter returned empty content")
+                return content
+
+        try:
+            raw_svg = await self.circuit_breaker.call(_do_call)
+            if not raw_svg:
+                return None
+
+            svg_content = self._post_process_svg(raw_svg, default_viewbox="0 0 800 450")
+            if not svg_content:
+                logger.warning(f"[editorial] SVG post-processing failed for '{synthesis_id}'")
+                return None
+
+            # Size limit (40KB)
+            if len(svg_content.encode('utf-8')) > 40_000:
+                svg_content = re.sub(r'@keyframes\s+\w+\s*\{[^}]*\}', '', svg_content)
+                svg_content = sanitize_svg(svg_content) or svg_content
+
+            self._generated_this_run.add(edit_key)
+
+            # Store in Redis
+            await self._store_editorial_svg(synthesis_id, svg_content)
+
+            logger.info(
+                f"[editorial] Generated SVG for '{title[:40]}' "
+                f"({len(entities)} entities, {len(svg_content)} chars)"
+            )
+            return svg_content
+
+        except CircuitOpenError:
+            logger.warning("[editorial] Circuit breaker is open, skipping")
+            return None
+        except Exception as e:
+            logger.error(f"[editorial] SVG generation failed for '{synthesis_id}': {e}")
+            return None
+
+    async def _store_editorial_svg(self, synthesis_id: str, svg_content: str):
+        """Store editorial SVG in Redis as a simple string key."""
+        try:
+            import aioredis
+            redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+
+            key = f"novapress:editorial:{synthesis_id}:svg"
+            await redis.set(key, svg_content, ex=90 * 24 * 3600)  # TTL 90 days
+
+            await redis.aclose()
+            logger.debug(f"[editorial] Stored SVG for '{synthesis_id}' in Redis")
+
+        except Exception as e:
+            logger.warning(f"[editorial] Failed to store SVG in Redis: {e}")
+
+    async def get_editorial_svg(self, synthesis_id: str) -> Optional[str]:
+        """Retrieve editorial SVG from Redis."""
+        try:
+            import aioredis
+            redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+
+            key = f"novapress:editorial:{synthesis_id}:svg"
+            svg_content = await redis.get(key)
+
+            await redis.aclose()
+            return svg_content
+
+        except Exception as e:
+            logger.warning(f"[editorial] Failed to read SVG from Redis: {e}")
             return None
 
 

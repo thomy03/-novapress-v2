@@ -1108,6 +1108,7 @@ class QdrantService:
                 "source_images": synthesis.get("source_images", [])[:5],
                 # Phase 3A: Geographic context from LLM
                 "geographic_context": synthesis.get("geographic_context", [])[:10],
+                "geo_relevance": synthesis.get("geo_relevance", "none"),
             }
         )
 

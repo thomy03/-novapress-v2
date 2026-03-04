@@ -2,14 +2,51 @@
 
 /**
  * HeroSynthesis - Large hero card for the main synthesis on homepage
- * Features: Category badge, Georgia title, MiniNovaLine sparkline, chapo, metadata, CTA
+ * Features: Editorial SVG illustration, Category badge, Georgia title, MiniNovaLine sparkline, chapo, metadata, CTA
  */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTheme } from '@/app/contexts/ThemeContext';
 import { MiniNovaLine } from '@/app/components/novaline/MiniNovaLine';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+
+// Minimal SVG sanitizer
+const DANGEROUS_ELEMENTS = new Set([
+  'script', 'foreignobject', 'iframe', 'embed', 'object',
+  'applet', 'form', 'input', 'textarea', 'button',
+  'link', 'meta', 'base',
+]);
+const DANGEROUS_CSS_RE = /url\s*\(|expression\s*\(|@import|behavior\s*:|javascript:/gi;
+
+function sanitizeSvg(raw: string): string {
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(raw, 'image/svg+xml');
+    if (doc.querySelector('parsererror')) return '';
+
+    function sanitizeNode(node: Element) {
+      for (const child of Array.from(node.children)) {
+        if (DANGEROUS_ELEMENTS.has(child.tagName.toLowerCase())) { child.remove(); continue; }
+        for (const attr of Array.from(child.attributes)) {
+          if (attr.name.toLowerCase().startsWith('on')) child.removeAttribute(attr.name);
+          if ((attr.name === 'href' || attr.name === 'xlink:href') && /javascript\s*:/i.test(attr.value))
+            child.removeAttribute(attr.name);
+        }
+        if (child.tagName.toLowerCase() === 'style' && child.textContent)
+          child.textContent = child.textContent.replace(DANGEROUS_CSS_RE, '/* removed */');
+        sanitizeNode(child);
+      }
+    }
+
+    const svgEl = doc.querySelector('svg');
+    if (!svgEl) return '';
+    sanitizeNode(svgEl);
+    return new XMLSerializer().serializeToString(svgEl);
+  } catch { return ''; }
+}
 
 // Category colors (newspaper style - same as TrendingTopics)
 const CATEGORY_COLORS: Record<string, string> = {
@@ -41,6 +78,15 @@ interface HeroSynthesisProps {
 export function HeroSynthesis({ synthesis }: HeroSynthesisProps) {
   const { theme } = useTheme();
   const router = useRouter();
+  const [editorialSvg, setEditorialSvg] = useState<string>('');
+
+  useEffect(() => {
+    if (!synthesis.id) return;
+    fetch(`${API_URL}/api/syntheses/by-id/${synthesis.id}/editorial-svg`)
+      .then(res => res.ok ? res.text() : '')
+      .then(svg => { if (svg) setEditorialSvg(sanitizeSvg(svg)); })
+      .catch(() => {});
+  }, [synthesis.id]);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -69,8 +115,20 @@ export function HeroSynthesis({ synthesis }: HeroSynthesisProps) {
         cursor: 'pointer',
       }}
     >
-      {/* Hero image */}
-      {synthesis.imageUrl && (
+      {/* Hero illustration: editorial SVG first, fallback to fal.ai image */}
+      {editorialSvg ? (
+        <div style={{
+          width: '100%',
+          maxHeight: '320px',
+          overflow: 'hidden',
+          borderRadius: '2px',
+        }}>
+          <div
+            dangerouslySetInnerHTML={{ __html: editorialSvg }}
+            style={{ width: '100%' }}
+          />
+        </div>
+      ) : synthesis.imageUrl ? (
         <div style={{
           width: '100%',
           height: '280px',
@@ -91,7 +149,7 @@ export function HeroSynthesis({ synthesis }: HeroSynthesisProps) {
             }}
           />
         </div>
-      )}
+      ) : null}
 
       {/* Category badge */}
       {synthesis.category && (

@@ -277,6 +277,7 @@ function TopicDashboardPage() {
         sourcesTotal={dashboard.sources_total || 0}
         entitiesCount={dashboard.key_entities.length}
         causalNodes={dashboard.aggregated_causal_graph.total_nodes}
+        firstDate={dashboard.first_date}
       />
 
       {/* Tab Navigation */}
@@ -408,6 +409,48 @@ function TopicDashboardPage() {
         {/* === TAB: Overview === */}
         {activeTab === 'overview' && (
           <section style={styles.section}>
+            {/* Dossier Summary */}
+            <div style={{
+              borderLeft: '3px solid #000',
+              padding: '16px 20px',
+              marginBottom: '32px',
+              backgroundColor: '#F9FAFB',
+            }}>
+              <div style={{
+                fontSize: '10px',
+                fontWeight: 800,
+                letterSpacing: '2px',
+                color: '#6B7280',
+                textTransform: 'uppercase' as const,
+                marginBottom: '8px',
+              }}>
+                RESUME DU DOSSIER
+              </div>
+              <p style={{
+                fontFamily: 'Georgia, "Times New Roman", serif',
+                fontSize: '16px',
+                color: '#374151',
+                lineHeight: 1.6,
+                margin: 0,
+              }}>
+                Ce dossier suit <strong>{dashboard.topic}</strong> depuis le{' '}
+                {formatDate(dashboard.first_date)} a travers{' '}
+                <strong>{dashboard.synthesis_count} syntheses</strong>.
+                {dashboard.key_entities.length > 0 && (
+                  <>
+                    {' '}Les acteurs principaux sont{' '}
+                    <strong>
+                      {dashboard.key_entities.slice(0, 3).map(e => e.name).join(', ')}
+                    </strong>.
+                  </>
+                )}
+                {' '}Le sujet est actuellement{' '}
+                <strong style={{ color: arcConfig.color }}>
+                  {arcConfig.label.toLowerCase()}
+                </strong>.
+              </p>
+            </div>
+
             {/* 2-column layout */}
             <div style={{
               display: 'grid',

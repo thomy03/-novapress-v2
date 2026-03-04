@@ -37,9 +37,8 @@ function NeuralNodeComponent({ data: rawData, selected }: NodeProps) {
   // DYNAMIC: More sources = More dendrites (3-8)
   const dendritesCount = Math.min(8, Math.max(3, data.sourcesCount || 4));
 
-  // Node size based on importance (fact density)
-  const baseSize = 60;
-  const nodeSize = baseSize + (data.factDensity || 0.5) * 20;
+  // Node size based on connections (more connections = bigger node)
+  const nodeSize = 50 + Math.min(data.sourcesCount || 1, 6) * 6;
 
   // Color based on activation level
   const activeColor = isSource ? '#DC2626' : getCascadeColor(activationLevel);
@@ -55,7 +54,7 @@ function NeuralNodeComponent({ data: rawData, selected }: NodeProps) {
       {/* Connection handles */}
       <Handle
         type="target"
-        position={Position.Top}
+        position={Position.Left}
         style={{
           background: isActive ? activeColor : '#9CA3AF',
           width: 8,
@@ -120,13 +119,13 @@ function NeuralNodeComponent({ data: rawData, selected }: NodeProps) {
         <span
           style={{
             color: isActive ? '#FFFFFF' : '#374151',
-            fontSize: nodeSize < 70 ? '9px' : '10px',
+            fontSize: '11px',
             fontFamily: 'Georgia, serif',
             textAlign: 'center',
             padding: '4px',
             lineHeight: 1.2,
             fontWeight: isActive ? 600 : 400,
-            maxWidth: `${nodeSize - 10}px`,
+            maxWidth: `${nodeSize - 8}px`,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             display: '-webkit-box',
@@ -134,7 +133,7 @@ function NeuralNodeComponent({ data: rawData, selected }: NodeProps) {
             WebkitBoxOrient: 'vertical' as const,
           }}
         >
-          {data.label?.length > 30 ? `${data.label.slice(0, 30)}...` : data.label}
+          {data.label?.length > 45 ? `${data.label.slice(0, 45)}...` : data.label}
         </span>
       </div>
 
@@ -196,7 +195,7 @@ function NeuralNodeComponent({ data: rawData, selected }: NodeProps) {
 
       <Handle
         type="source"
-        position={Position.Bottom}
+        position={Position.Right}
         style={{
           background: isActive ? activeColor : '#9CA3AF',
           width: 8,

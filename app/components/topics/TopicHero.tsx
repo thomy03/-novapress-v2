@@ -21,6 +21,7 @@ interface TopicHeroProps {
   sourcesTotal: number;
   entitiesCount: number;
   causalNodes: number;
+  firstDate?: string;
 }
 
 export default function TopicHero({
@@ -32,17 +33,17 @@ export default function TopicHero({
   transparencyAvg,
   sourcesTotal,
   entitiesCount,
-  causalNodes,
+  firstDate,
 }: TopicHeroProps) {
   const arc = NARRATIVE_ARC_COLORS[narrativeArc] || NARRATIVE_ARC_COLORS.developing;
+
+  const transparencyColor = transparencyAvg >= 70 ? '#10B981' : transparencyAvg >= 40 ? '#F59E0B' : '#DC2626';
 
   const kpis = [
     { value: synthesisCount, label: 'SYNTH\u00c8SES' },
     { value: `${durationDays}j`, label: 'DUR\u00c9E' },
     { value: sourcesTotal, label: 'SOURCES' },
     { value: entitiesCount, label: 'ENTIT\u00c9S' },
-    { value: Math.round(transparencyAvg), label: 'TRANSPARENCE' },
-    { value: causalNodes, label: 'NOEUDS CAUSAUX' },
   ];
 
   return (
@@ -113,12 +114,24 @@ export default function TopicHero({
         fontWeight: 700,
         lineHeight: 1.1,
         color: '#000',
-        margin: '0 0 24px 0',
+        margin: '0 0 8px 0',
         borderBottom: '3px solid #000',
         paddingBottom: '16px',
       }}>
         {topic}
       </h1>
+
+      {/* Subtitle */}
+      {firstDate && (
+        <p style={{
+          fontSize: '14px',
+          color: '#6B7280',
+          margin: '0 0 24px 0',
+        }}>
+          Dossier suivi depuis le{' '}
+          {new Date(firstDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+        </p>
+      )}
 
       {/* KPI Bar — large numbers with vertical dividers */}
       <div style={{
@@ -160,6 +173,35 @@ export default function TopicHero({
             </div>
           </div>
         ))}
+
+        {/* Transparency score with color indicator */}
+        <div
+          style={{
+            flex: '1 0 auto',
+            textAlign: 'center',
+            padding: '0 20px',
+            minWidth: '100px',
+          }}
+        >
+          <div style={{
+            fontFamily: 'Georgia, "Times New Roman", serif',
+            fontSize: '28px',
+            fontWeight: 700,
+            color: transparencyColor,
+            lineHeight: 1.2,
+          }}>
+            {Math.round(transparencyAvg)}<span style={{ fontSize: '16px', color: '#9CA3AF' }}>/100</span>
+          </div>
+          <div style={{
+            fontSize: '10px',
+            fontWeight: 700,
+            letterSpacing: '1.5px',
+            color: '#9CA3AF',
+            marginTop: '4px',
+          }}>
+            TRANSPARENCE
+          </div>
+        </div>
       </div>
     </div>
   );

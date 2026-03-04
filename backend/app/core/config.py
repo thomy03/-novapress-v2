@@ -5,18 +5,23 @@ Using pydantic-settings for type-safe environment variables
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
 from pathlib import Path
+import os
 import warnings
 
 # Get the backend directory (where .env should be)
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 ENV_FILE = BACKEND_DIR / ".env"
 
+# Support env file override for remote pipeline execution
+# Set ENV_FILE_OVERRIDE before importing config to use .env.pipeline
+_env_file = os.environ.get("ENV_FILE_OVERRIDE") or str(ENV_FILE)
+
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables"""
 
     model_config = SettingsConfigDict(
-        env_file=str(ENV_FILE),
+        env_file=_env_file,
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore"
@@ -57,6 +62,9 @@ class Settings(BaseSettings):
     FAL_MODEL_PHOTOREALISTIC: str = "fal-ai/nano-banana-pro"  # ~$0.04 (SPORT)
     FAL_MODEL_DESIGN: str = "fal-ai/recraft/v4/text-to-image"  # ~$0.04 (MONDE, POLITIQUE, ECO, SCIENCES)
     FAL_MODEL_FAST: str = "fal-ai/flux/schnell"  # ~$0.003 (fallback)
+
+    # Nexus SVG Generation (Gemini via OpenRouter)
+    NEXUS_SVG_MODEL: str = "google/gemini-3.1-flash-lite-preview"
 
     # BGE-M3 Embeddings (Open Source)
     EMBEDDING_MODEL: str = "BAAI/bge-m3"

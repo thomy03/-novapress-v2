@@ -466,6 +466,19 @@ INSTRUCTIONS DE RÉDACTION:
    - "developing": histoire en cours, nouveaux développements
    - "standard": actualité normale, information de fond
 
+9. CONTEXTE GÉOGRAPHIQUE (geographic_context + geo_relevance):
+   ⚠️ RÈGLES STRICTES — NE PAS AJOUTER DE CARTE INUTILE:
+   - geo_relevance: évalue si la géographie est CENTRALE au sujet:
+     - "high": conflit localisé, catastrophe naturelle, événement dans un lieu précis
+     - "medium": politique internationale avec lieux clés identifiables
+     - "none": sujet tech, économie abstraite, tendance globale, régulation, IA, marché boursier
+   - SI geo_relevance = "none" → geographic_context DOIT être un tableau VIDE []
+   - SI geo_relevance = "high" ou "medium":
+     - Précise les VILLES (type: "city"), PAS les pays/capitales par défaut
+     - Exemple: "Rafah" pas "Palestine", "Kharkiv" pas "Ukraine", "Toulouse" pas "France"
+     - N'ajoute un pays (type: "country") QUE si le pays ENTIER est concerné (ex: sanctions contre l'Iran)
+     - Le champ "country" = code ISO2 du pays parent (FR, US, etc.)
+
 Format JSON strict:
 {{
   "title": "Titre accrocheur et factuel",
@@ -482,9 +495,8 @@ Format JSON strict:
     {{"cause": "Fait déclencheur", "effect": "Conséquence observée", "type": "causes", "sources": ["Source1"]}},
     {{"cause": "Réaction", "effect": "Impact", "type": "triggers", "sources": ["Source2"]}}
   ],
-  "geographic_context": [
-    {{"place": "Lieu précis mentionné", "type": "city|country|region|waterway", "role": "Rôle dans l'actualité", "country": "FR"}}
-  ],
+  "geographic_context": [],
+  "geo_relevance": "none",
   "sentiment": "positive|negative|neutral|mixed",
   "topic_intensity": "breaking|hot|developing|standard",
   "readingTime": {max(3, min_words // 200)}
@@ -507,6 +519,7 @@ Format JSON strict:
             "analysis": result.get("analysis", ""),
             "causal_chain": result.get("causal_chain", []),
             "geographic_context": result.get("geographic_context", []),
+            "geo_relevance": result.get("geo_relevance", "none"),
             "sentiment": result.get("sentiment", "neutral"),
             "topic_intensity": result.get("topic_intensity", "standard"),
             "complianceScore": 95,
@@ -710,6 +723,19 @@ STRUCTURE ATTENDUE:
    - "developing": histoire en cours
    - "standard": actualité normale
 
+9. CONTEXTE GÉOGRAPHIQUE (geographic_context + geo_relevance):
+   ⚠️ RÈGLES STRICTES — NE PAS AJOUTER DE CARTE INUTILE:
+   - geo_relevance: évalue si la géographie est CENTRALE au sujet:
+     - "high": conflit localisé, catastrophe naturelle, événement dans un lieu précis
+     - "medium": politique internationale avec lieux clés identifiables
+     - "none": sujet tech, économie abstraite, tendance globale, régulation, IA, marché boursier
+   - SI geo_relevance = "none" → geographic_context DOIT être un tableau VIDE []
+   - SI geo_relevance = "high" ou "medium":
+     - Précise les VILLES (type: "city"), PAS les pays/capitales par défaut
+     - Exemple: "Rafah" pas "Palestine", "Kharkiv" pas "Ukraine"
+     - N'ajoute un pays (type: "country") QUE si le pays ENTIER est concerné
+     - Le champ "country" = code ISO2 du pays parent (FR, US, etc.)
+
 Format JSON strict:
 {{
   "title": "...",
@@ -721,9 +747,8 @@ Format JSON strict:
     {{"cause": "Événement déclencheur", "effect": "Conséquence", "type": "causes", "sources": ["Source"]}},
     {{"cause": "Action", "effect": "Réaction", "type": "triggers", "sources": ["Source"]}}
   ],
-  "geographic_context": [
-    {{"place": "Lieu précis", "type": "city|country|region|waterway", "role": "Rôle contextuel", "country": "XX"}}
-  ],
+  "geographic_context": [],
+  "geo_relevance": "none",
   "sentiment": "positive|negative|neutral|mixed",
   "topic_intensity": "breaking|hot|developing|standard",
   "readingTime": {max(3, min_words // 200)},
@@ -747,6 +772,7 @@ Format JSON strict:
             "analysis": result.get("analysis", ""),
             "causal_chain": result.get("causal_chain", []),
             "geographic_context": result.get("geographic_context", []),
+            "geo_relevance": result.get("geo_relevance", "none"),
             "sentiment": result.get("sentiment", "neutral"),
             "topic_intensity": result.get("topic_intensity", "standard"),
             "complianceScore": 95,
@@ -944,43 +970,43 @@ INSTRUCTIONS SPÉCIALES
 
 6. TIMELINE (timeline): Liste des dates clés (si histoire > 1 jour)
 
-7. ⚠️ CHAÎNE CAUSALE (causal_chain): ABSOLUMENT OBLIGATOIRE - NE JAMAIS OMETTRE
+7. ⚠️ CHAÎNE CAUSALE (causal_chain): ARBRE CAUSAL OBLIGATOIRE
    ╔══════════════════════════════════════════════════════════════════════════╗
-   ║  🔴🔴🔴 CRITIQUE: MINIMUM 3 RELATIONS CAUSALES OBLIGATOIRES 🔴🔴🔴       ║
-   ╠══════════════════════════════════════════════════════════════════════════╣
-   ║  ⚠️ Si tu ne génères pas AU MOINS 3 relations, la synthèse est REJETÉE  ║
-   ║  ⚠️ CHAQUE actualité a des CAUSES et des CONSÉQUENCES - trouve-les!     ║
+   ║  🔴 MINIMUM 5 RELATIONS formant un ARBRE CONNECTÉ (pas des lignes!)  🔴 ║
+   ║  🔴 Si tu ne génères pas AU MOINS 5 relations, la synthèse est REJETÉE  ║
    ╚══════════════════════════════════════════════════════════════════════════╝
 
-   🔍 MÉTHODE POUR IDENTIFIER LES RELATIONS:
+   🔴 RÈGLES STRUCTURELLES ABSOLUES:
 
-   Étape 1 - Pour CHAQUE fait principal, pose ces questions:
-   • "Pourquoi cela s'est-il produit?" → Identifie la CAUSE
-   • "Qu'est-ce que cela va provoquer?" → Identifie l'EFFET
+   A) LABELS COURTS: Chaque cause/effect = 5-8 mots MAX (pas de phrases longues!)
+      ✅ BON: "Retrait de Netflix du marché"
+      ✅ BON: "Chute devise (-15%)"
+      ❌ INTERDIT: "Le retrait stratégique de Netflix de la course à l'acquisition de Paramount"
+      ❌ INTERDIT: phrases > 8 mots
 
-   Étape 2 - Cherche ces indicateurs dans les sources:
-   • Mots causaux FR: "car", "donc", "suite à", "en raison de", "a provoqué",
-     "conduit à", "entraîne", "parce que", "à cause de", "grâce à"
-   • Mots causaux EN: "because", "due to", "as a result", "led to", "caused"
+   B) CHAÎNAGE OBLIGATOIRE: L'effet d'une relation DOIT être la cause EXACTE d'une autre.
+      Utilise le MÊME TEXTE MOT POUR MOT pour relier les relations en arbre.
+      Exemple correct:
+        Relation 1: cause="Sanctions UE", effect="Chute devise locale"
+        Relation 2: cause="Chute devise locale", effect="Hausse prix importations"
+        → "Chute devise locale" est IDENTIQUE dans les deux relations → elles sont reliées!
+      Exemple INCORRECT (textes différents = branches isolées):
+        Relation 1: effect="Chute de 15% de la devise locale en 24 heures"
+        Relation 2: cause="Chute de la devise locale"
+        → TEXTES DIFFÉRENTS = PAS de connexion! INTERDIT!
 
-   Étape 3 - Types d'événements qui ONT TOUJOURS des relations causales:
-   • Décision politique → impact sur société/économie/citoyens
-   • Annonce économique → réaction des marchés/entreprises
-   • Événement sportif → conséquences pour les acteurs
-   • Découverte scientifique → applications/implications
-   • Conflit/crise → réactions diplomatiques/mesures prises
+   C) BRANCHING: Une cause peut avoir 2-3 effets différents pour créer de la profondeur.
+      Exemple: cause="Fusion Paramount-Warner" → 2 effets:
+        effect="Licenciements massifs"
+        effect="Réduction concurrence streaming"
 
-   📋 TYPES DE RELATIONS (choisir parmi):
-   • "causes": cause directe (A provoque directement B)
-   • "triggers": déclencheur (A déclenche une réaction B)
+   D) Vise 6-10 relations formant un ARBRE CONNECTÉ avec 3-4 niveaux de profondeur.
+
+   📋 TYPES DE RELATIONS:
+   • "causes": cause directe (A provoque B)
+   • "triggers": déclencheur (A déclenche B)
    • "enables": permet (A rend B possible)
    • "prevents": empêche (A bloque B)
-
-   💡 SI TU NE TROUVES PAS DE RELATIONS EXPLICITES:
-   Crée des relations IMPLICITES logiques basées sur le contexte:
-   - "Situation actuelle" → "Réaction probable des acteurs"
-   - "Décision/annonce" → "Impact attendu"
-   - "Problème identifié" → "Mesures proposées"
 
 8. 🔮 SCÉNARIOS FUTURS (predictions): OBLIGATOIRE - 2-4 scénarios analysés comme un journaliste d'investigation
    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1023,6 +1049,19 @@ INSTRUCTIONS SPÉCIALES
    Si aucun chiffre factuel n'est disponible, retourne une liste vide [].
    Format: {{"value": "15%", "label": "hausse du PIB en 2025", "source": "Les Echos"}}
 
+12. 🌍 CONTEXTE GÉOGRAPHIQUE (geographic_context + geo_relevance):
+   ⚠️ RÈGLES STRICTES — NE PAS AJOUTER DE CARTE INUTILE:
+   - geo_relevance: évalue si la géographie est CENTRALE au sujet:
+     - "high": conflit localisé, catastrophe naturelle, événement dans un lieu précis
+     - "medium": politique internationale avec lieux clés identifiables
+     - "none": sujet tech, économie abstraite, tendance globale, régulation, IA, marché boursier
+   - SI geo_relevance = "none" → geographic_context DOIT être un tableau VIDE []
+   - SI geo_relevance = "high" ou "medium":
+     - Précise les VILLES (type: "city"), PAS les pays/capitales par défaut
+     - Exemple: "Rafah" pas "Palestine", "Kharkiv" pas "Ukraine"
+     - N'ajoute un pays (type: "country") QUE si le pays ENTIER est concerné
+     - Le champ "country" = code ISO2 du pays parent (FR, US, etc.)
+
 Format JSON (causal_chain + predictions + sentiment + topic_intensity + key_metrics OBLIGATOIRES):
 {{
   "title": "...",
@@ -1035,22 +1074,40 @@ Format JSON (causal_chain + predictions + sentiment + topic_intensity + key_metr
   "readingTime": {max(4, min_words // 150)},
   "causal_chain": [
     {{
-      "cause": "Annonce de nouvelles sanctions économiques par l'UE",
-      "effect": "Chute de 15% de la devise locale en 24 heures",
+      "cause": "Sanctions UE renforcées",
+      "effect": "Chute devise (-15%)",
       "type": "triggers",
       "sources": ["Le Monde", "Reuters"]
     }},
     {{
-      "cause": "Chute de la devise locale",
-      "effect": "Hausse des prix des importations affectant le pouvoir d'achat",
+      "cause": "Chute devise (-15%)",
+      "effect": "Inflation importations",
       "type": "causes",
       "sources": ["Les Echos"]
     }},
     {{
-      "cause": "Mécontentement populaire face à l'inflation",
-      "effect": "Manifestations dans les grandes villes",
+      "cause": "Chute devise (-15%)",
+      "effect": "Fuite capitaux étrangers",
+      "type": "triggers",
+      "sources": ["Reuters"]
+    }},
+    {{
+      "cause": "Inflation importations",
+      "effect": "Mécontentement populaire",
+      "type": "causes",
+      "sources": ["AFP"]
+    }},
+    {{
+      "cause": "Mécontentement populaire",
+      "effect": "Manifestations urbaines",
       "type": "triggers",
       "sources": ["AFP", "France Info"]
+    }},
+    {{
+      "cause": "Fuite capitaux étrangers",
+      "effect": "Demande aide FMI",
+      "type": "enables",
+      "sources": ["Les Echos"]
     }}
   ],
   "predictions": [
@@ -1078,9 +1135,8 @@ Format JSON (causal_chain + predictions + sentiment + topic_intensity + key_metr
       "rationale": "L'interconnexion économique rend les marchés sensibles aux instabilités régionales"
     }}
   ],
-  "geographic_context": [
-    {{"place": "Lieu précis", "type": "city|country|region|waterway", "role": "Son rôle dans l'actualité", "country": "XX"}}
-  ],
+  "geographic_context": [],
+  "geo_relevance": "none",
   "sentiment": "negative",
   "topic_intensity": "hot",
   "key_metrics": [
@@ -1112,6 +1168,7 @@ Format JSON (causal_chain + predictions + sentiment + topic_intensity + key_metr
             "isEnriched": True,
             "causal_chain": result.get("causal_chain", []),
             "geographic_context": result.get("geographic_context", []),
+            "geo_relevance": result.get("geo_relevance", "none"),
             "generation_cost_usd": self.get_last_generation_cost(),
             "predictions": result.get("predictions", []),
             "sentiment": result.get("sentiment", "neutral"),

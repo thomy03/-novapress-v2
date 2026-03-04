@@ -58,79 +58,79 @@ function calculateGraphComplexity(nodes: CausalNode[], edges: CausalEdge[]) {
   };
 }
 
-// Calculate neural layout (concentric circles)
-function calculateNeuralLayout(
+// Calculate hierarchical layout (left → right by topological depth)
+function calculateHierarchicalLayout(
   nodes: CausalNode[],
   edges: CausalEdge[],
-  centralEntity: string,
-  containerWidth: number = 400
 ): Record<string, { x: number; y: number }> {
   const positions: Record<string, { x: number; y: number }> = {};
-  const centerX = containerWidth / 2;
-  const centerY = 200;
 
-  // Find central node
-  const centralNode = nodes.find(n =>
-    n.label.toLowerCase().includes(centralEntity.toLowerCase())
-  );
+  // Build adjacency: label → node id
+  const labelToId = new Map(nodes.map(n => [n.label, n.id]));
 
-  // Place central node at center
-  if (centralNode) {
-    positions[centralNode.id] = { x: centerX, y: centerY };
+  // Compute in-degree and out-adjacency
+  const incoming = new Map<string, Set<string>>();
+  const outgoing = new Map<string, Set<string>>();
+  for (const n of nodes) {
+    incoming.set(n.id, new Set());
+    outgoing.set(n.id, new Set());
+  }
+  for (const e of edges) {
+    const src = labelToId.get(e.cause_text);
+    const tgt = labelToId.get(e.effect_text);
+    if (src && tgt && src !== tgt) {
+      outgoing.get(src)?.add(tgt);
+      incoming.get(tgt)?.add(src);
+    }
   }
 
-  // Find nodes that are causes (point TO central)
-  const causeNodeIds = new Set<string>();
-  const effectNodeIds = new Set<string>();
-
-  edges.forEach(edge => {
-    const sourceNode = nodes.find(n => n.label === edge.cause_text);
-    const targetNode = nodes.find(n => n.label === edge.effect_text);
-
-    if (sourceNode && targetNode) {
-      if (targetNode.label.toLowerCase().includes(centralEntity.toLowerCase())) {
-        causeNodeIds.add(sourceNode.id);
-      }
-      if (sourceNode.label.toLowerCase().includes(centralEntity.toLowerCase())) {
-        effectNodeIds.add(targetNode.id);
+  // BFS to compute depth (roots = no incoming edges)
+  const depth = new Map<string, number>();
+  const queue: string[] = [];
+  for (const n of nodes) {
+    if ((incoming.get(n.id)?.size || 0) === 0) {
+      depth.set(n.id, 0);
+      queue.push(n.id);
+    }
+  }
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const d = depth.get(current) || 0;
+    for (const next of outgoing.get(current) || []) {
+      const existing = depth.get(next);
+      if (existing === undefined || existing < d + 1) {
+        depth.set(next, d + 1);
+        queue.push(next);
       }
     }
-  });
+  }
+  // Assign unplaced nodes to median depth
+  const maxDepth = Math.max(0, ...Array.from(depth.values()));
+  for (const n of nodes) {
+    if (!depth.has(n.id)) depth.set(n.id, Math.floor(maxDepth / 2));
+  }
 
-  // Circle 1: Causes (radius 120px, upper half)
-  const causeNodes = nodes.filter(n => causeNodeIds.has(n.id));
-  causeNodes.forEach((node, i) => {
-    const angle = Math.PI + (Math.PI * (i + 1)) / (causeNodes.length + 1);
-    positions[node.id] = {
-      x: centerX + Math.cos(angle) * 120,
-      y: centerY + Math.sin(angle) * 100,
-    };
-  });
+  // Group nodes by depth level
+  const levels = new Map<number, CausalNode[]>();
+  for (const n of nodes) {
+    const d = depth.get(n.id) || 0;
+    if (!levels.has(d)) levels.set(d, []);
+    levels.get(d)!.push(n);
+  }
 
-  // Circle 2: Effects (radius 140px, lower half)
-  const effectNodes = nodes.filter(n => effectNodeIds.has(n.id));
-  effectNodes.forEach((node, i) => {
-    const angle = (Math.PI * (i + 1)) / (effectNodes.length + 1);
-    positions[node.id] = {
-      x: centerX + Math.cos(angle) * 140,
-      y: centerY + Math.sin(angle) * 110,
-    };
-  });
+  const numLevels = maxDepth + 1;
+  const colSpacing = Math.max(160, 400 / numLevels);
+  const rowSpacing = 100;
 
-  // Remaining nodes in outer circle
-  const placedIds = new Set([
-    ...Object.keys(positions),
-    ...causeNodeIds,
-    ...effectNodeIds,
-  ]);
-  const remainingNodes = nodes.filter(n => !placedIds.has(n.id));
-  remainingNodes.forEach((node, i) => {
-    const angle = (2 * Math.PI * i) / remainingNodes.length;
-    positions[node.id] = {
-      x: centerX + Math.cos(angle) * 180,
-      y: centerY + Math.sin(angle) * 150,
-    };
-  });
+  for (const [d, levelNodes] of levels.entries()) {
+    const x = 60 + d * colSpacing;
+    const totalHeight = (levelNodes.length - 1) * rowSpacing;
+    const startY = 200 - totalHeight / 2;
+
+    levelNodes.forEach((node, i) => {
+      positions[node.id] = { x, y: startY + i * rowSpacing };
+    });
+  }
 
   return positions;
 }
@@ -151,23 +151,34 @@ function NeuralCausalGraphInner({
 
   // Convert causal data to React Flow format
   const initialNodes: Node[] = useMemo(() => {
-    const positions = calculateNeuralLayout(causalNodes, causalEdges, centralEntity);
+    const positions = calculateHierarchicalLayout(causalNodes, causalEdges);
+
+    // Count real connections per node
+    const connectionCounts = new Map<string, number>();
+    causalEdges.forEach(edge => {
+      const src = causalNodes.find(n => n.label === edge.cause_text);
+      const tgt = causalNodes.find(n => n.label === edge.effect_text);
+      if (src) connectionCounts.set(src.id, (connectionCounts.get(src.id) || 0) + 1);
+      if (tgt) connectionCounts.set(tgt.id, (connectionCounts.get(tgt.id) || 0) + 1);
+    });
 
     return causalNodes.map((node) => ({
       id: node.id,
       type: 'neural',
       position: positions[node.id] || { x: 200, y: 200 },
+      sourcePosition: Position.Right,
+      targetPosition: Position.Left,
       data: {
         label: node.label,
         nodeType: node.node_type,
         factDensity: node.fact_density,
-        sourcesCount: complexity.dendritesPerNode,
+        sourcesCount: connectionCounts.get(node.id) || 1,
         isActivated: false,
         isSource: false,
         activationLevel: 0,
       },
     }));
-  }, [causalNodes, causalEdges, centralEntity, complexity.dendritesPerNode]);
+  }, [causalNodes, causalEdges]);
 
   const initialEdges: Edge[] = useMemo(() => {
     return causalEdges.map((edge, idx) => {

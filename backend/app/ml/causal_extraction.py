@@ -403,10 +403,24 @@ class CausalExtractor:
         # 4. Construire les noeuds depuis les relations + entites
         nodes = self._build_nodes(relations, entities, fact_density)
 
-        # 5. Trouver l'entite centrale
+        # 4b. Merge similar nodes (dedup by normalized label)
+        nodes, relations = self._merge_similar_nodes(nodes, relations)
+
+        # 4c. Cap at 15 nodes: keep most-connected, prune orphans
+        nodes, relations = self._cap_and_prune(nodes, relations, max_nodes=15)
+
+        # 4d. Validate connectivity: remove tiny disconnected components
+        nodes, relations = self._validate_connectivity(nodes, relations)
+
+        # 5. Bridge disconnected branches via shared entity mentions
+        bridge_edges = self._bridge_disconnected_branches(nodes, relations, entities)
+        if bridge_edges:
+            relations.extend(bridge_edges)
+
+        # 6. Trouver l'entite centrale
         central_entity = self._find_central_entity(relations, entities)
 
-        # 6. Determiner le type de flux narratif
+        # 7. Determiner le type de flux narratif
         narrative_flow = self._determine_narrative_flow(relations)
 
         graph = CausalGraph(
@@ -423,44 +437,309 @@ class CausalExtractor:
 
         return graph
 
+    def _normalize_for_dedup(self, text: str) -> str:
+        """Normalize label for deduplication — ignores articles, case, minor diffs."""
+        t = text.lower().strip()
+        for article in ['le ', 'la ', 'les ', "l'", 'un ', 'une ', 'des ', 'du ', 'de ',
+                         'the ', 'a ', 'an ']:
+            if t.startswith(article):
+                t = t[len(article):]
+        t = re.sub(r'[^\w\s]', '', t)
+        t = ' '.join(t.split())
+        return t[:50]
+
+    def _classify_node_type(self, label: str, entities: List[str]) -> str:
+        """Classify node as event, entity, or decision based on content."""
+        label_lower = label.lower()
+        for entity in entities:
+            if entity.lower() in label_lower and len(entity) > len(label) * 0.3:
+                return "entity"
+        decision_words = ['décision', 'decision', 'vote', 'accord', 'approbation',
+                          'approval', 'loi', 'law', 'règlement', 'regulation']
+        if any(w in label_lower for w in decision_words):
+            return "decision"
+        return "event"
+
     def _build_nodes(
         self,
         relations: List[CausalRelation],
         entities: List[str],
         fact_density: float
     ) -> List[CausalNode]:
-        """Construit les noeuds du graphe depuis les relations et entites"""
+        """Construit les noeuds du graphe depuis les relations.
+        Uses normalized dedup to merge similar labels.
+        Does NOT add standalone entity nodes (they create floating islands).
+        """
         nodes = []
-        seen_labels = set()
+        seen_normalized: Dict[str, CausalNode] = {}  # normalized_label → node
         node_id = 0
 
-        # Ajouter les noeuds depuis les relations
         for rel in relations:
             for text, is_cause in [(rel.cause_text, True), (rel.effect_text, False)]:
-                label = text[:80]  # Tronquer pour le label
-                if label not in seen_labels:
-                    seen_labels.add(label)
-                    nodes.append(CausalNode(
+                label = text[:60]
+                normalized = self._normalize_for_dedup(label)
+
+                if normalized not in seen_normalized:
+                    node_type = self._classify_node_type(label, entities)
+                    node = CausalNode(
                         id=f"node_{node_id}",
                         label=label,
-                        node_type="event",
+                        node_type=node_type,
                         fact_density=rel.confidence if is_cause else fact_density
-                    ))
+                    )
+                    seen_normalized[normalized] = node
+                    nodes.append(node)
                     node_id += 1
 
-        # Ajouter les entites cles comme noeuds si pas deja presentes
-        for entity in entities[:10]:  # Max 10 entites
-            if entity not in seen_labels and len(entity) > 2:
-                seen_labels.add(entity)
-                nodes.append(CausalNode(
-                    id=f"node_{node_id}",
-                    label=entity,
-                    node_type="entity",
-                    fact_density=fact_density
-                ))
-                node_id += 1
-
         return nodes
+
+    def _merge_similar_nodes(
+        self,
+        nodes: List[CausalNode],
+        relations: List[CausalRelation],
+    ) -> tuple:
+        """Merge nodes with identical normalized labels. Keep the shortest label as canonical."""
+        norm_to_canonical: Dict[str, str] = {}  # normalized → best raw label
+        norm_to_node: Dict[str, CausalNode] = {}
+
+        for node in nodes:
+            norm = self._normalize_for_dedup(node.label)
+            if norm in norm_to_canonical:
+                # Keep the shorter label
+                if len(node.label) < len(norm_to_canonical[norm]):
+                    norm_to_canonical[norm] = node.label
+                    norm_to_node[norm] = node
+            else:
+                norm_to_canonical[norm] = node.label
+                norm_to_node[norm] = node
+
+        # Build remap: old label → canonical label
+        label_remap: Dict[str, str] = {}
+        for node in nodes:
+            norm = self._normalize_for_dedup(node.label)
+            canonical = norm_to_canonical[norm]
+            if node.label != canonical:
+                label_remap[node.label] = canonical
+
+        if not label_remap:
+            return nodes, relations
+
+        # Remap edges
+        for rel in relations:
+            if rel.cause_text in label_remap:
+                rel.cause_text = label_remap[rel.cause_text]
+            if rel.effect_text in label_remap:
+                rel.effect_text = label_remap[rel.effect_text]
+
+        # Deduplicate self-loops created by merging
+        relations = [r for r in relations if r.cause_text != r.effect_text]
+
+        # Deduplicate edges with same cause+effect
+        seen_pairs: set = set()
+        unique_relations = []
+        for rel in relations:
+            pair = (rel.cause_text[:50], rel.effect_text[:50])
+            if pair not in seen_pairs:
+                seen_pairs.add(pair)
+                unique_relations.append(rel)
+        relations = unique_relations
+
+        # Keep only canonical nodes
+        merged_nodes = list(norm_to_node.values())
+        logger.info(f"Merged {len(nodes)} → {len(merged_nodes)} nodes ({len(label_remap)} duplicates removed)")
+        return merged_nodes, relations
+
+    def _cap_and_prune(
+        self,
+        nodes: List[CausalNode],
+        relations: List[CausalRelation],
+        max_nodes: int = 15,
+    ) -> tuple:
+        """Cap nodes at max_nodes by keeping the most connected. Remove orphans."""
+        if len(nodes) <= max_nodes:
+            # Still remove orphans (nodes with 0 edges)
+            connected_labels = set()
+            for rel in relations:
+                connected_labels.add(rel.cause_text)
+                connected_labels.add(rel.effect_text)
+            before = len(nodes)
+            nodes = [n for n in nodes if n.label in connected_labels]
+            if len(nodes) < before:
+                logger.info(f"Pruned {before - len(nodes)} orphan nodes")
+            return nodes, relations
+
+        # Count degree per node label
+        degree: Dict[str, int] = {}
+        for rel in relations:
+            degree[rel.cause_text] = degree.get(rel.cause_text, 0) + 1
+            degree[rel.effect_text] = degree.get(rel.effect_text, 0) + 1
+
+        # Sort nodes by degree (most connected first)
+        nodes.sort(key=lambda n: degree.get(n.label, 0), reverse=True)
+        kept_nodes = nodes[:max_nodes]
+        kept_labels = {n.label for n in kept_nodes}
+
+        # Filter edges to only reference kept nodes
+        relations = [
+            r for r in relations
+            if r.cause_text in kept_labels and r.effect_text in kept_labels
+        ]
+
+        logger.info(f"Capped nodes: {len(nodes)} → {len(kept_nodes)}, edges: {len(relations)}")
+        return kept_nodes, relations
+
+    def _validate_connectivity(
+        self,
+        nodes: List[CausalNode],
+        relations: List[CausalRelation],
+    ) -> tuple:
+        """Remove tiny disconnected components (< 3 nodes) when > 2 components exist."""
+        if len(nodes) < 4 or not relations:
+            return nodes, relations
+
+        # Union-Find
+        label_to_idx = {n.label: i for i, n in enumerate(nodes)}
+        parent = list(range(len(nodes)))
+
+        def find(x: int) -> int:
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            return x
+
+        def union(a: int, b: int):
+            ra, rb = find(a), find(b)
+            if ra != rb:
+                parent[ra] = rb
+
+        for rel in relations:
+            a = label_to_idx.get(rel.cause_text)
+            b = label_to_idx.get(rel.effect_text)
+            if a is not None and b is not None:
+                union(a, b)
+
+        # Group by component
+        components: Dict[int, List[int]] = {}
+        for i in range(len(nodes)):
+            root = find(i)
+            components.setdefault(root, []).append(i)
+
+        if len(components) <= 2:
+            return nodes, relations
+
+        # Remove components with < 3 nodes
+        keep_indices: set = set()
+        removed = 0
+        for comp_indices in components.values():
+            if len(comp_indices) >= 3:
+                keep_indices.update(comp_indices)
+            else:
+                removed += len(comp_indices)
+
+        if removed == 0:
+            return nodes, relations
+
+        kept_labels = {nodes[i].label for i in keep_indices}
+        nodes = [nodes[i] for i in sorted(keep_indices)]
+        relations = [
+            r for r in relations
+            if r.cause_text in kept_labels and r.effect_text in kept_labels
+        ]
+
+        logger.info(f"Connectivity validation: removed {removed} nodes from tiny components")
+        return nodes, relations
+
+    def _bridge_disconnected_branches(
+        self,
+        nodes: List[CausalNode],
+        relations: List[CausalRelation],
+        entities: List[str],
+    ) -> List[CausalRelation]:
+        """
+        Find disconnected components and create bridge edges between them
+        via shared entity mentions. Max 5 bridges to avoid clutter.
+        """
+        if len(relations) < 2 or not entities:
+            return []
+
+        # Build adjacency using normalized labels
+        node_labels = {n.id: self._normalize_for_dedup(n.label) for n in nodes}
+        label_to_id = {v: k for k, v in node_labels.items()}
+
+        # Union-Find
+        parent: Dict[str, str] = {n.id: n.id for n in nodes}
+
+        def find(x: str) -> str:
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            return x
+
+        def union(a: str, b: str):
+            ra, rb = find(a), find(b)
+            if ra != rb:
+                parent[ra] = rb
+
+        # Union nodes connected by existing edges
+        for rel in relations:
+            cause_norm = self._normalize_for_dedup(rel.cause_text[:60])
+            effect_norm = self._normalize_for_dedup(rel.effect_text[:60])
+            cause_id = label_to_id.get(cause_norm, "")
+            effect_id = label_to_id.get(effect_norm, "")
+            if cause_id and effect_id:
+                union(cause_id, effect_id)
+
+        # Group nodes by component
+        components: Dict[str, List[CausalNode]] = {}
+        for n in nodes:
+            root = find(n.id)
+            components.setdefault(root, []).append(n)
+
+        if len(components) <= 1:
+            return []  # Already fully connected
+
+        component_list = list(components.values())
+        bridges = []
+        seen_bridges: set = set()
+
+        for entity in entities[:8]:
+            entity_lower = entity.lower()
+            if len(entity_lower) < 3:
+                continue
+
+            # Find which components mention this entity
+            entity_components: List[tuple] = []  # (component_idx, node)
+            for ci, comp in enumerate(component_list):
+                for n in comp:
+                    if entity_lower in n.label.lower():
+                        entity_components.append((ci, n))
+                        break  # One match per component is enough
+
+            # Bridge pairs of components that share this entity
+            for i in range(len(entity_components)):
+                for j in range(i + 1, len(entity_components)):
+                    ci, n1 = entity_components[i]
+                    cj, n2 = entity_components[j]
+                    if ci == cj:
+                        continue
+                    bridge_key = (min(n1.id, n2.id), max(n1.id, n2.id))
+                    if bridge_key in seen_bridges:
+                        continue
+                    seen_bridges.add(bridge_key)
+                    bridges.append(CausalRelation(
+                        cause_text=n1.label,
+                        effect_text=n2.label,
+                        relation_type="enables",
+                        confidence=0.4,
+                        evidence=[f"Bridge: shared entity '{entity}'"],
+                        source_articles=[]
+                    ))
+                    if len(bridges) >= 5:
+                        return bridges
+
+        if bridges:
+            logger.info(f"Created {len(bridges)} bridge edges to connect {len(components)} components")
+        return bridges
 
     def _find_central_entity(
         self,

@@ -1,8 +1,51 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { RecurringTopicBadge } from '@/app/components/topics';
 import { SynthesisHeaderProps, sharedStyles } from '@/app/types/synthesis-page';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+
+// SVG sanitizer (defense-in-depth, same pattern as GeoSvgWidget)
+const DANGEROUS_ELEMENTS = new Set([
+  'script', 'foreignobject', 'iframe', 'embed', 'object',
+  'applet', 'form', 'input', 'textarea', 'button',
+  'link', 'meta', 'base',
+]);
+const DANGEROUS_CSS_RE = /url\s*\(|expression\s*\(|@import|behavior\s*:|javascript:/gi;
+
+function sanitizeSvg(raw: string): string {
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(raw, 'image/svg+xml');
+    const parserError = doc.querySelector('parsererror');
+    if (parserError) return '';
+
+    function sanitizeNode(node: Element) {
+      for (const child of Array.from(node.children)) {
+        if (DANGEROUS_ELEMENTS.has(child.tagName.toLowerCase())) {
+          child.remove();
+          continue;
+        }
+        for (const attr of Array.from(child.attributes)) {
+          if (attr.name.toLowerCase().startsWith('on')) child.removeAttribute(attr.name);
+          if ((attr.name === 'href' || attr.name === 'xlink:href') && /javascript\s*:/i.test(attr.value))
+            child.removeAttribute(attr.name);
+        }
+        if (child.tagName.toLowerCase() === 'style' && child.textContent)
+          child.textContent = child.textContent.replace(DANGEROUS_CSS_RE, '/* removed */');
+        sanitizeNode(child);
+      }
+    }
+
+    const svgEl = doc.querySelector('svg');
+    if (!svgEl) return '';
+    sanitizeNode(svgEl);
+    return new XMLSerializer().serializeToString(svgEl);
+  } catch {
+    return '';
+  }
+}
 
 /**
  * REF-012b: SynthesisHeader Component
@@ -14,6 +57,18 @@ import { SynthesisHeaderProps, sharedStyles } from '@/app/types/synthesis-page';
  * - Metadata (sources, reading time, date, accuracy)
  */
 export function SynthesisHeader({ synthesis, formatDate }: SynthesisHeaderProps) {
+  const [editorialSvg, setEditorialSvg] = useState<string>('');
+
+  useEffect(() => {
+    if (!synthesis.id) return;
+    fetch(`${API_URL}/api/syntheses/by-id/${synthesis.id}/editorial-svg`)
+      .then(res => res.ok ? res.text() : '')
+      .then(svg => {
+        if (svg) setEditorialSvg(sanitizeSvg(svg));
+      })
+      .catch(() => {});
+  }, [synthesis.id]);
+
   return (
     <>
       {/* AI Badge */}
@@ -81,8 +136,16 @@ export function SynthesisHeader({ synthesis, formatDate }: SynthesisHeaderProps)
         )}
       </div>
 
-      {/* Editorial Image (fal.ai generated) */}
-      {synthesis.imageUrl && (
+      {/* Editorial Illustration: SVG first, fallback to fal.ai image */}
+      {editorialSvg ? (
+        <div style={styles.imageContainer}>
+          <div
+            style={styles.editorialSvg}
+            dangerouslySetInnerHTML={{ __html: editorialSvg }}
+          />
+          <span style={styles.imageCaption}>Illustration editoriale generee par IA</span>
+        </div>
+      ) : synthesis.imageUrl ? (
         <div style={styles.imageContainer}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -92,7 +155,7 @@ export function SynthesisHeader({ synthesis, formatDate }: SynthesisHeaderProps)
           />
           <span style={styles.imageCaption}>Illustration generee par IA</span>
         </div>
-      )}
+      ) : null}
 
       {/* Phase 2D: Source Images Gallery */}
       {synthesis.sourceImages && synthesis.sourceImages.length > 0 && (
@@ -206,6 +269,12 @@ const styles: { [key: string]: React.CSSProperties } = {
   imageContainer: {
     marginBottom: '32px',
     position: 'relative',
+  },
+  editorialSvg: {
+    width: '100%',
+    maxHeight: '450px',
+    overflow: 'hidden',
+    borderRadius: '2px',
   },
   editorialImage: {
     width: '100%',

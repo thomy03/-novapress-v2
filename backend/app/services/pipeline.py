@@ -1156,6 +1156,29 @@ Contenu existant (extrait):
                     logger.warning(f"⚠️ Image generation failed: {img_error}")
                     synthesis["image_url"] = None
 
+                # === EDITORIAL SVG ILLUSTRATION (Gemini) ===
+                try:
+                    from app.services.nexus_image_generator import get_nexus_image_generator
+                    nexus_gen = get_nexus_image_generator()
+                    if nexus_gen.enabled:
+                        editorial_svg = await nexus_gen.generate_editorial_svg(
+                            synthesis_id=synthesis["id"],
+                            title=synthesis.get("title", ""),
+                            category=synthesis.get("category", "MONDE"),
+                            key_points=synthesis.get("keyPoints", synthesis.get("key_points", [])),
+                            key_metrics=synthesis.get("key_metrics", []),
+                            entities=[
+                                e.get("name", e) if isinstance(e, dict) else str(e)
+                                for e in synthesis.get("key_entities", [])[:5]
+                            ],
+                            sentiment=synthesis.get("sentiment", "neutral"),
+                        )
+                        if editorial_svg:
+                            synthesis["has_editorial_svg"] = True
+                            logger.info(f"🎨 Editorial SVG generated for '{synthesis.get('title', '')[:40]}'")
+                except Exception as esvg_error:
+                    logger.warning(f"⚠️ Editorial SVG generation failed: {esvg_error}")
+
                 # === Phase 2D: Collect source images from articles ===
                 source_images = []
                 seen_img_urls = set()

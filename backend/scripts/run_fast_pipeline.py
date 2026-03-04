@@ -12,6 +12,14 @@ backend_dir = os.path.dirname(script_dir)
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
+# Auto-detect .env.pipeline for remote execution (BEFORE app imports)
+pipeline_env = os.path.join(backend_dir, ".env.pipeline")
+if os.path.exists(pipeline_env):
+    os.environ["ENV_FILE_OVERRIDE"] = pipeline_env
+    print(f"📡 Mode remote: chargement de .env.pipeline (databases sur Firebat)")
+else:
+    print(f"💻 Mode local: chargement de .env (databases locales)")
+
 from app.services.pipeline import pipeline_engine
 from app.ml.embeddings import init_embedding_model
 from app.ml.knowledge_graph import init_knowledge_graph

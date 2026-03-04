@@ -483,6 +483,7 @@ def format_synthesis_for_frontend(synthesis: Dict[str, Any]) -> Dict[str, Any]:
         "sourceImages": synthesis.get("source_images", []),
         # Phase 3A: Geographic context
         "geographicContext": synthesis.get("geographic_context", []),
+        "geoRelevance": synthesis.get("geo_relevance", "none"),
         # Key Metrics (Axios/Bloomberg-style callouts)
         "keyMetrics": synthesis.get("key_metrics", []),
     }
@@ -895,6 +896,29 @@ async def get_persona_rotation_schedule(
         "rotationPersonas": info["rotation_personas"],
         "type": "rotation_schedule"
     }
+
+
+@router.get("/by-id/{synthesis_id}/editorial-svg")
+@limiter.limit("60/minute")
+async def get_editorial_svg(
+    request: Request,
+    synthesis_id: str = Path(..., description="Synthesis UUID"),
+):
+    """Return the editorial SVG illustration for a synthesis."""
+    from fastapi.responses import Response
+    from app.services.nexus_image_generator import get_nexus_image_generator
+
+    try:
+        generator = get_nexus_image_generator()
+        svg = await generator.get_editorial_svg(synthesis_id)
+        if not svg:
+            raise HTTPException(status_code=404, detail="No editorial SVG available")
+        return Response(content=svg, media_type="image/svg+xml")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to fetch editorial SVG for {synthesis_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/by-id/{synthesis_id}")

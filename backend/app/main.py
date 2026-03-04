@@ -115,35 +115,38 @@ async def lifespan(app: FastAPI):
     # Initialize APScheduler for automatic pipeline execution
     global _scheduler
     scheduler = None
-    try:
-        from apscheduler.schedulers.asyncio import AsyncIOScheduler
-        from apscheduler.triggers.interval import IntervalTrigger
+    if settings.PIPELINE_SCHEDULE_HOURS > 0:
+        try:
+            from apscheduler.schedulers.asyncio import AsyncIOScheduler
+            from apscheduler.triggers.interval import IntervalTrigger
 
-        async def scheduled_pipeline_run():
-            """Run the news pipeline on a schedule."""
-            logger.info("⏰ Scheduled pipeline run starting...")
-            try:
-                from app.services.pipeline_manager import get_pipeline_manager
-                manager = get_pipeline_manager()
-                await manager.start(mode="SCRAPE")
-                logger.success("✅ Scheduled pipeline run completed successfully")
-            except Exception as e:
-                logger.error(f"❌ Scheduled pipeline run failed: {e}")
+            async def scheduled_pipeline_run():
+                """Run the news pipeline on a schedule."""
+                logger.info("⏰ Scheduled pipeline run starting...")
+                try:
+                    from app.services.pipeline_manager import get_pipeline_manager
+                    manager = get_pipeline_manager()
+                    await manager.start(mode="SCRAPE")
+                    logger.success("✅ Scheduled pipeline run completed successfully")
+                except Exception as e:
+                    logger.error(f"❌ Scheduled pipeline run failed: {e}")
 
-        scheduler = AsyncIOScheduler()
-        _scheduler = scheduler
-        scheduler.add_job(
-            scheduled_pipeline_run,
-            trigger=IntervalTrigger(hours=settings.PIPELINE_SCHEDULE_HOURS),
-            id="pipeline_scheduled_run",
-            name="NovaPress Pipeline Auto-Run",
-            misfire_grace_time=3600,
-            max_instances=1,
-        )
-        scheduler.start()
-        logger.success(f"✅ APScheduler started — pipeline every {settings.PIPELINE_SCHEDULE_HOURS}h")
-    except Exception as e:
-        logger.warning(f"⚠️ APScheduler not available: {e}. Automatic pipeline disabled.")
+            scheduler = AsyncIOScheduler()
+            _scheduler = scheduler
+            scheduler.add_job(
+                scheduled_pipeline_run,
+                trigger=IntervalTrigger(hours=settings.PIPELINE_SCHEDULE_HOURS),
+                id="pipeline_scheduled_run",
+                name="NovaPress Pipeline Auto-Run",
+                misfire_grace_time=3600,
+                max_instances=1,
+            )
+            scheduler.start()
+            logger.success(f"✅ APScheduler started — pipeline every {settings.PIPELINE_SCHEDULE_HOURS}h")
+        except Exception as e:
+            logger.warning(f"⚠️ APScheduler not available: {e}. Automatic pipeline disabled.")
+    else:
+        logger.info("ℹ️ APScheduler disabled (PIPELINE_SCHEDULE_HOURS=0) — pipeline runs manually only")
 
     logger.success("✅ Backend ready!")
 
