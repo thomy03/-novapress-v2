@@ -488,6 +488,134 @@ function TopicDashboardPage() {
                     </div>
                   </div>
                 )}
+
+                {/* Inline edge detail panel (below connections) */}
+                {selectedEdge && !selectedNode && (
+                  <div style={{
+                    margin: '16px',
+                    padding: '20px',
+                    border: '1px solid #E5E5E5',
+                    backgroundColor: '#F9FAFB',
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                      <div style={{
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        letterSpacing: '1px',
+                        color: '#6B7280',
+                        textTransform: 'uppercase' as const,
+                      }}>
+                        RELATION CAUSALE
+                      </div>
+                      <button
+                        onClick={() => setSelectedEdge(null)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          fontSize: '18px',
+                          color: '#9CA3AF',
+                          padding: '0',
+                          fontFamily: 'inherit',
+                        }}
+                      >
+                        &times;
+                      </button>
+                    </div>
+
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr auto 1fr',
+                      gap: '16px',
+                      alignItems: 'center',
+                    }}>
+                      {/* Cause */}
+                      <div>
+                        <div style={{
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          letterSpacing: '1px',
+                          color: '#DC2626',
+                          textTransform: 'uppercase' as const,
+                          marginBottom: '6px',
+                        }}>
+                          CAUSE
+                        </div>
+                        <div style={{
+                          fontFamily: 'Georgia, "Times New Roman", serif',
+                          fontSize: '16px',
+                          fontWeight: 700,
+                          color: '#000',
+                          lineHeight: 1.3,
+                        }}>
+                          {selectedEdge.causeLabel}
+                        </div>
+                      </div>
+
+                      {/* Arrow */}
+                      <div style={{
+                        textAlign: 'center',
+                        color: (() => {
+                          if (selectedEdge.relationType === 'causes') return '#DC2626';
+                          if (selectedEdge.relationType === 'triggers') return '#F59E0B';
+                          if (selectedEdge.relationType === 'enables') return '#10B981';
+                          if (selectedEdge.relationType === 'prevents') return '#6B7280';
+                          return '#8B5CF6';
+                        })(),
+                        fontSize: '20px',
+                        fontWeight: 700,
+                      }}>
+                        &rarr;
+                        <div style={{ fontSize: '9px', letterSpacing: '1px', fontWeight: 700, marginTop: '2px' }}>
+                          {selectedEdge.relationType === 'causes' ? 'CAUSE' :
+                           selectedEdge.relationType === 'triggers' ? 'DECLENCHE' :
+                           selectedEdge.relationType === 'enables' ? 'PERMET' :
+                           selectedEdge.relationType === 'prevents' ? 'EMPECHE' : 'LIE A'}
+                        </div>
+                      </div>
+
+                      {/* Effect */}
+                      <div>
+                        <div style={{
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          letterSpacing: '1px',
+                          color: '#2563EB',
+                          textTransform: 'uppercase' as const,
+                          marginBottom: '6px',
+                        }}>
+                          EFFET
+                        </div>
+                        <div style={{
+                          fontFamily: 'Georgia, "Times New Roman", serif',
+                          fontSize: '16px',
+                          fontWeight: 700,
+                          color: '#000',
+                          lineHeight: 1.3,
+                        }}>
+                          {selectedEdge.effectLabel}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Stats row */}
+                    <div style={{
+                      display: 'flex',
+                      gap: '24px',
+                      marginTop: '16px',
+                      paddingTop: '12px',
+                      borderTop: '1px solid #E5E5E5',
+                      fontSize: '12px',
+                      color: '#6B7280',
+                    }}>
+                      <span>Confiance: <strong style={{ color: '#000' }}>{Math.round(selectedEdge.confidence * 100)}%</strong></span>
+                      <span>Mentions: <strong style={{ color: '#000' }}>{selectedEdge.mentionCount}</strong></span>
+                      {selectedEdge.sourceSyntheses.length > 0 && (
+                        <span>{selectedEdge.sourceSyntheses.length} synthese{selectedEdge.sourceSyntheses.length > 1 ? 's' : ''} liee{selectedEdge.sourceSyntheses.length > 1 ? 's' : ''}</span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Detail panel (right side) — 360px inline */}
@@ -648,174 +776,6 @@ function TopicDashboardPage() {
                 </div>
               )}
 
-              {/* Edge detail panel (right side) */}
-              {selectedEdge && !selectedNode && (
-                <div style={{
-                  width: '360px',
-                  flexShrink: 0,
-                  borderLeft: '1px solid #E5E5E5',
-                  boxShadow: '-4px 0 20px rgba(0,0,0,0.1)',
-                  padding: '20px',
-                  backgroundColor: '#FFFFFF',
-                  overflowY: 'auto',
-                  maxHeight: '700px',
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-                    <div style={{
-                      fontSize: '10px',
-                      fontWeight: 700,
-                      letterSpacing: '1px',
-                      color: '#6B7280',
-                      textTransform: 'uppercase' as const,
-                    }}>
-                      RELATION CAUSALE
-                    </div>
-                    <button
-                      onClick={() => setSelectedEdge(null)}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        fontSize: '18px',
-                        color: '#9CA3AF',
-                        padding: '0',
-                        fontFamily: 'inherit',
-                      }}
-                    >
-                      &times;
-                    </button>
-                  </div>
-
-                  {/* Cause */}
-                  <div style={{ marginBottom: '20px' }}>
-                    <div style={{
-                      fontSize: '10px',
-                      fontWeight: 700,
-                      letterSpacing: '1px',
-                      color: '#DC2626',
-                      textTransform: 'uppercase' as const,
-                      marginBottom: '6px',
-                    }}>
-                      CAUSE
-                    </div>
-                    <div style={{
-                      fontFamily: 'Georgia, "Times New Roman", serif',
-                      fontSize: '16px',
-                      fontWeight: 700,
-                      color: '#000',
-                      lineHeight: 1.3,
-                    }}>
-                      {selectedEdge.causeLabel}
-                    </div>
-                  </div>
-
-                  {/* Arrow */}
-                  <div style={{
-                    textAlign: 'center',
-                    padding: '8px 0',
-                    color: (() => {
-                      if (selectedEdge.relationType === 'causes') return '#DC2626';
-                      if (selectedEdge.relationType === 'triggers') return '#F59E0B';
-                      if (selectedEdge.relationType === 'enables') return '#10B981';
-                      if (selectedEdge.relationType === 'prevents') return '#6B7280';
-                      return '#8B5CF6';
-                    })(),
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    letterSpacing: '1px',
-                    textTransform: 'uppercase' as const,
-                  }}>
-                    {selectedEdge.relationType === 'causes' ? 'CAUSE' :
-                     selectedEdge.relationType === 'triggers' ? 'DECLENCHE' :
-                     selectedEdge.relationType === 'enables' ? 'PERMET' :
-                     selectedEdge.relationType === 'prevents' ? 'EMPECHE' : 'LIE A'}
-                    {' \u2193'}
-                  </div>
-
-                  {/* Effect */}
-                  <div style={{ marginBottom: '20px' }}>
-                    <div style={{
-                      fontSize: '10px',
-                      fontWeight: 700,
-                      letterSpacing: '1px',
-                      color: '#2563EB',
-                      textTransform: 'uppercase' as const,
-                      marginBottom: '6px',
-                    }}>
-                      EFFET
-                    </div>
-                    <div style={{
-                      fontFamily: 'Georgia, "Times New Roman", serif',
-                      fontSize: '16px',
-                      fontWeight: 700,
-                      color: '#000',
-                      lineHeight: 1.3,
-                    }}>
-                      {selectedEdge.effectLabel}
-                    </div>
-                  </div>
-
-                  {/* Confidence */}
-                  <div style={{
-                    display: 'flex',
-                    gap: '16px',
-                    marginBottom: '16px',
-                    padding: '12px',
-                    backgroundColor: '#F9FAFB',
-                    border: '1px solid #E5E5E5',
-                  }}>
-                    <div>
-                      <div style={{ fontSize: '10px', fontWeight: 700, color: '#6B7280', letterSpacing: '0.5px', marginBottom: '2px' }}>
-                        CONFIANCE
-                      </div>
-                      <div style={{ fontSize: '16px', fontWeight: 700, color: '#000' }}>
-                        {Math.round(selectedEdge.confidence * 100)}%
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: '10px', fontWeight: 700, color: '#6B7280', letterSpacing: '0.5px', marginBottom: '2px' }}>
-                        MENTIONS
-                      </div>
-                      <div style={{ fontSize: '16px', fontWeight: 700, color: '#000' }}>
-                        {selectedEdge.mentionCount}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Related syntheses */}
-                  {selectedEdge.sourceSyntheses.length > 0 && (
-                    <div>
-                      <div style={{
-                        fontSize: '10px',
-                        fontWeight: 700,
-                        letterSpacing: '1px',
-                        color: '#6B7280',
-                        textTransform: 'uppercase' as const,
-                        marginBottom: '6px',
-                      }}>
-                        Syntheses liees ({selectedEdge.sourceSyntheses.length})
-                      </div>
-                      {selectedEdge.sourceSyntheses.slice(0, 5).map((sid, i) => (
-                        <Link
-                          key={i}
-                          href={`/synthesis/${sid}`}
-                          style={{
-                            display: 'block',
-                            fontSize: '13px',
-                            color: '#2563EB',
-                            textDecoration: 'none',
-                            padding: '4px 0',
-                            borderBottom: '1px solid #F3F4F6',
-                            lineHeight: 1.3,
-                          }}
-                        >
-                          {sid.slice(0, 12)}...
-                        </Link>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
 
             {/* Predictions below graph */}

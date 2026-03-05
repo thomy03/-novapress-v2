@@ -114,7 +114,8 @@ function FeaturedDossiers({ theme }: { theme: Record<string, any> }) {
     fetch(`${API_URL}/api/trending/recurring-topics`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
-        const topics = (data?.topics || data || [])
+        const rawTopics = data?.data || data?.topics || data || [];
+        const topics = (Array.isArray(rawTopics) ? rawTopics : [])
           .filter((t: DossierInfo) => t.is_active)
           .sort((a: DossierInfo, b: DossierInfo) => b.synthesis_count - a.synthesis_count)
           .slice(0, 4);

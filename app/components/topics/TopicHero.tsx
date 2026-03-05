@@ -48,56 +48,35 @@ export default function TopicHero({
 
   return (
     <div>
-      {/* Hero Visual Header */}
+      {/* Hero Image */}
       <div style={{
         position: 'relative',
         width: '100%',
         height: '280px',
         overflow: 'hidden',
         marginBottom: '24px',
-        backgroundColor: '#0A0F1A',
+        backgroundColor: '#1a1a2e',
       }}>
-        {/* Decorative grid pattern */}
-        <svg
-          width="100%"
-          height="100%"
-          style={{ position: 'absolute', inset: 0, opacity: 0.15 }}
-        >
-          <defs>
-            <pattern id="hero-grid" width="40" height="40" patternUnits="userSpaceOnUse">
-              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#3B82F6" strokeWidth="0.5" />
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#hero-grid)" />
-          {/* Abstract nodes representing the topic network */}
-          {Array.from({ length: 8 }).map((_, i) => {
-            const cx = 80 + (i * 170) % 1200;
-            const cy = 60 + Math.sin(i * 1.2) * 80 + 80;
-            const r = 4 + (i % 3) * 3;
-            const colors = ['#DC2626', '#3B82F6', '#F59E0B', '#10B981'];
-            return (
-              <g key={i}>
-                <circle cx={cx} cy={cy} r={r * 3} fill={colors[i % 4]} opacity={0.08} />
-                <circle cx={cx} cy={cy} r={r} fill={colors[i % 4]} opacity={0.5} />
-              </g>
-            );
-          })}
-          {/* Abstract connection lines */}
-          {Array.from({ length: 5 }).map((_, i) => {
-            const x1 = 80 + (i * 170) % 1200;
-            const y1 = 60 + Math.sin(i * 1.2) * 80 + 80;
-            const x2 = 80 + ((i + 1) * 170) % 1200;
-            const y2 = 60 + Math.sin((i + 1) * 1.2) * 80 + 80;
-            return (
-              <line key={`l${i}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#3B82F6" strokeWidth="0.5" opacity={0.2} />
-            );
-          })}
-        </svg>
-        {/* Bottom fade overlay for text readability */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={`https://source.unsplash.com/1600x400/?${encodeURIComponent(topic)},map,country`}
+          alt={`Illustration: ${topic}`}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            display: 'block',
+          }}
+          onError={(e) => {
+            // Fallback: hide image, show dark bg
+            (e.target as HTMLImageElement).style.display = 'none';
+          }}
+        />
+        {/* Dark overlay for text readability */}
         <div style={{
           position: 'absolute',
           inset: 0,
-          background: 'linear-gradient(to top, rgba(10,15,26,0.95) 0%, rgba(10,15,26,0.4) 50%, rgba(10,15,26,0.1) 100%)',
+          background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.3) 50%, rgba(0,0,0,0.1) 100%)',
         }} />
         <div style={{
           position: 'absolute',
