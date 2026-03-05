@@ -460,19 +460,7 @@ async def get_topic_narrative(
         from app.core.config import settings
         import redis.asyncio as aioredis
 
-        # Check cache first
-        cache_key = f"novapress:topic_narrative:{hashlib.md5(topic_name.encode()).hexdigest()}"
-        redis_client = None
-        try:
-            redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
-            cached = await redis_client.get(cache_key)
-            if cached:
-                await redis_client.close()
-                return {"narrative": cached, "source": "cache"}
-        except Exception:
-            pass
-
-        # Fetch dashboard data to build context
+        # Fetch dashboard data first (needed for both cache key and generation)
         from app.ml.topic_tracker import get_topic_tracker
         tracker = get_topic_tracker()
         dashboard = await tracker.get_topic_dashboard(topic_name)
@@ -480,8 +468,25 @@ async def get_topic_narrative(
         if not dashboard:
             return {"narrative": None, "source": "no_data"}
 
-        # Build rich context for the LLM
+        # Content-fingerprint cache: key changes when syntheses change
         syntheses = dashboard.get("syntheses", [])
+        synthesis_ids = sorted([s.get("id", "") for s in syntheses if s.get("id")])
+        fingerprint = hashlib.md5("".join(synthesis_ids).encode()).hexdigest()[:8]
+        topic_hash = hashlib.md5(topic_name.encode()).hexdigest()
+        cache_key = f"novapress:topic_narrative:{topic_hash}:{fingerprint}"
+
+        redis_client = None
+        try:
+            redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+            cached = await redis_client.get(cache_key)
+            if cached:
+                await redis_client.close()
+                logger.info(f"Topic narrative cache hit for '{topic_name}' (fingerprint={fingerprint})")
+                return {"narrative": cached, "source": "cache"}
+        except Exception:
+            pass
+
+        # Build rich context for the LLM
         entities = dashboard.get("key_entities", [])
         causal = dashboard.get("aggregated_causal_graph", {})
         predictions = dashboard.get("predictions_summary", [])
@@ -570,10 +575,10 @@ Reponds UNIQUEMENT avec le texte narratif."""
         narrative = response.choices[0].message.content
         if narrative:
             narrative = narrative.strip()
-            # Cache for 6 hours
+            # Cache for 30 days (effectively permanent until content fingerprint changes)
             if redis_client:
                 try:
-                    await redis_client.set(cache_key, narrative, ex=6 * 3600)
+                    await redis_client.set(cache_key, narrative, ex=30 * 24 * 3600)
                     await redis_client.close()
                 except Exception:
                     pass

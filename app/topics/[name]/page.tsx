@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
@@ -15,9 +15,9 @@ import {
 } from '@/app/components/topics';
 import { Header } from '@/app/components/layout/Header';
 
-// Lazy-load the Nexus Scroll Viewer (images + force graph fallback)
-const NexusScrollViewer = dynamic(
-  () => import('@/app/components/causal/NexusScrollViewer'),
+// Lazy-load the interactive force graph (all nodes clickable)
+const NexusForceGraph = dynamic(
+  () => import('@/app/components/causal/NexusForceGraph'),
   {
     ssr: false,
     loading: () => (
@@ -298,12 +298,76 @@ function TopicDashboardPage() {
     source_syntheses: e.source_syntheses || [],
   }));
 
+  // Callback for NexusForceGraph node clicks
+  const handleGraphNodeSelect = useCallback((node: {
+    id: string;
+    label: string;
+    type: string;
+    mentionCount: number;
+    connections: { label: string; direction: 'cause' | 'effect'; relationType: string }[];
+  } | null) => {
+    if (!node) {
+      setSelectedNode(null);
+      return;
+    }
+    const causedBy = node.connections.filter(c => c.direction === 'cause').map(c => c.label);
+    const causes = node.connections.filter(c => c.direction === 'effect').map(c => c.label);
+    // Collect source syntheses from edges
+    const sourceSynths: string[] = [];
+    for (const e of causalEdges) {
+      if (e.cause_text === node.label || e.effect_text === node.label) {
+        for (const sid of (e.source_syntheses || [])) {
+          if (!sourceSynths.includes(sid)) sourceSynths.push(sid);
+        }
+      }
+    }
+    const rawNode = causalNodes.find(n => n.id === node.id);
+    setSelectedNode({
+      id: node.id,
+      label: node.label,
+      type: node.type,
+      mentionCount: node.mentionCount,
+      sourceSyntheses: [...sourceSynths, ...(rawNode?.source_syntheses || [])],
+      causedBy,
+      causes,
+    });
+    setSelectedEdge(null);
+  }, [causalEdges, causalNodes]);
+
   return (
-    <div style={styles.page}>
+    <div style={{ ...styles.page, position: 'relative' }}>
+      {/* Full-page background image */}
+      {heroImageUrl && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 0,
+          pointerEvents: 'none',
+        }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={heroImageUrl}
+            alt=""
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              opacity: 0.22,
+              filter: 'grayscale(40%) contrast(0.9)',
+            }}
+          />
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'linear-gradient(to bottom, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.85) 100%)',
+          }} />
+        </div>
+      )}
+
       {/* Shared Header */}
       <Header />
 
-      {/* Hero */}
+      {/* Hero — above background */}
       <TopicHero
         topic={dashboard.topic}
         narrativeArc={dashboard.narrative_arc}
@@ -339,12 +403,12 @@ function TopicDashboardPage() {
       </div>
 
       {/* Content */}
-      <div style={styles.content}>
+      <div style={{ ...styles.content, position: 'relative', zIndex: 1 }}>
 
         {/* === TAB: Causal Graph === */}
         {activeTab === 'causal' && (
           <section style={styles.section}>
-            {/* 2-column: Narrative sidebar + Graph */}
+            {/* 2-column: Sidebar (narrative or node detail) + Graph */}
             <div style={{
               display: 'grid',
               gridTemplateColumns: '320px 1fr',
@@ -353,35 +417,8 @@ function TopicDashboardPage() {
               position: 'relative',
               overflow: 'hidden',
             }}>
-              {/* Background image overlay */}
-              {heroImageUrl && (
-                <div style={{
-                  position: 'absolute',
-                  inset: 0,
-                  zIndex: 0,
-                  pointerEvents: 'none',
-                }}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={heroImageUrl}
-                    alt=""
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                      opacity: 0.12,
-                      filter: 'grayscale(60%) contrast(1.1)',
-                    }}
-                  />
-                  <div style={{
-                    position: 'absolute',
-                    inset: 0,
-                    background: 'linear-gradient(to right, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.6) 30%, rgba(255,255,255,0.3) 100%)',
-                  }} />
-                </div>
-              )}
 
-              {/* LEFT: Narrative sidebar */}
+              {/* LEFT: Sidebar — narrative (default) or node detail (when selected) */}
               <div style={{
                 position: 'relative',
                 zIndex: 1,
@@ -391,102 +428,198 @@ function TopicDashboardPage() {
                 overflowY: 'auto',
                 maxHeight: '800px',
               }}>
-                <div style={{
-                  fontSize: '10px',
-                  fontWeight: 800,
-                  letterSpacing: '2px',
-                  color: '#6B7280',
-                  textTransform: 'uppercase' as const,
-                  marginBottom: '16px',
-                }}>
-                  COMPRENDRE CE DOSSIER
-                </div>
-
-                {/* LLM-generated narrative */}
-                <div style={{
-                  fontFamily: 'Georgia, "Times New Roman", serif',
-                  fontSize: '14.5px',
-                  color: '#1F2937',
-                  lineHeight: 1.75,
-                  marginBottom: '24px',
-                }}>
-                  {narrativeLoading && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#9CA3AF', fontSize: '13px', marginBottom: '12px' }}>
-                      <div style={{
-                        width: '14px', height: '14px', borderRadius: '50%',
-                        border: '2px solid #E5E5E5', borderTopColor: '#2563EB',
-                        animation: 'spin 1s linear infinite',
-                      }} />
-                      Generation de l&apos;analyse...
-                    </div>
-                  )}
-                  {narrative ? (
-                    narrative.split('\n').filter(p => p.trim()).map((para, i) => (
-                      <p key={i} style={{ margin: '0 0 12px 0' }}>{para}</p>
-                    ))
-                  ) : !narrativeLoading ? (
-                    <>
-                      <p style={{ margin: '0 0 12px 0' }}>
-                        Le dossier <strong>{dashboard.topic}</strong> est suivi depuis le{' '}
-                        {formatDate(dashboard.first_date)}.
-                        {' '}En <strong>{dashboard.duration_days || 0} jours</strong>,{' '}
-                        <strong>{dashboard.synthesis_count} syntheses</strong> ont ete produites
-                        a partir de <strong>{dashboard.sources_total || 0} sources</strong> differentes.
-                      </p>
-                      {dashboard.key_entities.length > 0 && (
-                        <p style={{ margin: '0 0 12px 0' }}>
-                          Acteurs cles:{' '}
-                          {dashboard.key_entities.slice(0, 4).map(e => e.name).join(', ')}.
-                        </p>
-                      )}
-                      <p style={{ margin: '0' }}>
-                        Phase: <strong style={{ color: arcConfig.color }}>{arcConfig.label}</strong>.
-                      </p>
-                    </>
-                  ) : null}
-                </div>
-
-                {/* Recent syntheses mini-list */}
-                <div style={{
-                  borderTop: '1px solid #E5E5E5',
-                  paddingTop: '16px',
-                }}>
-                  <div style={{
-                    fontSize: '10px',
-                    fontWeight: 700,
-                    letterSpacing: '1.5px',
-                    color: '#6B7280',
-                    textTransform: 'uppercase' as const,
-                    marginBottom: '10px',
-                  }}>
-                    DERNIERES SYNTHESES
-                  </div>
-                  {dashboard.syntheses.slice(0, 5).map((s, i) => (
-                    <Link
-                      key={s.id}
-                      href={`/synthesis/${s.id}`}
+                {selectedNode ? (
+                  /* ---- Node detail view ---- */
+                  <div>
+                    <button
+                      onClick={() => setSelectedNode(null)}
                       style={{
-                        display: 'block',
-                        padding: '8px 0',
-                        borderBottom: i < 4 ? '1px solid #F3F4F6' : 'none',
-                        textDecoration: 'none',
-                        color: '#000',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '0',
+                        marginBottom: '16px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        color: '#2563EB',
+                        backgroundColor: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
                       }}
                     >
-                      <div style={{ fontSize: '11px', color: '#9CA3AF', marginBottom: '2px' }}>
-                        {formatDate(s.date)}
+                      &larr; Retour au narratif
+                    </button>
+
+                    <div style={{
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      letterSpacing: '0.5px',
+                      color: NODE_TYPE_LEGEND.find(l => l.type === selectedNode.type)?.color || '#6B7280',
+                      textTransform: 'uppercase' as const,
+                      marginBottom: '4px',
+                    }}>
+                      {NODE_TYPE_LEGEND.find(l => l.type === selectedNode.type)?.label || selectedNode.type}
+                    </div>
+                    <h3 style={{
+                      fontFamily: 'Georgia, "Times New Roman", serif',
+                      fontSize: '20px',
+                      fontWeight: 700,
+                      color: '#000',
+                      margin: '0 0 12px 0',
+                      lineHeight: 1.3,
+                    }}>
+                      {selectedNode.label}
+                    </h3>
+
+                    <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '16px' }}>
+                      {selectedNode.mentionCount} mention{selectedNode.mentionCount > 1 ? 's' : ''}
+                      {selectedNode.causedBy.length + selectedNode.causes.length > 0 && (
+                        <> &middot; {selectedNode.causedBy.length + selectedNode.causes.length} connexion{(selectedNode.causedBy.length + selectedNode.causes.length) > 1 ? 's' : ''}</>
+                      )}
+                    </div>
+
+                    {selectedNode.causedBy.length > 0 && (
+                      <div style={{ marginBottom: '16px' }}>
+                        <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '1px', color: '#DC2626', marginBottom: '6px' }}>
+                          ORIGINES
+                        </div>
+                        {selectedNode.causedBy.map((c, i) => (
+                          <div key={i} style={{ fontSize: '13px', color: '#000', padding: '4px 0', borderBottom: '1px solid #F3F4F6' }}>
+                            {c}
+                          </div>
+                        ))}
                       </div>
+                    )}
+
+                    {selectedNode.causes.length > 0 && (
+                      <div style={{ marginBottom: '16px' }}>
+                        <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '1px', color: '#10B981', marginBottom: '6px' }}>
+                          CONSEQUENCES
+                        </div>
+                        {selectedNode.causes.map((c, i) => (
+                          <div key={i} style={{ fontSize: '13px', color: '#000', padding: '4px 0', borderBottom: '1px solid #F3F4F6' }}>
+                            {c}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {selectedNode.sourceSyntheses.length > 0 && (
+                      <div style={{ paddingTop: '12px', borderTop: '1px solid #E5E5E5' }}>
+                        <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '1px', color: '#6B7280', marginBottom: '6px' }}>
+                          SYNTHESES LIEES
+                        </div>
+                        {selectedNode.sourceSyntheses.slice(0, 5).map((sid, i) => {
+                          const synth = dashboard.syntheses.find(s => s.id === sid);
+                          return synth ? (
+                            <Link key={i} href={`/synthesis/${sid}`} style={{ display: 'block', fontSize: '12px', color: '#2563EB', textDecoration: 'none', padding: '4px 0' }}>
+                              {synth.title.length > 70 ? synth.title.slice(0, 70) + '\u2026' : synth.title}
+                            </Link>
+                          ) : null;
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  /* ---- Narrative view (default) ---- */
+                  <div>
+                    <div style={{
+                      fontSize: '10px',
+                      fontWeight: 800,
+                      letterSpacing: '2px',
+                      color: '#6B7280',
+                      textTransform: 'uppercase' as const,
+                      marginBottom: '16px',
+                    }}>
+                      COMPRENDRE CE DOSSIER
+                    </div>
+
+                    <div style={{
+                      fontFamily: 'Georgia, "Times New Roman", serif',
+                      fontSize: '14.5px',
+                      color: '#1F2937',
+                      lineHeight: 1.75,
+                      marginBottom: '24px',
+                    }}>
+                      {narrativeLoading && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#9CA3AF', fontSize: '13px', marginBottom: '12px' }}>
+                          <div style={{
+                            width: '14px', height: '14px', borderRadius: '50%',
+                            border: '2px solid #E5E5E5', borderTopColor: '#2563EB',
+                            animation: 'spin 1s linear infinite',
+                          }} />
+                          Generation de l&apos;analyse...
+                        </div>
+                      )}
+                      {narrative ? (
+                        narrative.split('\n').filter(p => p.trim()).map((para, i) => (
+                          <p key={i} style={{ margin: '0 0 12px 0' }}>{para}</p>
+                        ))
+                      ) : !narrativeLoading ? (
+                        <>
+                          <p style={{ margin: '0 0 12px 0' }}>
+                            Le dossier <strong>{dashboard.topic}</strong> est suivi depuis le{' '}
+                            {formatDate(dashboard.first_date)}.
+                            {' '}En <strong>{dashboard.duration_days || 0} jours</strong>,{' '}
+                            <strong>{dashboard.synthesis_count} syntheses</strong> ont ete produites
+                            a partir de <strong>{dashboard.sources_total || 0} sources</strong> differentes.
+                          </p>
+                          {dashboard.key_entities.length > 0 && (
+                            <p style={{ margin: '0 0 12px 0' }}>
+                              Acteurs cles:{' '}
+                              {dashboard.key_entities.slice(0, 4).map(e => e.name).join(', ')}.
+                            </p>
+                          )}
+                          <p style={{ margin: '0' }}>
+                            Phase: <strong style={{ color: arcConfig.color }}>{arcConfig.label}</strong>.
+                          </p>
+                        </>
+                      ) : null}
+                    </div>
+
+                    <div style={{
+                      borderTop: '1px solid #E5E5E5',
+                      paddingTop: '16px',
+                    }}>
                       <div style={{
-                        fontSize: '13px',
-                        fontWeight: 500,
-                        lineHeight: 1.3,
-                        color: '#1F2937',
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        letterSpacing: '1.5px',
+                        color: '#6B7280',
+                        textTransform: 'uppercase' as const,
+                        marginBottom: '10px',
                       }}>
-                        {s.title.length > 80 ? s.title.slice(0, 80) + '\u2026' : s.title}
+                        DERNIERES SYNTHESES
                       </div>
-                    </Link>
-                  ))}
-                </div>
+                      {dashboard.syntheses.slice(0, 5).map((s, i) => (
+                        <Link
+                          key={s.id}
+                          href={`/synthesis/${s.id}`}
+                          style={{
+                            display: 'block',
+                            padding: '8px 0',
+                            borderBottom: i < 4 ? '1px solid #F3F4F6' : 'none',
+                            textDecoration: 'none',
+                            color: '#000',
+                          }}
+                        >
+                          <div style={{ fontSize: '11px', color: '#9CA3AF', marginBottom: '2px' }}>
+                            {formatDate(s.date)}
+                          </div>
+                          <div style={{
+                            fontSize: '13px',
+                            fontWeight: 500,
+                            lineHeight: 1.3,
+                            color: '#1F2937',
+                          }}>
+                            {s.title.length > 80 ? s.title.slice(0, 80) + '\u2026' : s.title}
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* RIGHT: Graph + connections */}
@@ -526,16 +659,16 @@ function TopicDashboardPage() {
                   </div>
                 )}
 
-                {/* Graph */}
+                {/* Interactive Force Graph */}
                 <div style={{ minWidth: 0 }}>
                   {hasCausalData ? (
-                    <NexusScrollViewer
+                    <NexusForceGraph
                       topic={dashboard.topic}
                       nodes={causalNodes}
                       edges={causalEdges}
                       centralEntity={dashboard.topic}
                       height={600}
-                      theme="light"
+                      onNodeSelect={handleGraphNodeSelect}
                     />
                   ) : (
                     <div style={styles.emptyState}>
@@ -543,177 +676,6 @@ function TopicDashboardPage() {
                     </div>
                   )}
                 </div>
-
-                {/* Clickable nodes grid — easy UX for exploring nodes */}
-                {hasCausalData && causalNodes.length > 0 && (
-                  <div style={{
-                    padding: '12px 16px',
-                    borderTop: '1px solid #E5E5E5',
-                    backgroundColor: 'rgba(249,250,251,0.95)',
-                  }}>
-                    <div style={{
-                      fontSize: '10px',
-                      fontWeight: 700,
-                      letterSpacing: '1.5px',
-                      color: '#6B7280',
-                      textTransform: 'uppercase' as const,
-                      marginBottom: '8px',
-                    }}>
-                      EXPLORER LES NOEUDS ({causalNodes.length})
-                    </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                      {causalNodes
-                        .sort((a, b) => (b.mention_count || 1) - (a.mention_count || 1))
-                        .map((node) => {
-                          const typeConfig = NODE_TYPE_LEGEND.find(l => l.type === node.node_type);
-                          const color = typeConfig?.color || '#6B7280';
-                          return (
-                            <button
-                              key={node.id}
-                              onClick={() => {
-                                // Build connections for this node
-                                const causedBy: string[] = [];
-                                const causes: string[] = [];
-                                const sourceSynths: string[] = [];
-                                for (const e of causalEdges) {
-                                  if (e.effect_text === node.label || e.cause_text === node.label) {
-                                    if (e.cause_text === node.label) causes.push(e.effect_text);
-                                    if (e.effect_text === node.label) causedBy.push(e.cause_text);
-                                    for (const sid of (e.source_syntheses || [])) {
-                                      if (!sourceSynths.includes(sid)) sourceSynths.push(sid);
-                                    }
-                                  }
-                                }
-                                setSelectedNode({
-                                  id: node.id,
-                                  label: node.label,
-                                  type: node.node_type,
-                                  mentionCount: node.mention_count || 1,
-                                  sourceSyntheses: [...sourceSynths, ...(node.source_syntheses || [])],
-                                  causedBy,
-                                  causes,
-                                });
-                                setSelectedEdge(null);
-                              }}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '5px',
-                                padding: '6px 12px',
-                                fontSize: '12px',
-                                fontWeight: 500,
-                                backgroundColor: selectedNode?.id === node.id ? `${color}15` : '#FFFFFF',
-                                color: '#1F2937',
-                                border: `1px solid ${selectedNode?.id === node.id ? color : '#E5E5E5'}`,
-                                borderLeft: `3px solid ${color}`,
-                                cursor: 'pointer',
-                                fontFamily: 'inherit',
-                                transition: 'all 0.15s',
-                              }}
-                            >
-                              {node.label.length > 30 ? node.label.slice(0, 30) + '\u2026' : node.label}
-                              {(node.mention_count || 0) > 1 && (
-                                <span style={{ fontSize: '10px', color: '#9CA3AF' }}>
-                                  {node.mention_count}x
-                                </span>
-                              )}
-                            </button>
-                          );
-                        })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Selected node detail panel */}
-                {selectedNode && (
-                  <div style={{
-                    margin: '0 16px 16px',
-                    padding: '16px 20px',
-                    border: '1px solid #E5E5E5',
-                    backgroundColor: '#FFFFFF',
-                    borderLeft: `3px solid ${NODE_TYPE_LEGEND.find(l => l.type === selectedNode.type)?.color || '#6B7280'}`,
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                      <div>
-                        <span style={{
-                          fontSize: '10px',
-                          fontWeight: 700,
-                          letterSpacing: '0.5px',
-                          color: NODE_TYPE_LEGEND.find(l => l.type === selectedNode.type)?.color || '#6B7280',
-                          textTransform: 'uppercase' as const,
-                        }}>
-                          {NODE_TYPE_LEGEND.find(l => l.type === selectedNode.type)?.label || selectedNode.type}
-                        </span>
-                        <h3 style={{
-                          fontFamily: 'Georgia, "Times New Roman", serif',
-                          fontSize: '18px',
-                          fontWeight: 700,
-                          color: '#000',
-                          margin: '4px 0 0 0',
-                          lineHeight: 1.3,
-                        }}>
-                          {selectedNode.label}
-                        </h3>
-                      </div>
-                      <button
-                        onClick={() => setSelectedNode(null)}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', color: '#9CA3AF', padding: '0', fontFamily: 'inherit' }}
-                      >
-                        &times;
-                      </button>
-                    </div>
-
-                    <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '12px' }}>
-                      {selectedNode.mentionCount} mention{selectedNode.mentionCount > 1 ? 's' : ''}
-                      {selectedNode.causedBy.length + selectedNode.causes.length > 0 && (
-                        <> &middot; {selectedNode.causedBy.length + selectedNode.causes.length} connexion{(selectedNode.causedBy.length + selectedNode.causes.length) > 1 ? 's' : ''}</>
-                      )}
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                      {selectedNode.causedBy.length > 0 && (
-                        <div>
-                          <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '1px', color: '#DC2626', marginBottom: '6px' }}>
-                            ORIGINES
-                          </div>
-                          {selectedNode.causedBy.map((c, i) => (
-                            <div key={i} style={{ fontSize: '13px', color: '#000', padding: '3px 0', borderBottom: '1px solid #F3F4F6' }}>
-                              {c}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {selectedNode.causes.length > 0 && (
-                        <div>
-                          <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '1px', color: '#10B981', marginBottom: '6px' }}>
-                            CONSEQUENCES
-                          </div>
-                          {selectedNode.causes.map((c, i) => (
-                            <div key={i} style={{ fontSize: '13px', color: '#000', padding: '3px 0', borderBottom: '1px solid #F3F4F6' }}>
-                              {c}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {selectedNode.sourceSyntheses.length > 0 && (
-                      <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #E5E5E5' }}>
-                        <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '1px', color: '#6B7280', marginBottom: '6px' }}>
-                          SYNTHESES LIEES
-                        </div>
-                        {selectedNode.sourceSyntheses.slice(0, 3).map((sid, i) => {
-                          const synth = dashboard.syntheses.find(s => s.id === sid);
-                          return synth ? (
-                            <Link key={i} href={`/synthesis/${sid}`} style={{ display: 'block', fontSize: '12px', color: '#2563EB', textDecoration: 'none', padding: '3px 0' }}>
-                              {synth.title.length > 60 ? synth.title.slice(0, 60) + '\u2026' : synth.title}
-                            </Link>
-                          ) : null;
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
 
                 {/* Connections list below graph */}
                 {hasCausalData && (
