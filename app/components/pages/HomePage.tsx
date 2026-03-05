@@ -14,7 +14,6 @@ import { useArticles } from '../../contexts/ArticlesContext';
 import { Header } from '../layout/Header';
 import { StatusBar } from '../layout/StatusBar';
 import { NewsTicker } from '../layout/NewsTicker';
-import { DossiersBar } from '../layout/DossiersBar';
 import { Footer } from '../layout/Footer';
 import { OfflineNotification } from '../ui/OfflineNotification';
 import { TrendingTopics } from '../trending';
@@ -871,7 +870,6 @@ export function HomePage() {
       <Header />
       <StatusBar />
       <NewsTicker />
-      <DossiersBar />
       <MainContent />
       <Footer />
       <OfflineNotification />
