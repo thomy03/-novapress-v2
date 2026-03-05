@@ -158,14 +158,9 @@ async def get_podcast_rss(request: Request):
 
     feed = get_podcast_feed()
 
-    # Determine base URL from request or config
-    base_url = str(request.base_url).rstrip("/")
-    # In production, prefer the configured domain
-    if "localhost" in base_url:
-        from app.core.config import settings
-        configured = getattr(settings, "SITE_URL", None)
-        if configured:
-            base_url = configured.rstrip("/")
+    # Always use configured SITE_URL for consistent HTTPS URLs in feed
+    from app.core.config import settings
+    base_url = settings.SITE_URL.rstrip("/")
 
     xml = feed.generate_rss(base_url)
 

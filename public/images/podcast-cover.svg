@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1400" viewBox="0 0 1400 1400">
+  <rect width="1400" height="1400" fill="#FFFFFF"/>
+
+  <!-- Top red line -->
+  <rect x="0" y="0" width="1400" height="8" fill="#DC2626"/>
+
+  <!-- Border frame -->
+  <rect x="40" y="40" width="1320" height="1320" fill="none" stroke="#000000" stroke-width="2"/>
+  <rect x="48" y="48" width="1304" height="1304" fill="none" stroke="#000000" stroke-width="0.5"/>
+
+  <!-- Header area -->
+  <line x1="80" y1="200" x2="1320" y2="200" stroke="#000000" stroke-width="2"/>
+  <line x1="80" y1="204" x2="1320" y2="204" stroke="#000000" stroke-width="0.5"/>
+
+  <!-- NovaPress title -->
+  <text x="700" y="140" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="72" font-weight="700" fill="#000000">NovaPress</text>
+  <text x="700" y="180" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="28" font-weight="400" fill="#6B7280" letter-spacing="6">TALKSHOW</text>
+
+  <!-- AI badge -->
+  <rect x="940" y="100" width="60" height="32" rx="2" fill="#2563EB"/>
+  <text x="970" y="122" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#FFFFFF">AI</text>
+
+  <!-- Main title -->
+  <text x="700" y="340" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="56" font-weight="700" fill="#000000">Le debat IA</text>
+  <text x="700" y="410" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="56" font-weight="700" fill="#000000">de l'actualite</text>
+
+  <!-- Divider -->
+  <line x1="500" y1="460" x2="900" y2="460" stroke="#DC2626" stroke-width="3"/>
+
+  <!-- 5 panelist circles -->
+  <circle cx="380" cy="620" r="55" fill="#EC4899" opacity="0.15" stroke="#EC4899" stroke-width="2"/>
+  <text x="380" y="628" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#9D174D">VM</text>
+
+  <circle cx="540" cy="620" r="55" fill="#2563EB" opacity="0.15" stroke="#2563EB" stroke-width="2"/>
+  <text x="540" y="628" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#1E40AF">PR</text>
+
+  <circle cx="700" cy="620" r="55" fill="#10B981" opacity="0.15" stroke="#10B981" stroke-width="2"/>
+  <text x="700" y="628" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#065F46">CD</text>
+
+  <circle cx="860" cy="620" r="55" fill="#F59E0B" opacity="0.15" stroke="#F59E0B" stroke-width="2"/>
+  <text x="860" y="628" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#92400E">ML</text>
+
+  <circle cx="1020" cy="620" r="55" fill="#8B5CF6" opacity="0.15" stroke="#8B5CF6" stroke-width="2"/>
+  <text x="1020" y="628" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#5B21B6">SB</text>
+
+  <!-- Panelist names -->
+  <text x="380" y="700" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" fill="#6B7280">Moderatrice</text>
+  <text x="540" y="700" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" fill="#6B7280">Expert</text>
+  <text x="700" y="700" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" fill="#6B7280">Reporter</text>
+  <text x="860" y="700" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" fill="#6B7280">Editorialiste</text>
+  <text x="1020" y="700" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" fill="#6B7280">Prospectiviste</text>
+
+  <!-- Divider -->
+  <line x1="80" y1="760" x2="1320" y2="760" stroke="#E5E5E5" stroke-width="1"/>
+
+  <!-- Description -->
+  <text x="700" y="830" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="26" fill="#374151">5 experts IA analysent et debattent</text>
+  <text x="700" y="870" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="26" fill="#374151">les grands dossiers de l'actualite</text>
+
+  <!-- Categories -->
+  <text x="700" y="950" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#9CA3AF" letter-spacing="4">GEOPOLITIQUE · TECHNOLOGIE · ECONOMIE · SCIENCES</text>
+
+  <!-- Bottom section -->
+  <line x1="80" y1="1060" x2="1320" y2="1060" stroke="#000000" stroke-width="1"/>
+
+  <!-- Microphone icon (simple) -->
+  <rect x="665" y="1100" width="70" height="100" rx="35" fill="none" stroke="#DC2626" stroke-width="3"/>
+  <line x1="700" y1="1200" x2="700" y2="1240" stroke="#DC2626" stroke-width="3"/>
+  <line x1="670" y1="1240" x2="730" y2="1240" stroke="#DC2626" stroke-width="3"/>
+
+  <!-- Bottom text -->
+  <text x="700" y="1300" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#9CA3AF" letter-spacing="2">novapressai.com</text>
+
+  <!-- Bottom red line -->
+  <rect x="0" y="1392" width="1400" height="8" fill="#DC2626"/>
+</svg>
