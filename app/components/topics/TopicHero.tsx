@@ -47,109 +47,198 @@ export default function TopicHero({
   ];
 
   return (
-    <div style={{
-      maxWidth: '1200px',
-      margin: '0 auto',
-      padding: '40px 24px 0',
-    }}>
-      {/* Back link */}
-      <Link href="/" style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '6px',
-        color: '#6B7280',
-        textDecoration: 'none',
-        fontSize: '13px',
-        marginBottom: '24px',
-      }}>
-        {'← Retour aux actualités'}
-      </Link>
-
-      {/* Badges */}
+    <div>
+      {/* Hero Visual Header */}
       <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '10px',
-        marginBottom: '12px',
-        flexWrap: 'wrap',
+        position: 'relative',
+        width: '100%',
+        height: '280px',
+        overflow: 'hidden',
+        marginBottom: '24px',
+        backgroundColor: '#0A0F1A',
       }}>
-        <span style={{
-          backgroundColor: '#000',
-          color: '#FFF',
-          padding: '4px 12px',
-          fontSize: '11px',
-          fontWeight: 700,
-          letterSpacing: '1px',
+        {/* Decorative grid pattern */}
+        <svg
+          width="100%"
+          height="100%"
+          style={{ position: 'absolute', inset: 0, opacity: 0.15 }}
+        >
+          <defs>
+            <pattern id="hero-grid" width="40" height="40" patternUnits="userSpaceOnUse">
+              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#3B82F6" strokeWidth="0.5" />
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#hero-grid)" />
+          {/* Abstract nodes representing the topic network */}
+          {Array.from({ length: 8 }).map((_, i) => {
+            const cx = 80 + (i * 170) % 1200;
+            const cy = 60 + Math.sin(i * 1.2) * 80 + 80;
+            const r = 4 + (i % 3) * 3;
+            const colors = ['#DC2626', '#3B82F6', '#F59E0B', '#10B981'];
+            return (
+              <g key={i}>
+                <circle cx={cx} cy={cy} r={r * 3} fill={colors[i % 4]} opacity={0.08} />
+                <circle cx={cx} cy={cy} r={r} fill={colors[i % 4]} opacity={0.5} />
+              </g>
+            );
+          })}
+          {/* Abstract connection lines */}
+          {Array.from({ length: 5 }).map((_, i) => {
+            const x1 = 80 + (i * 170) % 1200;
+            const y1 = 60 + Math.sin(i * 1.2) * 80 + 80;
+            const x2 = 80 + ((i + 1) * 170) % 1200;
+            const y2 = 60 + Math.sin((i + 1) * 1.2) * 80 + 80;
+            return (
+              <line key={`l${i}`} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#3B82F6" strokeWidth="0.5" opacity={0.2} />
+            );
+          })}
+        </svg>
+        {/* Bottom fade overlay for text readability */}
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'linear-gradient(to top, rgba(10,15,26,0.95) 0%, rgba(10,15,26,0.4) 50%, rgba(10,15,26,0.1) 100%)',
+        }} />
+        <div style={{
+          position: 'absolute',
+          bottom: '24px',
+          left: '24px',
+          right: '24px',
         }}>
-          DOSSIER
-        </span>
-        <span style={{
-          backgroundColor: `${arc.color}15`,
-          color: arc.color,
-          padding: '4px 12px',
-          fontSize: '11px',
-          fontWeight: 700,
-          letterSpacing: '0.5px',
-        }}>
-          {arc.label}
-        </span>
-        {isActive && (
-          <span style={{
-            backgroundColor: '#FEE2E2',
-            color: '#DC2626',
-            padding: '4px 12px',
-            fontSize: '11px',
-            fontWeight: 600,
-            letterSpacing: '0.5px',
+          {/* Badges on image */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            marginBottom: '12px',
+            flexWrap: 'wrap',
           }}>
-            EN COURS
-          </span>
-        )}
+            <span style={{
+              backgroundColor: '#FFF',
+              color: '#000',
+              padding: '4px 12px',
+              fontSize: '11px',
+              fontWeight: 700,
+              letterSpacing: '1px',
+            }}>
+              DOSSIER
+            </span>
+            <span style={{
+              backgroundColor: 'rgba(255,255,255,0.2)',
+              color: '#FFF',
+              padding: '4px 12px',
+              fontSize: '11px',
+              fontWeight: 700,
+              letterSpacing: '0.5px',
+              backdropFilter: 'blur(4px)',
+            }}>
+              {arc.label}
+            </span>
+            {isActive && (
+              <span style={{
+                backgroundColor: 'rgba(220, 38, 38, 0.8)',
+                color: '#FFF',
+                padding: '4px 12px',
+                fontSize: '11px',
+                fontWeight: 600,
+                letterSpacing: '0.5px',
+              }}>
+                EN COURS
+              </span>
+            )}
+          </div>
+          <h1 style={{
+            fontFamily: 'Georgia, "Times New Roman", serif',
+            fontSize: '42px',
+            fontWeight: 700,
+            lineHeight: 1.1,
+            color: '#FFF',
+            margin: 0,
+            textShadow: '0 2px 8px rgba(0,0,0,0.3)',
+          }}>
+            {topic}
+          </h1>
+        </div>
       </div>
 
-      {/* Title */}
-      <h1 style={{
-        fontFamily: 'Georgia, "Times New Roman", serif',
-        fontSize: '48px',
-        fontWeight: 700,
-        lineHeight: 1.1,
-        color: '#000',
-        margin: '0 0 8px 0',
-        borderBottom: '3px solid #000',
-        paddingBottom: '16px',
-      }}>
-        {topic}
-      </h1>
-
-      {/* Subtitle */}
-      {firstDate && (
-        <p style={{
-          fontSize: '14px',
-          color: '#6B7280',
-          margin: '0 0 24px 0',
-        }}>
-          Dossier suivi depuis le{' '}
-          {new Date(firstDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
-        </p>
-      )}
-
-      {/* KPI Bar — large numbers with vertical dividers */}
+      {/* Content below image */}
       <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0',
-        paddingBottom: '32px',
-        borderBottom: '1px solid #E5E5E5',
-        overflowX: 'auto',
+        maxWidth: '1200px',
+        margin: '0 auto',
+        padding: '0 24px',
       }}>
-        {kpis.map((kpi, i) => (
+        {/* Back link */}
+        <Link href="/" style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '6px',
+          color: '#6B7280',
+          textDecoration: 'none',
+          fontSize: '13px',
+          marginBottom: '16px',
+        }}>
+          {'← Retour aux actualités'}
+        </Link>
+
+        {/* Subtitle */}
+        {firstDate && (
+          <p style={{
+            fontSize: '14px',
+            color: '#6B7280',
+            margin: '0 0 24px 0',
+          }}>
+            Dossier suivi depuis le{' '}
+            {new Date(firstDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+          </p>
+        )}
+
+        {/* KPI Bar — large numbers with vertical dividers */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0',
+          paddingBottom: '32px',
+          borderBottom: '1px solid #E5E5E5',
+          overflowX: 'auto',
+        }}>
+          {kpis.map((kpi, i) => (
+            <div
+              key={kpi.label}
+              style={{
+                flex: '1 0 auto',
+                textAlign: 'center',
+                padding: '0 20px',
+                borderRight: i < kpis.length - 1 ? '1px solid #E5E5E5' : 'none',
+                minWidth: '100px',
+              }}
+            >
+              <div style={{
+                fontFamily: 'Georgia, "Times New Roman", serif',
+                fontSize: '28px',
+                fontWeight: 700,
+                color: '#000',
+                lineHeight: 1.2,
+              }}>
+                {kpi.value}
+              </div>
+              <div style={{
+                fontSize: '10px',
+                fontWeight: 700,
+                letterSpacing: '1.5px',
+                color: '#9CA3AF',
+                marginTop: '4px',
+              }}>
+                {kpi.label}
+              </div>
+            </div>
+          ))}
+
+          {/* Transparency score with color indicator */}
           <div
-            key={kpi.label}
             style={{
               flex: '1 0 auto',
               textAlign: 'center',
               padding: '0 20px',
-              borderRight: i < kpis.length - 1 ? '1px solid #E5E5E5' : 'none',
               minWidth: '100px',
             }}
           >
@@ -157,10 +246,10 @@ export default function TopicHero({
               fontFamily: 'Georgia, "Times New Roman", serif',
               fontSize: '28px',
               fontWeight: 700,
-              color: '#000',
+              color: transparencyColor,
               lineHeight: 1.2,
             }}>
-              {kpi.value}
+              {Math.round(transparencyAvg)}<span style={{ fontSize: '16px', color: '#9CA3AF' }}>/100</span>
             </div>
             <div style={{
               fontSize: '10px',
@@ -169,37 +258,8 @@ export default function TopicHero({
               color: '#9CA3AF',
               marginTop: '4px',
             }}>
-              {kpi.label}
+              TRANSPARENCE
             </div>
-          </div>
-        ))}
-
-        {/* Transparency score with color indicator */}
-        <div
-          style={{
-            flex: '1 0 auto',
-            textAlign: 'center',
-            padding: '0 20px',
-            minWidth: '100px',
-          }}
-        >
-          <div style={{
-            fontFamily: 'Georgia, "Times New Roman", serif',
-            fontSize: '28px',
-            fontWeight: 700,
-            color: transparencyColor,
-            lineHeight: 1.2,
-          }}>
-            {Math.round(transparencyAvg)}<span style={{ fontSize: '16px', color: '#9CA3AF' }}>/100</span>
-          </div>
-          <div style={{
-            fontSize: '10px',
-            fontWeight: 700,
-            letterSpacing: '1.5px',
-            color: '#9CA3AF',
-            marginTop: '4px',
-          }}>
-            TRANSPARENCE
           </div>
         </div>
       </div>

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { Header } from '@/app/components/layout/Header';
 import { NarrativeArcIndicator } from '@/app/components/topics';
 import type { NarrativeArc } from '@/app/components/topics';
 
@@ -47,15 +48,8 @@ export default function TopicsListPage() {
 
   return (
     <div style={styles.page}>
-      {/* Header */}
-      <header style={styles.header}>
-        <div style={styles.headerContent}>
-          <Link href="/" style={styles.backLink}>
-            <span style={{ fontSize: '18px' }}>&larr;</span>
-            <span>Retour aux actualites</span>
-          </Link>
-        </div>
-      </header>
+      {/* Shared Header */}
+      <Header />
 
       {/* Hero */}
       <div style={styles.hero}>
@@ -175,27 +169,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     minHeight: '100vh',
     backgroundColor: '#FFFFFF',
     color: '#000000',
-  },
-  header: {
-    borderBottom: '1px solid #E5E5E5',
-    padding: '16px 0',
-    backgroundColor: '#FFFFFF',
-    position: 'sticky',
-    top: 0,
-    zIndex: 100,
-  },
-  headerContent: {
-    maxWidth: '1200px',
-    margin: '0 auto',
-    padding: '0 24px',
-  },
-  backLink: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '8px',
-    color: '#6B7280',
-    textDecoration: 'none',
-    fontSize: '14px',
   },
   hero: {
     maxWidth: '1200px',

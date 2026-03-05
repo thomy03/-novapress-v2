@@ -13,6 +13,7 @@ import {
   TopicEntityCards,
   TopicSentimentSparkline,
 } from '@/app/components/topics';
+import { Header } from '@/app/components/layout/Header';
 
 // Lazy-load the Nexus Scroll Viewer (images + force graph fallback)
 const NexusScrollViewer = dynamic(
@@ -138,8 +139,6 @@ const NODE_TYPE_LEGEND: { type: string; label: string; color: string; shape: 'ci
   { type: 'keyword', label: 'Mot-cle', color: '#059669', shape: 'hexagon' },
 ];
 
-const NODES_PER_PAGE = 20;
-
 interface SelectedNodeInfo {
   id: string;
   label: string;
@@ -148,6 +147,16 @@ interface SelectedNodeInfo {
   sourceSyntheses: string[];
   causedBy: string[];
   causes: string[];
+}
+
+interface SelectedEdgeInfo {
+  id: string;
+  causeLabel: string;
+  effectLabel: string;
+  relationType: string;
+  confidence: number;
+  mentionCount: number;
+  sourceSyntheses: string[];
 }
 
 export default function TopicDashboardPageWrapper() {
@@ -169,7 +178,7 @@ function TopicDashboardPage() {
   const initialTab = (searchParams.get('tab') as TabId) || 'overview';
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
   const [selectedNode, setSelectedNode] = useState<SelectedNodeInfo | null>(null);
-  const [nodeListPage, setNodeListPage] = useState(0);
+  const [selectedEdge, setSelectedEdge] = useState<SelectedEdgeInfo | null>(null);
 
   useEffect(() => {
     const fetchDashboard = async () => {
@@ -274,18 +283,10 @@ function TopicDashboardPage() {
     source_syntheses: e.source_syntheses || [],
   }));
 
-  // Pagination for node list
-  const totalNodePages = Math.ceil(causalNodes.length / NODES_PER_PAGE);
-  const pagedNodes = causalNodes.slice(nodeListPage * NODES_PER_PAGE, (nodeListPage + 1) * NODES_PER_PAGE);
-
   return (
     <div style={styles.page}>
-      {/* Header Bar (sticky) */}
-      <header style={styles.header}>
-        <div style={styles.headerContent}>
-          <span style={styles.headerLabel}>DOSSIER</span>
-        </div>
-      </header>
+      {/* Shared Header */}
+      <Header />
 
       {/* Hero */}
       <TopicHero
@@ -409,7 +410,7 @@ function TopicDashboardPage() {
                   </div>
                 )}
 
-                {/* Clickable node list with pagination */}
+                {/* Clickable edge/connection list */}
                 {hasCausalData && (
                   <div style={{
                     padding: '16px',
@@ -428,72 +429,59 @@ function TopicDashboardPage() {
                         color: '#6B7280',
                         textTransform: 'uppercase' as const,
                       }}>
-                        NOEUDS DU GRAPHE ({causalNodes.length})
+                        CONNEXIONS CAUSALES ({causalEdges.length})
                       </div>
-                      {totalNodePages > 1 && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <button
-                            onClick={() => setNodeListPage(p => Math.max(0, p - 1))}
-                            disabled={nodeListPage === 0}
-                            style={{
-                              ...styles.paginationBtn,
-                              opacity: nodeListPage === 0 ? 0.3 : 1,
-                            }}
-                          >
-                            &larr;
-                          </button>
-                          <span style={{ fontSize: '11px', color: '#6B7280' }}>
-                            {nodeListPage + 1} / {totalNodePages}
-                          </span>
-                          <button
-                            onClick={() => setNodeListPage(p => Math.min(totalNodePages - 1, p + 1))}
-                            disabled={nodeListPage >= totalNodePages - 1}
-                            style={{
-                              ...styles.paginationBtn,
-                              opacity: nodeListPage >= totalNodePages - 1 ? 0.3 : 1,
-                            }}
-                          >
-                            &rarr;
-                          </button>
-                        </div>
-                      )}
                     </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                      {pagedNodes.map(node => {
-                        const isSelected = selectedNode?.id === node.id;
-                        const typeColor = NODE_TYPE_LEGEND.find(l => l.type === node.node_type)?.color || '#6B7280';
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {causalEdges.slice(0, 12).map((edge, idx) => {
+                        const isSelected = selectedEdge?.id === (edge.id || `edge-${idx}`);
+                        const typeColor = edge.relation_type === 'causes' ? '#DC2626'
+                          : edge.relation_type === 'triggers' ? '#F59E0B'
+                          : edge.relation_type === 'enables' ? '#10B981'
+                          : edge.relation_type === 'prevents' ? '#6B7280'
+                          : '#8B5CF6';
                         return (
                           <button
-                            key={node.id}
+                            key={edge.id || `edge-${idx}`}
                             onClick={() => {
-                              const causedBy = causalEdges
-                                .filter(e => e.effect_text === node.label)
-                                .map(e => e.cause_text);
-                              const causesArr = causalEdges
-                                .filter(e => e.cause_text === node.label)
-                                .map(e => e.effect_text);
-                              setSelectedNode({
-                                id: node.id,
-                                label: node.label,
-                                type: node.node_type,
-                                mentionCount: node.mention_count || 1,
-                                sourceSyntheses: node.source_syntheses || [],
-                                causedBy,
-                                causes: causesArr,
+                              setSelectedEdge({
+                                id: edge.id || `edge-${idx}`,
+                                causeLabel: edge.cause_text,
+                                effectLabel: edge.effect_text,
+                                relationType: edge.relation_type,
+                                confidence: edge.confidence,
+                                mentionCount: edge.mention_count || 1,
+                                sourceSyntheses: edge.source_syntheses || [],
                               });
+                              setSelectedNode(null);
                             }}
                             style={{
-                              padding: '4px 10px',
-                              fontSize: '12px',
-                              backgroundColor: isSelected ? typeColor : '#F3F4F6',
-                              color: isSelected ? '#fff' : '#374151',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              padding: '8px 12px',
+                              fontSize: '13px',
+                              backgroundColor: isSelected ? '#F9FAFB' : '#FFFFFF',
+                              color: '#000',
                               border: `1px solid ${isSelected ? typeColor : '#E5E5E5'}`,
+                              borderLeft: `3px solid ${typeColor}`,
                               cursor: 'pointer',
                               fontFamily: 'inherit',
-                              borderLeft: `3px solid ${typeColor}`,
+                              textAlign: 'left' as const,
+                              width: '100%',
                             }}
                           >
-                            {node.label.length > 50 ? node.label.slice(0, 50) + '\u2026' : node.label}
+                            <span style={{ flex: 1, minWidth: 0 }}>
+                              <span style={{ fontWeight: 600 }}>
+                                {edge.cause_text.length > 35 ? edge.cause_text.slice(0, 35) + '\u2026' : edge.cause_text}
+                              </span>
+                              <span style={{ color: typeColor, fontWeight: 700, margin: '0 6px', fontSize: '11px' }}>
+                                {'\u2192'}
+                              </span>
+                              <span>
+                                {edge.effect_text.length > 35 ? edge.effect_text.slice(0, 35) + '\u2026' : edge.effect_text}
+                              </span>
+                            </span>
                           </button>
                         );
                       })}
@@ -655,6 +643,175 @@ function TopicDashboardPage() {
                           </Link>
                         );
                       })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Edge detail panel (right side) */}
+              {selectedEdge && !selectedNode && (
+                <div style={{
+                  width: '360px',
+                  flexShrink: 0,
+                  borderLeft: '1px solid #E5E5E5',
+                  boxShadow: '-4px 0 20px rgba(0,0,0,0.1)',
+                  padding: '20px',
+                  backgroundColor: '#FFFFFF',
+                  overflowY: 'auto',
+                  maxHeight: '700px',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                    <div style={{
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      letterSpacing: '1px',
+                      color: '#6B7280',
+                      textTransform: 'uppercase' as const,
+                    }}>
+                      RELATION CAUSALE
+                    </div>
+                    <button
+                      onClick={() => setSelectedEdge(null)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '18px',
+                        color: '#9CA3AF',
+                        padding: '0',
+                        fontFamily: 'inherit',
+                      }}
+                    >
+                      &times;
+                    </button>
+                  </div>
+
+                  {/* Cause */}
+                  <div style={{ marginBottom: '20px' }}>
+                    <div style={{
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      letterSpacing: '1px',
+                      color: '#DC2626',
+                      textTransform: 'uppercase' as const,
+                      marginBottom: '6px',
+                    }}>
+                      CAUSE
+                    </div>
+                    <div style={{
+                      fontFamily: 'Georgia, "Times New Roman", serif',
+                      fontSize: '16px',
+                      fontWeight: 700,
+                      color: '#000',
+                      lineHeight: 1.3,
+                    }}>
+                      {selectedEdge.causeLabel}
+                    </div>
+                  </div>
+
+                  {/* Arrow */}
+                  <div style={{
+                    textAlign: 'center',
+                    padding: '8px 0',
+                    color: (() => {
+                      if (selectedEdge.relationType === 'causes') return '#DC2626';
+                      if (selectedEdge.relationType === 'triggers') return '#F59E0B';
+                      if (selectedEdge.relationType === 'enables') return '#10B981';
+                      if (selectedEdge.relationType === 'prevents') return '#6B7280';
+                      return '#8B5CF6';
+                    })(),
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    letterSpacing: '1px',
+                    textTransform: 'uppercase' as const,
+                  }}>
+                    {selectedEdge.relationType === 'causes' ? 'CAUSE' :
+                     selectedEdge.relationType === 'triggers' ? 'DECLENCHE' :
+                     selectedEdge.relationType === 'enables' ? 'PERMET' :
+                     selectedEdge.relationType === 'prevents' ? 'EMPECHE' : 'LIE A'}
+                    {' \u2193'}
+                  </div>
+
+                  {/* Effect */}
+                  <div style={{ marginBottom: '20px' }}>
+                    <div style={{
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      letterSpacing: '1px',
+                      color: '#2563EB',
+                      textTransform: 'uppercase' as const,
+                      marginBottom: '6px',
+                    }}>
+                      EFFET
+                    </div>
+                    <div style={{
+                      fontFamily: 'Georgia, "Times New Roman", serif',
+                      fontSize: '16px',
+                      fontWeight: 700,
+                      color: '#000',
+                      lineHeight: 1.3,
+                    }}>
+                      {selectedEdge.effectLabel}
+                    </div>
+                  </div>
+
+                  {/* Confidence */}
+                  <div style={{
+                    display: 'flex',
+                    gap: '16px',
+                    marginBottom: '16px',
+                    padding: '12px',
+                    backgroundColor: '#F9FAFB',
+                    border: '1px solid #E5E5E5',
+                  }}>
+                    <div>
+                      <div style={{ fontSize: '10px', fontWeight: 700, color: '#6B7280', letterSpacing: '0.5px', marginBottom: '2px' }}>
+                        CONFIANCE
+                      </div>
+                      <div style={{ fontSize: '16px', fontWeight: 700, color: '#000' }}>
+                        {Math.round(selectedEdge.confidence * 100)}%
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '10px', fontWeight: 700, color: '#6B7280', letterSpacing: '0.5px', marginBottom: '2px' }}>
+                        MENTIONS
+                      </div>
+                      <div style={{ fontSize: '16px', fontWeight: 700, color: '#000' }}>
+                        {selectedEdge.mentionCount}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Related syntheses */}
+                  {selectedEdge.sourceSyntheses.length > 0 && (
+                    <div>
+                      <div style={{
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        letterSpacing: '1px',
+                        color: '#6B7280',
+                        textTransform: 'uppercase' as const,
+                        marginBottom: '6px',
+                      }}>
+                        Syntheses liees ({selectedEdge.sourceSyntheses.length})
+                      </div>
+                      {selectedEdge.sourceSyntheses.slice(0, 5).map((sid, i) => (
+                        <Link
+                          key={i}
+                          href={`/synthesis/${sid}`}
+                          style={{
+                            display: 'block',
+                            fontSize: '13px',
+                            color: '#2563EB',
+                            textDecoration: 'none',
+                            padding: '4px 0',
+                            borderBottom: '1px solid #F3F4F6',
+                            lineHeight: 1.3,
+                          }}
+                        >
+                          {sid.slice(0, 12)}...
+                        </Link>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -1015,33 +1172,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '50%',
     animation: 'spin 1s linear infinite',
   },
-  header: {
-    borderBottom: '1px solid #E5E5E5',
-    padding: '16px 0',
-    backgroundColor: '#FFFFFF',
-    position: 'sticky',
-    top: 0,
-    zIndex: 100,
-  },
-  headerContent: {
-    maxWidth: '1200px',
-    margin: '0 auto',
-    padding: '0 24px',
-    display: 'flex',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-  },
-  headerLabel: {
-    fontSize: '11px',
-    fontWeight: 700,
-    letterSpacing: '1px',
-    color: '#2563EB',
-  },
   tabBar: {
     borderBottom: '1px solid #E5E5E5',
     backgroundColor: '#FFFFFF',
     position: 'sticky',
-    top: '57px',
+    top: '0px',
     zIndex: 99,
   },
   tabBarInner: {
@@ -1114,14 +1249,5 @@ const styles: { [key: string]: React.CSSProperties } = {
     marginTop: '60px',
     paddingTop: '24px',
     borderTop: '1px solid #E5E5E5',
-  },
-  paginationBtn: {
-    background: 'none',
-    border: '1px solid #E5E5E5',
-    padding: '2px 8px',
-    fontSize: '12px',
-    cursor: 'pointer',
-    color: '#374151',
-    fontFamily: 'inherit',
   },
 };

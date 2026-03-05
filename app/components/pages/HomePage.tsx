@@ -88,6 +88,329 @@ function SidebarDossiers({ theme }: { theme: Record<string, any> }) {
   );
 }
 
+// ── Featured Dossiers (promoted section with nexus causal preview) ───────────
+
+interface DossierInfo {
+  topic_name: string;
+  synthesis_count: number;
+  narrative_arc: string;
+  is_active: boolean;
+  key_entities: string[];
+}
+
+interface DossierCausalPreview {
+  nodes: { id: string; label: string; type: string }[];
+  edges: { source?: string; target?: string; cause_text?: string; effect_text?: string; relation_type?: string }[];
+  total_nodes: number;
+  total_edges: number;
+}
+
+function FeaturedDossiers({ theme }: { theme: Record<string, any> }) {
+  const [dossiers, setDossiers] = useState<DossierInfo[]>([]);
+  const [mainCausal, setMainCausal] = useState<DossierCausalPreview | null>(null);
+
+  useEffect(() => {
+    // Fetch top dossiers
+    fetch(`${API_URL}/api/trending/recurring-topics`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        const topics = (data?.topics || data || [])
+          .filter((t: DossierInfo) => t.is_active)
+          .sort((a: DossierInfo, b: DossierInfo) => b.synthesis_count - a.synthesis_count)
+          .slice(0, 4);
+        setDossiers(topics);
+
+        // Fetch causal graph for top dossier
+        if (topics.length > 0) {
+          fetch(`${API_URL}/api/trending/topics/${encodeURIComponent(topics[0].topic_name)}/dashboard`)
+            .then(r => r.ok ? r.json() : null)
+            .then(dashboard => {
+              if (dashboard?.aggregated_causal_graph?.total_nodes > 0) {
+                setMainCausal(dashboard.aggregated_causal_graph);
+              }
+            })
+            .catch(() => {});
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  if (dossiers.length === 0) return null;
+
+  const ARC_COLORS: Record<string, string> = {
+    emerging: '#2563EB',
+    developing: '#10B981',
+    peak: '#DC2626',
+    declining: '#F59E0B',
+    resolved: '#6B7280',
+  };
+
+  const mainDossier = dossiers[0];
+  const otherDossiers = dossiers.slice(1);
+
+  return (
+    <section style={{ marginBottom: '48px' }}>
+      {/* Section header */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'baseline',
+        marginBottom: '20px',
+        paddingBottom: '10px',
+        borderBottom: `3px solid ${theme.text}`,
+      }}>
+        <h2 style={{
+          fontFamily: 'var(--font-serif)',
+          fontSize: '20px',
+          fontWeight: 700,
+          color: theme.text,
+          letterSpacing: '0.02em',
+          margin: 0,
+        }}>
+          DOSSIERS
+        </h2>
+        <Link href="/topics" style={{
+          fontSize: '13px',
+          color: theme.textSecondary,
+          textDecoration: 'none',
+          fontWeight: 500,
+        }}>
+          Tous les dossiers &rarr;
+        </Link>
+      </div>
+
+      {/* Grid: Main dossier with causal preview (2/3) + other dossiers (1/3) */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: mainCausal ? '2fr 1fr' : '1fr',
+        gap: '24px',
+      }}>
+        {/* Main dossier with nexus causal */}
+        <Link
+          href={`/topics/${encodeURIComponent(mainDossier.topic_name)}`}
+          style={{ textDecoration: 'none', color: theme.text, display: 'block' }}
+        >
+          <div
+            className="card-hover-lift"
+            style={{
+              border: `1px solid ${theme.border}`,
+              overflow: 'hidden',
+              backgroundColor: theme.card,
+            }}
+          >
+            {/* Nexus Causal Mini Preview */}
+            {mainCausal && mainCausal.nodes.length > 0 && (
+              <div style={{
+                position: 'relative',
+                height: '200px',
+                backgroundColor: '#0A0F1A',
+                overflow: 'hidden',
+              }}>
+                <svg
+                  width="100%"
+                  height="200"
+                  viewBox="0 0 600 200"
+                  style={{ display: 'block' }}
+                >
+                  {/* Grid pattern */}
+                  <defs>
+                    <pattern id="hp-grid" width="30" height="30" patternUnits="userSpaceOnUse">
+                      <path d="M 30 0 L 0 0 0 30" fill="none" stroke="rgba(59, 130, 246, 0.06)" strokeWidth="0.5" />
+                    </pattern>
+                  </defs>
+                  <rect width="600" height="200" fill="url(#hp-grid)" />
+
+                  {/* Edges */}
+                  {mainCausal.edges.slice(0, 12).map((edge, idx) => {
+                    const srcNode = mainCausal.nodes.find(n => n.id === edge.source);
+                    const tgtNode = mainCausal.nodes.find(n => n.id === edge.target);
+                    if (!srcNode || !tgtNode) return null;
+                    const srcIdx = mainCausal.nodes.indexOf(srcNode);
+                    const tgtIdx = mainCausal.nodes.indexOf(tgtNode);
+                    const total = Math.min(mainCausal.nodes.length, 12);
+                    const sx = 50 + (srcIdx % total) * (500 / total);
+                    const sy = 40 + Math.sin(srcIdx * 0.8) * 60 + 60;
+                    const tx = 50 + (tgtIdx % total) * (500 / total);
+                    const ty = 40 + Math.sin(tgtIdx * 0.8) * 60 + 60;
+                    const edgeColor = edge.relation_type === 'causes' ? '#DC2626'
+                      : edge.relation_type === 'triggers' ? '#F59E0B'
+                      : edge.relation_type === 'enables' ? '#10B981' : '#6B7280';
+                    return (
+                      <line
+                        key={idx}
+                        x1={sx} y1={sy} x2={tx} y2={ty}
+                        stroke={edgeColor}
+                        strokeWidth={0.8}
+                        opacity={0.4}
+                      />
+                    );
+                  })}
+
+                  {/* Nodes */}
+                  {mainCausal.nodes.slice(0, 12).map((node, i) => {
+                    const total = Math.min(mainCausal.nodes.length, 12);
+                    const x = 50 + (i % total) * (500 / total);
+                    const y = 40 + Math.sin(i * 0.8) * 60 + 60;
+                    const color = node.type === 'event' ? '#DC2626'
+                      : node.type === 'entity' ? '#3B82F6'
+                      : node.type === 'decision' ? '#F59E0B' : '#10B981';
+                    return (
+                      <g key={node.id}>
+                        <circle cx={x} cy={y} r={8} fill={color} opacity={0.2} />
+                        <circle cx={x} cy={y} r={4} fill={color} opacity={0.8} />
+                      </g>
+                    );
+                  })}
+
+                  {/* Topic label */}
+                  <text x="16" y="24" fill="rgba(255,255,255,0.5)" fontSize="10" fontWeight="700" letterSpacing="1.5">
+                    NEXUS CAUSAL
+                  </text>
+                  <text x="16" y="42" fill="#FFFFFF" fontSize="16" fontWeight="700" fontFamily="Georgia, serif">
+                    {mainDossier.topic_name}
+                  </text>
+
+                  {/* Stats */}
+                  <text x="584" y="24" fill="rgba(255,255,255,0.4)" fontSize="10" textAnchor="end" fontFamily="monospace">
+                    {mainCausal.total_nodes} noeuds  {mainCausal.total_edges} relations
+                  </text>
+                </svg>
+              </div>
+            )}
+
+            {/* Dossier info */}
+            <div style={{ padding: '16px 20px' }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                marginBottom: '8px',
+              }}>
+                <span style={{
+                  backgroundColor: '#000',
+                  color: '#FFF',
+                  padding: '2px 8px',
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  letterSpacing: '1px',
+                }}>
+                  DOSSIER
+                </span>
+                <span style={{
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  color: ARC_COLORS[mainDossier.narrative_arc] || '#6B7280',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                }}>
+                  {mainDossier.narrative_arc === 'peak' ? 'Point culminant' :
+                   mainDossier.narrative_arc === 'developing' ? 'En cours' :
+                   mainDossier.narrative_arc === 'emerging' ? 'Emergent' : mainDossier.narrative_arc}
+                </span>
+              </div>
+              <h3 style={{
+                fontFamily: 'var(--font-serif)',
+                fontSize: '22px',
+                fontWeight: 700,
+                color: theme.text,
+                margin: '0 0 8px 0',
+                lineHeight: 1.2,
+              }}>
+                {mainDossier.topic_name}
+              </h3>
+              <div style={{
+                display: 'flex',
+                gap: '12px',
+                fontSize: '12px',
+                color: theme.textSecondary,
+              }}>
+                <span style={{ fontFamily: 'var(--font-mono)' }}>{mainDossier.synthesis_count} syntheses</span>
+                {mainDossier.key_entities?.slice(0, 3).map((e, i) => (
+                  <span key={i} style={{
+                    padding: '1px 6px',
+                    backgroundColor: `${theme.border}`,
+                    fontSize: '11px',
+                  }}>
+                    {e}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Link>
+
+        {/* Other dossiers list */}
+        {otherDossiers.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+            {otherDossiers.map((d, i) => (
+              <Link
+                key={d.topic_name}
+                href={`/topics/${encodeURIComponent(d.topic_name)}`}
+                className="card-hover-lift"
+                style={{
+                  display: 'block',
+                  padding: '16px 0',
+                  borderBottom: i < otherDossiers.length - 1 ? `1px solid ${theme.border}` : 'none',
+                  textDecoration: 'none',
+                  color: theme.text,
+                }}
+              >
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  marginBottom: '6px',
+                }}>
+                  <span style={{
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    color: ARC_COLORS[d.narrative_arc] || '#6B7280',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                  }}>
+                    {d.is_active ? 'EN COURS' : 'CLOS'}
+                  </span>
+                  <span style={{
+                    fontSize: '11px',
+                    color: theme.textSecondary,
+                    fontFamily: 'var(--font-mono)',
+                  }}>
+                    {d.synthesis_count} synth.
+                  </span>
+                </div>
+                <h4 style={{
+                  fontFamily: 'var(--font-serif)',
+                  fontSize: '16px',
+                  fontWeight: 600,
+                  color: theme.text,
+                  margin: '0 0 6px 0',
+                  lineHeight: 1.3,
+                }}>
+                  {d.topic_name}
+                </h4>
+                {d.key_entities?.length > 0 && (
+                  <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                    {d.key_entities.slice(0, 3).map((e, ei) => (
+                      <span key={ei} style={{
+                        fontSize: '10px',
+                        padding: '1px 6px',
+                        backgroundColor: `${theme.border}`,
+                        color: theme.textSecondary,
+                      }}>
+                        {e}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 // ── Editorial Card Variants ──────────────────────────────────────────────────
 
 /** Featured card: large image (max 240px, 4:3), 20px Georgia title, 3-line summary, accent bar */
@@ -700,6 +1023,9 @@ function MainContent() {
 
         </div>
       </section>
+
+      {/* Featured Dossiers Section — Promote top dossiers with nexus preview */}
+      <FeaturedDossiers theme={theme} />
 
       {/* Main content area: Categories (left) + Sidebar (right) */}
       {restSyntheses.length > 0 && (
