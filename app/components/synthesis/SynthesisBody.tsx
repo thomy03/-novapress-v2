@@ -178,6 +178,24 @@ interface Section {
   paragraphs: string[];
 }
 
+/**
+ * Check if a heading is just a copy of the start of the first paragraph.
+ * Returns true if the heading is lazy (repeats paragraph start).
+ */
+function isLazyHeading(heading: string, firstParagraph?: string): boolean {
+  if (!firstParagraph) return false;
+  const h = heading.toLowerCase().trim().replace(/[.,!?:;]+$/g, '');
+  const p = firstParagraph.toLowerCase().trim();
+  // Check if paragraph starts with the heading text
+  if (p.startsWith(h)) return true;
+  // Check if heading is a truncated first sentence (>60% overlap)
+  const firstSentence = p.split(/[.!?]/)[0] || '';
+  if (firstSentence.length > 10 && h.length > 10) {
+    if (firstSentence.startsWith(h) || h.startsWith(firstSentence)) return true;
+  }
+  return false;
+}
+
 function groupIntoSections(paragraphs: string[]): Section[] {
   const sections: Section[] = [];
   let current: Section = { paragraphs: [] };
@@ -198,6 +216,15 @@ function groupIntoSections(paragraphs: string[]): Section[] {
   // Push the last section
   if (current.paragraphs.length > 0 || current.heading) {
     sections.push(current);
+  }
+
+  // Post-process: remove lazy headings that copy the first sentence
+  for (const section of sections) {
+    if (section.heading && section.paragraphs.length > 0) {
+      if (isLazyHeading(section.heading, section.paragraphs[0])) {
+        section.heading = undefined;
+      }
+    }
   }
 
   return sections;

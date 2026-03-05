@@ -429,6 +429,10 @@ INSTRUCTIONS DE RÉDACTION:
      Exemple conflit: ## L'escalade militaire\\n\\nParagraphe...\\n\\n## Washington face au dilemme\\n\\nParagraphe...
      Exemple tech: ## La course aux puces IA\\n\\nParagraphe...\\n\\n## Ce que cela change pour l'Europe\\n\\n...
      INTERDIT: "Les faits", "Reactions", "Perspectives", "Contexte", "Repercussions"
+     ⚠️ REGLE CRITIQUE: L'intertitre NE DOIT JAMAIS reprendre le debut de la phrase qui suit.
+     Chaque intertitre est un TITRE EDITORIAL court (3-6 mots) qui RESUME l'IDEE du paragraphe, PAS son contenu litteral.
+     BON: ## Le pari texan de la moderation | MAUVAIS: ## Le Texas resume tout l'Amerique (= copie de la 1ere phrase)
+     BON: ## Washington pris au piege | MAUVAIS: ## Pendant ce temps au Montana (= debut de phrase)
      Les intertitres DOIVENT être SPÉCIFIQUES au sujet, comme un vrai journal
    - Contexte et enjeux expliqués
    - CHAQUE paragraphe DOIT avoir 1-2 citations [SOURCE:N] après les faits importants
@@ -701,6 +705,8 @@ STRUCTURE ATTENDUE:
      EXEMPLE conflit: "## L'escalade militaire", "## Washington face au dilemme"
      EXEMPLE tech: "## La course aux puces IA", "## Ce que ca change pour l'Europe"
    - INTERDIT: "Les faits", "Reactions", "Perspectives", "Contexte", "Repercussions"
+   - ⚠️ REGLE CRITIQUE INTERTITRES: L'intertitre NE DOIT JAMAIS reprendre le debut de la phrase qui suit.
+     C'est un TITRE EDITORIAL court (3-6 mots) qui resume l'IDEE, PAS le contenu litteral.
    - Chaque section: 1-3 paragraphes avec citations [SOURCE:N]
    - PLUS de sources et chunks = article PLUS LONG
    {"- INCLURE une section sur les contradictions entre sources" if contradictions else ""}
@@ -957,6 +963,8 @@ INSTRUCTIONS SPÉCIALES
      EXEMPLE tech: "## La course aux puces IA", "## Ce que ca change pour l'Europe"
      EXEMPLE economie: "## Le marche retient son souffle", "## Les menages en premiere ligne"
    - INTERDIT: "Les faits", "Reactions", "Perspectives", "Contexte", "Repercussions", "Ce qu'il faut retenir"
+   - ⚠️ REGLE CRITIQUE INTERTITRES: L'intertitre NE DOIT JAMAIS reprendre le debut de la phrase qui suit.
+     C'est un TITRE EDITORIAL court (3-6 mots) qui resume l'IDEE, PAS le contenu litteral.
    - Chaque section: 1-3 paragraphes de 100-150 mots avec citations [SOURCE:N]
    - EXACTEMENT 6-8 paragraphes au total
    - ⚠️ DERNIER PARAGRAPHE: Inclure une phrase prospective du type:
