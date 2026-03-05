@@ -516,8 +516,6 @@ export default function SynthesisClient({ initialSynthesis }: SynthesisClientPro
         <div style={styles.breadcrumbContent}>
           <Link href="/" style={styles.breadcrumbLink}>Accueil</Link>
           <span style={styles.breadcrumbSep}>/</span>
-          <Link href="/intelligence" style={styles.breadcrumbLink}>Intelligence</Link>
-          <span style={styles.breadcrumbSep}>/</span>
           <span style={styles.breadcrumbCurrent}>{synthesis.category || 'Synthese'}</span>
         </div>
       </nav>

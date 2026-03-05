@@ -280,7 +280,7 @@ export default function SynthesisBody({ synthesis }: SynthesisBodyProps) {
       {/* Key Points */}
       {synthesis.keyPoints && synthesis.keyPoints.length > 0 && (
         <div style={styles.keyPointsSection}>
-          <h2 style={styles.keyPointsTitle}>Points Cl\u00e9s</h2>
+          <h2 style={styles.keyPointsTitle}>Points Clés</h2>
           <ul style={styles.keyPointsList}>
             {synthesis.keyPoints.map((point, index) => (
               <li key={index} style={styles.keyPoint}>

@@ -149,27 +149,6 @@ export function Header() {
               EN DIRECT
             </Link>
 
-            <Link
-              href="/intelligence"
-              className="btn-hover-primary"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '6px 14px',
-                background: theme.brand.secondary,
-                borderRadius: '6px',
-                fontSize: '11px',
-                fontWeight: 700,
-                color: '#FFFFFF',
-                textDecoration: 'none',
-                letterSpacing: '0.05em',
-                textTransform: 'uppercase',
-              }}
-            >
-              Intelligence
-            </Link>
-
             {isAuthenticated && user?.isAdmin && (
               <Link
                 href="/admin/pipeline"

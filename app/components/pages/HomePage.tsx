@@ -26,6 +26,69 @@ import { Badge, CategoryBadge, AIBadge } from '../ui/Badge';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 const PAGE_SIZE = 10;
 
+// ── Sidebar Dossiers (vertical list of trending entities) ────────────────────
+
+function SidebarDossiers({ theme }: { theme: Record<string, any> }) {
+  const [entities, setEntities] = useState<{ entity: string; count: number }[]>([]);
+  useEffect(() => {
+    fetch(`${API_URL}/api/trending/entities?hours=168&limit=8`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.data) setEntities(data.data); })
+      .catch(() => {});
+  }, []);
+  if (entities.length === 0) return null;
+  return (
+    <div style={{
+      marginBottom: '24px',
+      padding: '16px',
+      backgroundColor: theme.card,
+      border: `1px solid ${theme.border}`,
+    }}>
+      <h3 style={{
+        fontSize: '11px',
+        fontWeight: 800,
+        textTransform: 'uppercase',
+        letterSpacing: '2px',
+        color: theme.text,
+        borderBottom: `2px solid ${theme.text}`,
+        paddingBottom: '8px',
+        marginBottom: '12px',
+      }}>
+        Dossiers
+      </h3>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+        {entities.map((item, i) => (
+          <Link
+            key={item.entity}
+            href={`/topics/${encodeURIComponent(item.entity)}`}
+            className="card-hover-lift"
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '10px 0',
+              borderBottom: i < entities.length - 1 ? `1px solid ${theme.border}` : 'none',
+              textDecoration: 'none',
+              color: theme.text,
+              fontSize: '14px',
+              fontWeight: 500,
+            }}
+          >
+            <span>{item.entity}</span>
+            <span style={{
+              fontSize: '11px',
+              color: theme.textSecondary,
+              fontFamily: 'var(--font-mono)',
+            }}>
+              {item.count} synth.
+            </span>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Editorial Card Variants ──────────────────────────────────────────────────
 
 /** Featured card: large image (max 240px, 4:3), 20px Georgia title, 3-line summary, accent bar */
@@ -636,108 +699,92 @@ function MainContent() {
             </Link>
           ))}
 
-          {/* Trending Topics - Always show below secondary cards */}
-          <div className="lg:sticky lg:top-4">
-            <TrendingTopics />
-          </div>
         </div>
       </section>
 
-      {/* Syntheses Grid — Category blocks (ACCUEIL) or flat list (filtered) */}
+      {/* Main content area: Categories (left) + Sidebar (right) */}
       {restSyntheses.length > 0 && (
-        <section style={{ marginBottom: '48px' }}>
-          {apiCategory ? (
-            /* Filtered view: flat grid, no sub-headers */
-            <>
-              <div className="category-grid">
-                {restSyntheses.map((s) => (
-                  <CompactCard key={s.id} synthesis={s} theme={theme} formatDate={formatDate} />
-                ))}
-              </div>
+        <section className="homepage-main-grid" style={{ marginBottom: '48px' }}>
+          {/* Left: Syntheses grid */}
+          <div>
+            {apiCategory ? (
+              /* Filtered view: flat grid */
+              <>
+                <div className="category-grid">
+                  {restSyntheses.map((s) => (
+                    <CompactCard key={s.id} synthesis={s} theme={theme} formatDate={formatDate} />
+                  ))}
+                </div>
 
-              {/* Infinite Scroll Trigger */}
-              <div
-                ref={loadingRef}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  padding: '40px 0',
-                  minHeight: '100px',
-                }}
-              >
-                {loadingMore && <LoadingSpinner theme={theme} />}
-                {!hasMore && syntheses.length > 7 && (
-                  <p style={{ color: theme.textSecondary, fontSize: '14px' }}>
-                    Toutes les synthèses sont chargées
-                  </p>
-                )}
-              </div>
-            </>
-          ) : (
-            /* ACCUEIL view: grouped by category */
-            <>
-              {CATEGORY_ORDER
-                .filter(cat => categoryGroups[cat] && categoryGroups[cat].length > 0)
-                .map(cat => (
-                  <div key={cat} style={{ marginBottom: '40px' }}>
-                    {/* Category Section Header */}
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'baseline',
-                      marginBottom: '20px',
-                      paddingBottom: '10px',
-                      borderBottom: `3px solid ${CATEGORY_COLORS[cat] || theme.border}`,
-                    }}>
-                      <h2 style={{
-                        fontFamily: 'var(--font-serif)',
-                        fontSize: '20px',
-                        fontWeight: 700,
-                        color: theme.text,
-                        letterSpacing: '0.02em',
-                        margin: 0,
+                <div
+                  ref={loadingRef}
+                  style={{ display: 'flex', justifyContent: 'center', padding: '40px 0', minHeight: '100px' }}
+                >
+                  {loadingMore && <LoadingSpinner theme={theme} />}
+                  {!hasMore && syntheses.length > 7 && (
+                    <p style={{ color: theme.textSecondary, fontSize: '14px' }}>Toutes les synthèses sont chargées</p>
+                  )}
+                </div>
+              </>
+            ) : (
+              /* ACCUEIL view: grouped by category */
+              <>
+                {CATEGORY_ORDER
+                  .filter(cat => categoryGroups[cat] && categoryGroups[cat].length > 0)
+                  .map(cat => (
+                    <div key={cat} style={{ marginBottom: '40px' }}>
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'baseline',
+                        marginBottom: '20px',
+                        paddingBottom: '10px',
+                        borderBottom: `3px solid ${CATEGORY_COLORS[cat] || theme.border}`,
                       }}>
-                        {cat}
-                      </h2>
-                      <span style={{
-                        fontSize: '13px',
-                        color: theme.textSecondary,
-                      }}>
-                        {categoryGroups[cat].length} analyse{categoryGroups[cat].length > 1 ? 's' : ''}
-                      </span>
+                        <h2 style={{
+                          fontFamily: 'var(--font-serif)',
+                          fontSize: '20px',
+                          fontWeight: 700,
+                          color: theme.text,
+                          letterSpacing: '0.02em',
+                          margin: 0,
+                        }}>
+                          {cat}
+                        </h2>
+                        <span style={{ fontSize: '13px', color: theme.textSecondary }}>
+                          {categoryGroups[cat].length} analyse{categoryGroups[cat].length > 1 ? 's' : ''}
+                        </span>
+                      </div>
+                      <EditorialCategoryGrid
+                        items={categoryGroups[cat]}
+                        theme={theme}
+                        formatDate={formatDate}
+                        accentColor={CATEGORY_COLORS[cat] || theme.border}
+                      />
                     </div>
+                  ))}
 
-                    {/* Editorial L-shape Grid */}
-                    <EditorialCategoryGrid
-                      items={categoryGroups[cat]}
-                      theme={theme}
-                      formatDate={formatDate}
-                      accentColor={CATEGORY_COLORS[cat] || theme.border}
-                    />
-                  </div>
-                ))}
+                <div
+                  ref={loadingRef}
+                  style={{ display: 'flex', justifyContent: 'center', padding: '40px 0', minHeight: '100px' }}
+                >
+                  {loadingMore && <LoadingSpinner theme={theme} />}
+                  {!hasMore && syntheses.length > 7 && (
+                    <p style={{ color: theme.textSecondary, fontSize: '14px' }}>Toutes les synthèses sont chargées</p>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
 
-              {/* Infinite Scroll Trigger */}
-              <div
-                ref={loadingRef}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  padding: '40px 0',
-                  minHeight: '100px',
-                }}
-              >
-                {loadingMore && <LoadingSpinner theme={theme} />}
-                {!hasMore && syntheses.length > 7 && (
-                  <p style={{ color: theme.textSecondary, fontSize: '14px' }}>
-                    Toutes les synthèses sont chargées
-                  </p>
-                )}
-              </div>
-            </>
-          )}
+          {/* Right sidebar: Dossiers + Tendances (sticky) */}
+          <aside className="homepage-sidebar" style={{ position: 'sticky', top: '100px', alignSelf: 'start' }}>
+            {/* Dossiers section — vertical list of trending entities */}
+            <SidebarDossiers theme={theme} />
+
+            {/* Tendances */}
+            <TrendingTopics />
+          </aside>
         </section>
       )}
 

@@ -635,6 +635,22 @@ code, pre, kbd {
   }
 }
 
+.homepage-main-grid {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 32px;
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
+  .homepage-main-grid {
+    grid-template-columns: 1fr;
+  }
+  .homepage-sidebar {
+    position: static !important;
+  }
+}
+
 .editorial-briefs-row {
   display: flex;
   gap: 0;

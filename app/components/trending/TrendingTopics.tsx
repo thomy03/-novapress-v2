@@ -250,7 +250,7 @@ function CategoriesList({ categories, theme }: { categories: CategoryStat[]; the
       {activeCategories.map((category) => (
         <Link
           key={category.name}
-          href={`/intelligence?category=${category.name}`}
+          href={`/topics?category=${category.name}`}
           style={styles.categoryCard}
         >
           {/* Hot badge */}
