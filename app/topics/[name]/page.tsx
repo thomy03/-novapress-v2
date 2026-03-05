@@ -229,6 +229,47 @@ function TopicDashboardPage() {
     }
   }, [topicName, searchParams]);
 
+  // Callback for NexusForceGraph node clicks — must be before early returns to keep hook order stable
+  const handleGraphNodeSelect = useCallback((node: {
+    id: string;
+    label: string;
+    type: string;
+    mentionCount: number;
+    connections: { label: string; direction: 'cause' | 'effect'; relationType: string }[];
+  } | null) => {
+    if (!node || !dashboard) {
+      setSelectedNode(null);
+      return;
+    }
+    const causedBy = node.connections.filter(c => c.direction === 'cause').map(c => c.label);
+    const causes = node.connections.filter(c => c.direction === 'effect').map(c => c.label);
+    // Build edges from dashboard data
+    const rawEdges = dashboard.aggregated_causal_graph.edges;
+    const rawNodes = dashboard.aggregated_causal_graph.nodes;
+    const nodeLabels = Object.fromEntries(rawNodes.map(n => [n.id, n.label]));
+    const sourceSynths: string[] = [];
+    for (const e of rawEdges) {
+      const causeText = e.cause_text || nodeLabels[e.source || ''] || '';
+      const effectText = e.effect_text || nodeLabels[e.target || ''] || '';
+      if (causeText === node.label || effectText === node.label) {
+        for (const sid of (e.source_syntheses || [])) {
+          if (!sourceSynths.includes(sid)) sourceSynths.push(sid);
+        }
+      }
+    }
+    const rawNode = rawNodes.find(n => n.id === node.id);
+    setSelectedNode({
+      id: node.id,
+      label: node.label,
+      type: node.type,
+      mentionCount: node.mentionCount,
+      sourceSyntheses: [...sourceSynths, ...(rawNode?.source_syntheses || [])],
+      causedBy,
+      causes,
+    });
+    setSelectedEdge(null);
+  }, [dashboard]);
+
   if (loading) {
     return (
       <div style={styles.page}>
@@ -297,42 +338,6 @@ function TopicDashboardPage() {
     mention_count: e.mention_count || 1,
     source_syntheses: e.source_syntheses || [],
   }));
-
-  // Callback for NexusForceGraph node clicks
-  const handleGraphNodeSelect = useCallback((node: {
-    id: string;
-    label: string;
-    type: string;
-    mentionCount: number;
-    connections: { label: string; direction: 'cause' | 'effect'; relationType: string }[];
-  } | null) => {
-    if (!node) {
-      setSelectedNode(null);
-      return;
-    }
-    const causedBy = node.connections.filter(c => c.direction === 'cause').map(c => c.label);
-    const causes = node.connections.filter(c => c.direction === 'effect').map(c => c.label);
-    // Collect source syntheses from edges
-    const sourceSynths: string[] = [];
-    for (const e of causalEdges) {
-      if (e.cause_text === node.label || e.effect_text === node.label) {
-        for (const sid of (e.source_syntheses || [])) {
-          if (!sourceSynths.includes(sid)) sourceSynths.push(sid);
-        }
-      }
-    }
-    const rawNode = causalNodes.find(n => n.id === node.id);
-    setSelectedNode({
-      id: node.id,
-      label: node.label,
-      type: node.type,
-      mentionCount: node.mentionCount,
-      sourceSyntheses: [...sourceSynths, ...(rawNode?.source_syntheses || [])],
-      causedBy,
-      causes,
-    });
-    setSelectedEdge(null);
-  }, [causalEdges, causalNodes]);
 
   return (
     <div style={{ ...styles.page, position: 'relative' }}>
