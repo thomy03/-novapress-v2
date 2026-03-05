@@ -95,7 +95,7 @@ interface DossierInfo {
   synthesis_count: number;
   narrative_arc: string;
   is_active: boolean;
-  key_entities: string[];
+  key_entities: (string | { name: string; count?: number; type?: string })[];
 }
 
 interface DossierCausalPreview {
@@ -103,6 +103,10 @@ interface DossierCausalPreview {
   edges: { source?: string; target?: string; cause_text?: string; effect_text?: string; relation_type?: string }[];
   total_nodes: number;
   total_edges: number;
+}
+
+function getEntityName(e: string | { name: string; count?: number; type?: string }): string {
+  return typeof e === 'string' ? e : e.name;
 }
 
 function FeaturedDossiers({ theme }: { theme: Record<string, any> }) {
@@ -332,7 +336,7 @@ function FeaturedDossiers({ theme }: { theme: Record<string, any> }) {
                     backgroundColor: `${theme.border}`,
                     fontSize: '11px',
                   }}>
-                    {e}
+                    {getEntityName(e)}
                   </span>
                 ))}
               </div>
@@ -398,7 +402,7 @@ function FeaturedDossiers({ theme }: { theme: Record<string, any> }) {
                         backgroundColor: `${theme.border}`,
                         color: theme.textSecondary,
                       }}>
-                        {e}
+                        {getEntityName(e)}
                       </span>
                     ))}
                   </div>
