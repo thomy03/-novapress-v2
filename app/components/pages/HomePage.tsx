@@ -26,6 +26,226 @@ import { Badge, CategoryBadge, AIBadge } from '../ui/Badge';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 const PAGE_SIZE = 10;
 
+// ── Editorial Card Variants ──────────────────────────────────────────────────
+
+/** Featured card: large image (max 240px, 4:3), 20px Georgia title, 3-line summary, accent bar */
+function FeaturedCategoryCard({ synthesis: s, theme, formatDate, accentColor }: {
+  synthesis: SynthesisBrief;
+  theme: Record<string, any>;
+  formatDate: (d: string) => string;
+  accentColor: string;
+}) {
+  return (
+    <Link href={`/synthesis/${s.id}`} style={{ textDecoration: 'none' }}>
+      <article
+        className="card-hover-lift"
+        style={{
+          height: '100%',
+          backgroundColor: theme.card,
+          border: `1px solid ${theme.border}`,
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        {s.imageUrl && (
+          <div style={{
+            width: '100%',
+            maxHeight: '240px',
+            aspectRatio: '4 / 3',
+            overflow: 'hidden',
+            backgroundColor: '#F9FAFB',
+          }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={s.imageUrl}
+              alt=""
+              loading="lazy"
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+            />
+          </div>
+        )}
+        <div style={{ padding: '16px 20px', flex: 1, display: 'flex', flexDirection: 'column', borderLeft: `4px solid ${accentColor}` }}>
+          <h3 style={{
+            fontFamily: 'var(--font-serif)',
+            fontSize: '20px',
+            fontWeight: 700,
+            lineHeight: 1.25,
+            color: theme.text,
+            margin: '0 0 10px 0',
+            display: '-webkit-box',
+            WebkitLineClamp: 3,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+          }}>
+            {s.title}
+          </h3>
+          <p style={{
+            fontSize: '14px',
+            lineHeight: 1.55,
+            color: theme.textSecondary,
+            margin: '0 0 12px 0',
+            flex: 1,
+            display: '-webkit-box',
+            WebkitLineClamp: 3,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+          }}>
+            {s.summary}
+          </p>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            fontSize: '11px',
+            color: theme.textSecondary,
+            borderTop: `1px solid ${theme.border}`,
+            paddingTop: '8px',
+            marginTop: 'auto',
+          }}>
+            <span style={{ fontFamily: 'var(--font-mono)' }}>{s.numSources} sources</span>
+            <span>{formatDate(s.createdAt)}</span>
+          </div>
+        </div>
+      </article>
+    </Link>
+  );
+}
+
+/** Text-only card: no image, 15px title + 2-line summary, borderBottom separator */
+function TextOnlyCard({ synthesis: s, theme, formatDate }: {
+  synthesis: SynthesisBrief;
+  theme: Record<string, any>;
+  formatDate: (d: string) => string;
+}) {
+  return (
+    <Link href={`/synthesis/${s.id}`} style={{ textDecoration: 'none', display: 'block' }}>
+      <article
+        className="card-hover-lift"
+        style={{
+          padding: '14px 0',
+          borderBottom: `1px solid ${theme.border}`,
+        }}
+      >
+        <h3 style={{
+          fontFamily: 'var(--font-serif)',
+          fontSize: '15px',
+          fontWeight: 600,
+          lineHeight: 1.35,
+          color: theme.text,
+          margin: '0 0 6px 0',
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+        }}>
+          {s.title}
+        </h3>
+        <p style={{
+          fontSize: '13px',
+          lineHeight: 1.5,
+          color: theme.textSecondary,
+          margin: '0 0 6px 0',
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+        }}>
+          {s.summary}
+        </p>
+        <span style={{ fontSize: '11px', color: theme.textSecondary }}>{formatDate(s.createdAt)}</span>
+      </article>
+    </Link>
+  );
+}
+
+/** Brief card: title only, 14px, vertical borderRight separator between siblings */
+function BriefCard({ synthesis: s, theme, isLast }: {
+  synthesis: SynthesisBrief;
+  theme: Record<string, any>;
+  isLast: boolean;
+}) {
+  return (
+    <Link
+      href={`/synthesis/${s.id}`}
+      style={{
+        textDecoration: 'none',
+        flex: 1,
+        padding: '12px 16px',
+        borderRight: isLast ? 'none' : `1px solid ${theme.border}`,
+        display: 'block',
+      }}
+    >
+      <h4
+        className="card-hover-lift"
+        style={{
+          fontFamily: 'var(--font-serif)',
+          fontSize: '14px',
+          fontWeight: 600,
+          lineHeight: 1.35,
+          color: theme.text,
+          margin: 0,
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+        }}
+      >
+        {s.title}
+      </h4>
+    </Link>
+  );
+}
+
+/** EditorialCategoryGrid: L-shape pattern per category section */
+function EditorialCategoryGrid({ items, theme, formatDate, accentColor }: {
+  items: SynthesisBrief[];
+  theme: Record<string, any>;
+  formatDate: (d: string) => string;
+  accentColor: string;
+}) {
+  // Fallback: if <= 2 items, just use CompactCards
+  if (items.length <= 2) {
+    return (
+      <div className="category-grid">
+        {items.map((s) => (
+          <CompactCard key={s.id} synthesis={s} theme={theme} formatDate={formatDate} />
+        ))}
+      </div>
+    );
+  }
+
+  const featured = items[0];
+  const textCards = items.slice(1, 3);
+  const briefs = items.slice(3);
+
+  return (
+    <div>
+      {/* Top row: featured (2fr) + text-only stack (1fr) */}
+      <div className="editorial-top-grid">
+        <FeaturedCategoryCard
+          synthesis={featured}
+          theme={theme}
+          formatDate={formatDate}
+          accentColor={accentColor}
+        />
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          {textCards.map((s) => (
+            <TextOnlyCard key={s.id} synthesis={s} theme={theme} formatDate={formatDate} />
+          ))}
+        </div>
+      </div>
+
+      {/* Bottom row: briefs (title only, horizontal) */}
+      {briefs.length > 0 && (
+        <div className="editorial-briefs-row">
+          {briefs.map((s, i) => (
+            <BriefCard key={s.id} synthesis={s} theme={theme} isLast={i === briefs.length - 1} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Compact card for category grids — newspaper-strict style
 function CompactCard({ synthesis: s, theme, formatDate }: {
   synthesis: SynthesisBrief;
@@ -535,12 +755,13 @@ function MainContent() {
                       </span>
                     </div>
 
-                    {/* Category Grid */}
-                    <div className="category-grid">
-                      {categoryGroups[cat].map((s) => (
-                        <CompactCard key={s.id} synthesis={s} theme={theme} formatDate={formatDate} />
-                      ))}
-                    </div>
+                    {/* Editorial L-shape Grid */}
+                    <EditorialCategoryGrid
+                      items={categoryGroups[cat]}
+                      theme={theme}
+                      formatDate={formatDate}
+                      accentColor={CATEGORY_COLORS[cat] || theme.border}
+                    />
                   </div>
                 ))}
 

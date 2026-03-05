@@ -612,6 +612,46 @@ code, pre, kbd {
   }
 }
 
+/* ============================================================================
+   EDITORIAL GRID (Homepage L-shape category blocks)
+   ============================================================================ */
+
+.editorial-top-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 20px;
+  align-items: stretch;
+}
+
+@media (max-width: 1024px) {
+  .editorial-top-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .editorial-top-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.editorial-briefs-row {
+  display: flex;
+  gap: 0;
+  border-top: 1px solid var(--border);
+  margin-top: 16px;
+}
+
+@media (max-width: 640px) {
+  .editorial-briefs-row {
+    flex-direction: column;
+  }
+  .editorial-briefs-row > * {
+    border-right: none !important;
+    border-bottom: 1px solid var(--border);
+  }
+}
+
 .bento-span-1 { grid-column: span 1; }
 .bento-span-2 { grid-column: span 2; }
 .bento-span-3 { grid-column: span 3; }

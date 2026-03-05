@@ -13,7 +13,6 @@ import {
   SynthesisHeader,
   PersonaSection,
   SynthesisBody,
-  SourcesSection,
   HistoricalContext
 } from '@/app/components/synthesis';
 import { Header } from '@/app/components/layout/Header';
@@ -30,7 +29,7 @@ import {
 } from '@/app/types/synthesis-page';
 import { CausalGraphResponse } from '@/app/types/causal';
 import { getSavedPersona, savePersona } from '@/app/components/ui/PersonaSwitcher';
-import NewsXRay from '@/app/components/xray/NewsXRay';
+import { SourceArticle, RelatedSynthesisBrief } from '@/app/types/synthesis-page';
 import { UpgradeModal } from '@/app/components/ui/UpgradeModal';
 import { FeatureLock } from '@/app/components/ui/FeatureLock';
 import { subscriptionService } from '@/app/lib/api/services';
@@ -217,6 +216,139 @@ function TopicNexusLink({
   );
 }
 
+/** SourcesSidebar — compact source list for left sidebar */
+function SourcesSidebar({ sourceArticles, sources, numSources }: {
+  sourceArticles?: SourceArticle[];
+  sources?: string[];
+  numSources: number;
+}) {
+  const hasSourceArticles = sourceArticles && sourceArticles.length > 0;
+  const hasSources = sources && sources.length > 0;
+  if (!hasSourceArticles && !hasSources) return null;
+
+  return (
+    <div style={{ padding: '20px', backgroundColor: '#fff', border: '1px solid #E5E5E5', marginTop: '16px' }}>
+      <h3 style={{
+        margin: '0 0 12px 0',
+        fontSize: '11px',
+        fontWeight: 800,
+        textTransform: 'uppercase' as const,
+        letterSpacing: '2px',
+        color: '#000',
+        borderBottom: '2px solid #000',
+        paddingBottom: '8px',
+      }}>
+        SOURCES ({numSources})
+      </h3>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {hasSourceArticles ? (
+          sourceArticles!.map((src, i) => (
+            <div key={i} style={{ borderBottom: i < sourceArticles!.length - 1 ? '1px solid #E5E5E5' : 'none', paddingBottom: '8px' }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#000', marginBottom: '2px' }}>
+                {src.name}
+              </div>
+              {src.title && (
+                <div style={{
+                  fontSize: '12px',
+                  lineHeight: 1.4,
+                  color: '#6B7280',
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical' as const,
+                  overflow: 'hidden',
+                  marginBottom: '4px',
+                }}>
+                  {src.title}
+                </div>
+              )}
+              {src.url && (
+                <a
+                  href={src.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ fontSize: '11px', color: '#2563EB', textDecoration: 'none' }}
+                >
+                  Lire &rarr;
+                </a>
+              )}
+            </div>
+          ))
+        ) : (
+          sources!.map((name, i) => (
+            <span key={i} style={{ fontSize: '12px', color: '#374151' }}>{name}</span>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** RelatedSyntheses — grid of related synthesis cards at bottom of main content */
+function RelatedSyntheses({ items }: { items: RelatedSynthesisBrief[] }) {
+  if (!items || items.length === 0) return null;
+
+  const formatRelDate = (dateString: string) => {
+    const d = new Date(dateString);
+    return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+  };
+
+  return (
+    <div style={{ marginTop: '48px', paddingTop: '24px', borderTop: '3px solid #000' }}>
+      <h2 style={{
+        fontFamily: 'Georgia, serif',
+        fontSize: '18px',
+        fontWeight: 700,
+        color: '#000',
+        marginBottom: '20px',
+        letterSpacing: '-0.01em',
+      }}>
+        Sur le meme sujet
+      </h2>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: `repeat(${Math.min(items.length, 4)}, 1fr)`,
+        gap: '16px',
+      }}>
+        {items.slice(0, 4).map((rel) => (
+          <Link
+            key={rel.id}
+            href={`/synthesis/${rel.id}`}
+            style={{ textDecoration: 'none' }}
+          >
+            <article
+              className="card-hover-lift"
+              style={{
+                padding: '16px',
+                backgroundColor: '#F9FAFB',
+                border: '1px solid #E5E5E5',
+                height: '100%',
+              }}
+            >
+              <h3 style={{
+                fontFamily: 'Georgia, serif',
+                fontSize: '14px',
+                fontWeight: 600,
+                lineHeight: 1.35,
+                color: '#000',
+                margin: '0 0 8px 0',
+                display: '-webkit-box',
+                WebkitLineClamp: 3,
+                WebkitBoxOrient: 'vertical' as const,
+                overflow: 'hidden',
+              }}>
+                {rel.title}
+              </h3>
+              <span style={{ fontSize: '11px', color: '#6B7280' }}>
+                {formatRelDate(rel.createdAt)}
+              </span>
+            </article>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 interface SynthesisClientProps {
   initialSynthesis: SynthesisData;
 }
@@ -393,20 +525,39 @@ export default function SynthesisClient({ initialSynthesis }: SynthesisClientPro
       {/* 3-Column Layout */}
       <SynthesisLayout
         leftSidebar={
-          <TimelinePreview
-            synthesisId={synthesis.id}
-            onError={(err: Error) => console.log('Timeline not available:', err.message)}
-          />
+          <>
+            <TimelinePreview
+              synthesisId={synthesis.id}
+              onError={(err: Error) => console.log('Timeline not available:', err.message)}
+            />
+            <SourcesSidebar
+              sourceArticles={synthesis.sourceArticles}
+              sources={synthesis.sources}
+              numSources={synthesis.numSources}
+            />
+          </>
         }
         rightSidebar={
-          <TopicNexusLink
-            synthesisId={synthesis.id}
-            causalData={causalData}
-            causalLoading={causalLoading}
-            narrativeArc={synthesis.historicalContext?.narrativeArc}
-            timeline={synthesis.timeline}
-            relatedSyntheses={synthesis.historicalContext?.relatedSyntheses}
-          />
+          <>
+            <TopicNexusLink
+              synthesisId={synthesis.id}
+              causalData={causalData}
+              causalLoading={causalLoading}
+              narrativeArc={synthesis.historicalContext?.narrativeArc}
+              timeline={synthesis.timeline}
+              relatedSyntheses={synthesis.historicalContext?.relatedSyntheses}
+            />
+            {/* Causal chains + predictions in sidebar */}
+            {causalData && !causalLoading && (
+              <div style={{ marginTop: '16px' }}>
+                <MiniCausalWidget
+                  edges={causalData.edges || []}
+                  predictions={synthesis.predictions || []}
+                  centralEntity={causalData.central_entity}
+                />
+              </div>
+            )}
+          </>
         }
       >
         {/* Main Content */}
@@ -503,18 +654,6 @@ export default function SynthesisClient({ initialSynthesis }: SynthesisClientPro
           {/* Body Content */}
           <SynthesisBody synthesis={synthesis} />
 
-          {/* Inline Causal Widget — relations + predictions in newspaper style */}
-          {causalData && !causalLoading && (
-            <MiniCausalWidget
-              edges={causalData.edges || []}
-              predictions={synthesis.predictions || []}
-              centralEntity={causalData.central_entity}
-            />
-          )}
-
-          {/* Sources & Enrichment */}
-          <SourcesSection synthesis={synthesis} />
-
           {/* Reader Feedback */}
           <FeedbackWidget
             synthesisId={synthesis.id}
@@ -522,19 +661,8 @@ export default function SynthesisClient({ initialSynthesis }: SynthesisClientPro
             initialFeedbackCount={synthesis.feedbackCount}
           />
 
-          {/* News X-Ray - Transparency Analysis */}
-          {synthesis.transparencyScore !== undefined && synthesis.transparencyScore > 0 && (
-            <NewsXRay
-              transparencyScore={synthesis.transparencyScore}
-              transparencyLabel={synthesis.transparencyLabel || 'N/A'}
-              transparencyBreakdown={synthesis.transparencyBreakdown || {}}
-              sourceArticles={synthesis.sourceArticles || []}
-              numSources={synthesis.numSources}
-              contradictionsCount={synthesis.historicalContext?.contradictionsCount || 0}
-              hasContradictions={synthesis.historicalContext?.hasContradictions || false}
-              causalGraphId={synthesis.id}
-            />
-          )}
+          {/* Related Syntheses — "Sur le meme sujet" */}
+          <RelatedSyntheses items={synthesis.historicalContext?.relatedSyntheses || []} />
 
           {/* Back Link */}
           <div style={styles.backSection}>
