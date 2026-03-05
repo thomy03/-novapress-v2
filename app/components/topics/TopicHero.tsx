@@ -1,7 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
 const NARRATIVE_ARC_COLORS: Record<string, { color: string; label: string }> = {
   emerging:   { color: '#2563EB', label: '\u00c9mergent' },
@@ -36,6 +38,24 @@ export default function TopicHero({
   firstDate,
 }: TopicHeroProps) {
   const arc = NARRATIVE_ARC_COLORS[narrativeArc] || NARRATIVE_ARC_COLORS.developing;
+  const [heroImageUrl, setHeroImageUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchHeroImage = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/trending/topics/${encodeURIComponent(topic)}/hero-image`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.image_url) {
+            setHeroImageUrl(data.image_url);
+          }
+        }
+      } catch {
+        // Silently fail — dark bg fallback is fine
+      }
+    };
+    fetchHeroImage();
+  }, [topic]);
 
   const transparencyColor = transparencyAvg >= 70 ? '#10B981' : transparencyAvg >= 40 ? '#F59E0B' : '#DC2626';
 
@@ -57,21 +77,22 @@ export default function TopicHero({
         marginBottom: '24px',
         backgroundColor: '#1a1a2e',
       }}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={`https://source.unsplash.com/1600x400/?${encodeURIComponent(topic)},map,country`}
-          alt={`Illustration: ${topic}`}
-          style={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            display: 'block',
-          }}
-          onError={(e) => {
-            // Fallback: hide image, show dark bg
-            (e.target as HTMLImageElement).style.display = 'none';
-          }}
-        />
+        {heroImageUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={heroImageUrl}
+            alt={`Illustration: ${topic}`}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              display: 'block',
+            }}
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none';
+            }}
+          />
+        )}
         {/* Dark overlay for text readability */}
         <div style={{
           position: 'absolute',

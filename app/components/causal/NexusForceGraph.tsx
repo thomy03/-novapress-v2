@@ -80,6 +80,13 @@ export interface NexusForceGraphProps {
   centralEntity?: string;
   topic: string;
   height?: number;
+  onNodeSelect?: (node: {
+    id: string;
+    label: string;
+    type: string;
+    mentionCount: number;
+    connections: { label: string; direction: 'cause' | 'effect'; relationType: string }[];
+  } | null) => void;
 }
 
 /**
@@ -221,6 +228,7 @@ export default function NexusForceGraph({
   centralEntity,
   topic,
   height = 600,
+  onNodeSelect,
 }: NexusForceGraphProps) {
   const graphRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -228,6 +236,7 @@ export default function NexusForceGraph({
   const timeRef = useRef<number>(Date.now());
   const [dimensions, setDimensions] = useState({ width: 800, height });
   const [hoveredNode, setHoveredNode] = useState<NexusNode | null>(null);
+  const [focusedNode, setFocusedNode] = useState<NexusNode | null>(null);
   const [, setTick] = useState(0);
 
   // Build graph data with auto-classification and topological depth
@@ -417,10 +426,26 @@ export default function NexusForceGraph({
     const breathe = 1 + Math.sin(time / 1500 + n.id.charCodeAt(0) * 0.3) * 0.04;
     const size = mentionSize * breathe;
     const isHovered = hoveredNode?.id === n.id;
+    const isFocused = focusedNode?.id === n.id;
 
-    // Outer glow (stronger for hovered)
-    const glowRadius = size * (isHovered ? 4 : 2.5);
-    const glowAlpha = isHovered ? 0.5 : (0.2 + Math.sin(time / 1000 + n.id.charCodeAt(0)) * 0.08);
+    // When a node is focused, dim non-connected nodes
+    let dimmed = false;
+    if (focusedNode && !isFocused) {
+      const isConnected = graphData.links.some(edge => {
+        const srcId = typeof edge.source === 'object' ? edge.source.id : edge.source;
+        const tgtId = typeof edge.target === 'object' ? edge.target.id : edge.target;
+        return (srcId === focusedNode.id && tgtId === n.id) || (tgtId === focusedNode.id && srcId === n.id);
+      });
+      if (!isConnected) dimmed = true;
+    }
+
+    if (dimmed) {
+      ctx.globalAlpha = 0.15;
+    }
+
+    // Outer glow (stronger for hovered/focused)
+    const glowRadius = size * (isFocused ? 5 : isHovered ? 4 : 2.5);
+    const glowAlpha = isFocused ? 0.7 : isHovered ? 0.5 : (0.2 + Math.sin(time / 1000 + n.id.charCodeAt(0)) * 0.08);
     const glow = ctx.createRadialGradient(x, y, size * 0.3, x, y, glowRadius);
     glow.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${glowAlpha})`);
     glow.addColorStop(1, 'transparent');
@@ -510,7 +535,21 @@ export default function NexusForceGraph({
         ctx.fillText(line, x, labelY + i * lineHeight);
       });
     }
-  }, [hoveredNode, wrapText]);
+
+    // Focused node: pulsing selection ring
+    if (isFocused) {
+      const pulseScale = 1 + Math.sin(time / 300) * 0.15;
+      ctx.beginPath();
+      ctx.arc(x, y, size * 1.6 * pulseScale, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255, 255, 255, 0.6)`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    if (dimmed) {
+      ctx.globalAlpha = 1;
+    }
+  }, [hoveredNode, focusedNode, graphData.links, wrapText]);
 
   // Custom edge renderer
   const linkCanvasObject = useCallback((link: any, ctx: CanvasRenderingContext2D) => {
@@ -602,6 +641,52 @@ export default function NexusForceGraph({
   const handleNodeHover = useCallback((node: any) => {
     setHoveredNode(node as NexusNode | null);
   }, []);
+
+  // Click on node: zoom in + show detail dialog + highlight connections
+  const handleNodeClick = useCallback((node: any) => {
+    const n = node as NexusNode;
+    if (focusedNode?.id === n.id) {
+      // Clicking same node again: deselect and zoom out
+      setFocusedNode(null);
+      onNodeSelect?.(null);
+      graphRef.current?.zoomToFit(500, 80);
+      return;
+    }
+
+    setFocusedNode(n);
+
+    // Zoom into the clicked node
+    if (graphRef.current && n.x !== undefined && n.y !== undefined) {
+      graphRef.current.centerAt(n.x, n.y, 600);
+      graphRef.current.zoom(3, 600);
+    }
+
+    // Find all connections for this node
+    const connections: { label: string; direction: 'cause' | 'effect'; relationType: string }[] = [];
+    for (const edge of graphData.links) {
+      const sourceId = typeof edge.source === 'object' ? edge.source.id : edge.source;
+      const targetId = typeof edge.target === 'object' ? edge.target.id : edge.target;
+      if (sourceId === n.id) {
+        const targetNode = graphData.nodes.find(nd => nd.id === targetId);
+        if (targetNode) {
+          connections.push({ label: targetNode.label, direction: 'effect', relationType: edge.relation_type });
+        }
+      } else if (targetId === n.id) {
+        const sourceNode = graphData.nodes.find(nd => nd.id === sourceId);
+        if (sourceNode) {
+          connections.push({ label: sourceNode.label, direction: 'cause', relationType: edge.relation_type });
+        }
+      }
+    }
+
+    onNodeSelect?.({
+      id: n.id,
+      label: n.label,
+      type: n.node_type,
+      mentionCount: n.mention_count || 1,
+      connections,
+    });
+  }, [focusedNode, graphData, onNodeSelect]);
 
   const nodeCount = graphData.nodes.length;
   const edgeCount = graphData.links.length;
@@ -778,6 +863,7 @@ export default function NexusForceGraph({
         linkCanvasObject={linkCanvasObject}
         linkDirectionalParticles={0}
         onNodeHover={handleNodeHover}
+        onNodeClick={handleNodeClick}
         enableNodeDrag={true}
         enableZoomInteraction={true}
         enablePanInteraction={true}
@@ -858,8 +944,186 @@ export default function NexusForceGraph({
         ))}
       </div>
 
+      {/* Focused node detail dialog */}
+      {focusedNode && (
+        <div style={{
+          position: 'absolute',
+          top: '60px',
+          right: '24px',
+          width: '280px',
+          backgroundColor: 'rgba(10, 10, 26, 0.95)',
+          border: '1px solid rgba(255, 255, 255, 0.2)',
+          borderRadius: '8px',
+          padding: '16px',
+          zIndex: 25,
+          boxShadow: '0 12px 40px rgba(0, 0, 0, 0.7)',
+        }}>
+          {/* Close button */}
+          <button
+            onClick={() => {
+              setFocusedNode(null);
+              onNodeSelect?.(null);
+              graphRef.current?.zoomToFit(500, 80);
+            }}
+            style={{
+              position: 'absolute',
+              top: '8px',
+              right: '10px',
+              background: 'none',
+              border: 'none',
+              color: 'rgba(255,255,255,0.5)',
+              fontSize: '18px',
+              cursor: 'pointer',
+              padding: '0',
+              fontFamily: 'inherit',
+            }}
+          >
+            &times;
+          </button>
+
+          {/* Node type badge */}
+          <div style={{
+            display: 'inline-block',
+            padding: '2px 8px',
+            borderRadius: '4px',
+            backgroundColor: `${NODE_COLORS[focusedNode.node_type]?.core || '#2563EB'}30`,
+            color: NODE_COLORS[focusedNode.node_type]?.glow || '#93C5FD',
+            fontSize: '10px',
+            fontWeight: 700,
+            letterSpacing: '0.5px',
+            textTransform: 'uppercase' as const,
+            marginBottom: '8px',
+          }}>
+            {NODE_COLORS[focusedNode.node_type]?.label || focusedNode.node_type}
+          </div>
+
+          {/* Node label */}
+          <div style={{
+            fontSize: '16px',
+            fontWeight: 700,
+            color: '#FFFFFF',
+            lineHeight: 1.3,
+            marginBottom: '12px',
+            fontFamily: 'Georgia, "Times New Roman", serif',
+          }}>
+            {focusedNode.label}
+          </div>
+
+          {/* Stats */}
+          <div style={{ display: 'flex', gap: '12px', marginBottom: '14px' }}>
+            {(focusedNode.mention_count || 0) > 0 && (
+              <div style={{
+                fontSize: '11px',
+                color: 'rgba(255,255,255,0.6)',
+              }}>
+                <span style={{ fontWeight: 700, color: '#FFF', fontSize: '14px' }}>{focusedNode.mention_count}</span> mentions
+              </div>
+            )}
+            {(focusedNode._connectionCount || 0) > 0 && (
+              <div style={{
+                fontSize: '11px',
+                color: 'rgba(255,255,255,0.6)',
+              }}>
+                <span style={{ fontWeight: 700, color: '#FFF', fontSize: '14px' }}>{focusedNode._connectionCount}</span> connexions
+              </div>
+            )}
+          </div>
+
+          {/* Connected nodes list */}
+          {(() => {
+            const causes: string[] = [];
+            const effects: string[] = [];
+            for (const edge of graphData.links) {
+              const srcId = typeof edge.source === 'object' ? edge.source.id : edge.source;
+              const tgtId = typeof edge.target === 'object' ? edge.target.id : edge.target;
+              if (srcId === focusedNode.id) {
+                const t = graphData.nodes.find(nd => nd.id === tgtId);
+                if (t) effects.push(t.label);
+              } else if (tgtId === focusedNode.id) {
+                const s = graphData.nodes.find(nd => nd.id === srcId);
+                if (s) causes.push(s.label);
+              }
+            }
+            return (
+              <>
+                {causes.length > 0 && (
+                  <div style={{ marginBottom: '10px' }}>
+                    <div style={{
+                      fontSize: '9px',
+                      fontWeight: 700,
+                      letterSpacing: '1px',
+                      color: 'rgba(255,255,255,0.4)',
+                      marginBottom: '4px',
+                    }}>
+                      CAUSES
+                    </div>
+                    {causes.map((c, i) => (
+                      <div key={i} style={{
+                        fontSize: '12px',
+                        color: 'rgba(255,255,255,0.8)',
+                        padding: '3px 0',
+                        borderBottom: '1px solid rgba(255,255,255,0.08)',
+                        cursor: 'pointer',
+                      }}
+                        onClick={() => {
+                          const targetNode = graphData.nodes.find(nd => nd.label === c);
+                          if (targetNode) handleNodeClick(targetNode);
+                        }}
+                      >
+                        <span style={{ color: '#DC2626', marginRight: '6px' }}>&#8592;</span>
+                        {c}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {effects.length > 0 && (
+                  <div>
+                    <div style={{
+                      fontSize: '9px',
+                      fontWeight: 700,
+                      letterSpacing: '1px',
+                      color: 'rgba(255,255,255,0.4)',
+                      marginBottom: '4px',
+                    }}>
+                      EFFETS
+                    </div>
+                    {effects.map((e, i) => (
+                      <div key={i} style={{
+                        fontSize: '12px',
+                        color: 'rgba(255,255,255,0.8)',
+                        padding: '3px 0',
+                        borderBottom: '1px solid rgba(255,255,255,0.08)',
+                        cursor: 'pointer',
+                      }}
+                        onClick={() => {
+                          const targetNode = graphData.nodes.find(nd => nd.label === e);
+                          if (targetNode) handleNodeClick(targetNode);
+                        }}
+                      >
+                        <span style={{ color: '#10B981', marginRight: '6px' }}>&#8594;</span>
+                        {e}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            );
+          })()}
+
+          {/* Hint */}
+          <div style={{
+            fontSize: '10px',
+            color: 'rgba(255,255,255,0.3)',
+            marginTop: '12px',
+            textAlign: 'center',
+          }}>
+            Cliquez sur un lien pour naviguer
+          </div>
+        </div>
+      )}
+
       {/* Hover tooltip */}
-      {hoveredNode && (
+      {hoveredNode && !focusedNode && (
         <div style={{
           position: 'absolute',
           bottom: '50px',

@@ -383,3 +383,63 @@ async def get_synthesis_topic_info(
     except Exception as e:
         logger.error(f"Failed to check topic recurrence: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/topics/{topic_name}/hero-image")
+@limiter.limit("10/minute")
+async def get_topic_hero_image(
+    request: Request,
+    topic_name: str
+):
+    """
+    Generate or retrieve a contextual hero image for a topic/dossier page.
+    Uses fal.ai z-image/turbo with a topic-specific prompt.
+    Returns cached URL if already generated (stored in Redis).
+    """
+    import hashlib
+    try:
+        from app.services.image_generator import get_image_generator
+        from app.core.config import settings
+        import redis.asyncio as aioredis
+
+        generator = get_image_generator()
+        if not generator.enabled:
+            return {"image_url": None, "source": "disabled"}
+
+        # Check Redis cache first (cache for 7 days)
+        cache_key = f"novapress:topic_hero:{hashlib.md5(topic_name.encode()).hexdigest()}"
+        try:
+            redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+            cached = await redis.get(cache_key)
+            if cached:
+                await redis.close()
+                return {"image_url": cached, "source": "cache"}
+        except Exception:
+            redis = None
+
+        # Generate image with topic-specific prompt
+        prompt = (
+            f"Editorial press photograph illustrating the theme: {topic_name}. "
+            f"Show a relevant geographic map, landmark, or symbolic scene related to {topic_name}. "
+            f"Style: photojournalistic, documentary, dramatic natural lighting, "
+            f"cinematic composition, newspaper front page quality, muted natural colors. "
+            f"absolutely no text, no letters, no words, no numbers, no logos, no watermarks, no captions."
+        )
+
+        image_url = await generator._call_model(prompt, "MONDE")
+
+        if image_url:
+            # Cache the result for 7 days
+            if redis:
+                try:
+                    await redis.set(cache_key, image_url, ex=7 * 24 * 3600)
+                    await redis.close()
+                except Exception:
+                    pass
+            return {"image_url": image_url, "source": "generated"}
+
+        return {"image_url": None, "source": "failed"}
+
+    except Exception as e:
+        logger.error(f"Failed to generate topic hero image: {e}")
+        return {"image_url": None, "source": "error"}

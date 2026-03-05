@@ -61,6 +61,7 @@ interface NexusScrollViewerProps {
   centralEntity?: string;
   height?: number;
   theme?: ThemeMode;
+  onNodeSelect?: NexusForceGraphProps['onNodeSelect'];
 }
 
 // ==========================================
@@ -157,6 +158,7 @@ export default function NexusScrollViewer({
   centralEntity,
   height = 600,
   theme: initialTheme = 'light',
+  onNodeSelect,
 }: NexusScrollViewerProps) {
   const [svgs, setSvgs] = useState<NexusSvg[]>([]);
   const [loading, setLoading] = useState(true);
@@ -268,6 +270,7 @@ export default function NexusScrollViewer({
         centralEntity={centralEntity}
         topic={topic}
         height={height}
+        onNodeSelect={onNodeSelect}
       />
     );
   }
