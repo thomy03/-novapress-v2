@@ -63,7 +63,7 @@ PANELISTS = {
 }
 
 # LLM model for script generation
-TALKSHOW_MODEL = "google/gemini-2.5-flash-preview"
+TALKSHOW_MODEL = "google/gemini-3.1-flash-lite-preview"
 
 
 class TalkshowGenerator:
@@ -207,6 +207,86 @@ class TalkshowGenerator:
             return "audio/mpeg"
         return "audio/ogg"
 
+    async def _enrich_with_search(self, topic: str) -> Dict[str, str]:
+        """Enrich talkshow context with Grok + Perplexity real-time search."""
+        from app.core.config import settings
+
+        enrichment: Dict[str, str] = {}
+
+        # Perplexity — web context + latest developments
+        if settings.PERPLEXITY_API_KEY:
+            try:
+                from openai import AsyncOpenAI
+
+                pplx = AsyncOpenAI(
+                    api_key=settings.PERPLEXITY_API_KEY,
+                    base_url="https://api.perplexity.ai",
+                    timeout=float(settings.PERPLEXITY_TIMEOUT),
+                )
+                resp = await pplx.chat.completions.create(
+                    model="sonar",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "Tu es un chercheur. Fournis un briefing factuel et concis en francais.",
+                        },
+                        {
+                            "role": "user",
+                            "content": (
+                                f"Quels sont les derniers developpements et le contexte cle "
+                                f"sur le sujet: \"{topic}\"? "
+                                f"Inclus les faits recents, les positions des acteurs, "
+                                f"et les enjeux principaux. 300 mots max."
+                            ),
+                        },
+                    ],
+                    max_tokens=600,
+                )
+                web_ctx = resp.choices[0].message.content or ""
+                if web_ctx:
+                    enrichment["web_context"] = web_ctx
+                    logger.info(f"Talkshow Perplexity enrichment: {len(web_ctx)} chars")
+            except Exception as e:
+                logger.debug(f"Talkshow Perplexity enrichment failed: {e}")
+
+        # Grok — social sentiment + breaking angles
+        if settings.XAI_API_KEY:
+            try:
+                from openai import AsyncOpenAI
+
+                grok = AsyncOpenAI(
+                    api_key=settings.XAI_API_KEY,
+                    base_url="https://api.x.ai/v1",
+                    timeout=float(settings.GROK_TIMEOUT),
+                )
+                resp = await grok.chat.completions.create(
+                    model="grok-3-mini-fast",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "Tu es un analyste des reseaux sociaux. Reponds en francais.",
+                        },
+                        {
+                            "role": "user",
+                            "content": (
+                                f"Quel est le sentiment dominant sur les reseaux sociaux "
+                                f"concernant \"{topic}\"? "
+                                f"Quels sont les angles polemiques, les debats en cours, "
+                                f"et les points de friction? 200 mots max."
+                            ),
+                        },
+                    ],
+                    max_tokens=400,
+                )
+                social_ctx = resp.choices[0].message.content or ""
+                if social_ctx:
+                    enrichment["social_sentiment"] = social_ctx
+                    logger.info(f"Talkshow Grok enrichment: {len(social_ctx)} chars")
+            except Exception as e:
+                logger.debug(f"Talkshow Grok enrichment failed: {e}")
+
+        return enrichment
+
     async def _generate_script(
         self,
         topic: str,
@@ -216,11 +296,14 @@ class TalkshowGenerator:
         narrative: Optional[str],
         duration_target: int,
     ) -> Optional[List[Dict[str, str]]]:
-        """Generate debate script via Gemini Flash 3.1."""
+        """Generate debate script via Gemini Flash 3.1 Lite with full intelligence."""
         from openai import AsyncOpenAI
         from app.core.config import settings
 
         n_exchanges = max(10, duration_target // 15)
+
+        # Enrich with real-time search (Perplexity + Grok)
+        search_enrichment = await self._enrich_with_search(topic)
 
         # Build rich context
         context_parts = []
@@ -268,6 +351,20 @@ class TalkshowGenerator:
         if narrative:
             context_parts.append(f"=== NARRATIF EDITORIAL ===\n{narrative[:500]}")
 
+        # Real-time web context (Perplexity)
+        if search_enrichment.get("web_context"):
+            context_parts.append(
+                f"=== CONTEXTE WEB TEMPS REEL (Perplexity) ===\n"
+                f"{search_enrichment['web_context']}"
+            )
+
+        # Social sentiment (Grok)
+        if search_enrichment.get("social_sentiment"):
+            context_parts.append(
+                f"=== SENTIMENT RESEAUX SOCIAUX (X/Twitter) ===\n"
+                f"{search_enrichment['social_sentiment']}"
+            )
+
         full_context = "\n\n".join(context_parts)
 
         # Panelist descriptions
@@ -295,6 +392,9 @@ REGLES DU SCRIPT:
 11. Les repliques doivent etre SUBSTANTIELLES — analyses, arguments, pas des platitudes
 12. UTILISE les relations causales et predictions pour enrichir le debat
 13. Le debat doit ECLAIRER le sujet, pas juste le decrire
+14. INTEGRE le contexte web temps reel et le sentiment des reseaux sociaux quand disponible
+15. La journaliste peut CITER les reactions sur les reseaux sociaux
+16. Le contradicteur peut OPPOSER le sentiment public aux analyses des experts
 
 RETOURNE UNIQUEMENT un JSON array valide.
 Format: [{{"speaker": "moderateur", "text": "..."}}, {{"speaker": "expert", "text": "..."}}, ...]
