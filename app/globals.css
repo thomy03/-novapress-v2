@@ -994,3 +994,15 @@ button, a, input[type="button"], input[type="submit"] {
 
 .border-hover { transition: border-color 0.2s ease; }
 .border-hover:hover { border-color: var(--border-hover-color, #2563EB); }
+
+/* ============================================================================
+   SYNTHESIS SIDEBAR — hide scrollbar (scroll still works)
+   ============================================================================ */
+
+.synthesis-right-sidebar::-webkit-scrollbar {
+  display: none;
+}
+
+.synthesis-right-sidebar {
+  -ms-overflow-style: none; /* IE/Edge */
+}

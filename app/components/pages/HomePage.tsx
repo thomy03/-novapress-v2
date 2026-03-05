@@ -565,85 +565,43 @@ function MainContent() {
           )}
         </div>
 
-        {/* Secondary Column (40%) - 2 stacked cards */}
-        <div className="flex flex-col gap-4">
-          {secondarySyntheses.map((s, idx) => (
+        {/* Secondary Column (40%) - 2 text-only stacked cards */}
+        <div className="flex flex-col gap-0">
+          {secondarySyntheses.map((s) => (
             <Link key={s.id} href={`/synthesis/${s.id}`} style={{ textDecoration: 'none' }}>
               <article
-                className="card-interactive"
+                className="card-hover-lift"
                 style={{
-                  backgroundColor: theme.card,
-                  border: `1px solid ${theme.border}`,
-                  borderRadius: '12px',
-                  padding: '20px',
-                  minHeight: '160px',
+                  padding: '20px 0',
+                  borderBottom: `1px solid ${theme.border}`,
                   display: 'flex',
                   flexDirection: 'column',
-                  position: 'relative',
                 }}
               >
-                {/* Thumbnail */}
-                {s.imageUrl && (
-                  <div style={{
-                    width: '100%',
-                    aspectRatio: '16 / 9',
-                    overflow: 'hidden',
-                    borderRadius: '8px',
-                    marginBottom: '12px',
-                    backgroundColor: '#F9FAFB',
+                {/* Category */}
+                {s.category && (
+                  <span style={{
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '1px',
+                    color: CATEGORY_COLORS[s.category] || theme.textSecondary,
+                    marginBottom: '6px',
                   }}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={s.imageUrl}
-                      alt=""
-                      loading="lazy"
-                      style={{
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'cover',
-                        display: 'block',
-                      }}
-                    />
-                  </div>
+                    {s.category}
+                  </span>
                 )}
-
-                {/* Accent line on hover */}
-                <div
-                  className="accent-line-reveal"
-                  style={{
-                    position: 'absolute',
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    height: '3px',
-                    background: theme.brand.secondary,
-                  }}
-                />
-
-                {/* Category + Badge */}
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  marginBottom: '12px',
-                }}>
-                  {s.category && (
-                    <CategoryBadge category={s.category} size="sm" />
-                  )}
-                  <AIBadge size="sm" />
-                </div>
 
                 {/* Title */}
                 <h3 style={{
                   fontFamily: 'var(--font-serif)',
-                  fontSize: '16px',
+                  fontSize: '17px',
                   fontWeight: 600,
-                  lineHeight: 1.35,
+                  lineHeight: 1.3,
                   color: theme.text,
-                  margin: 0,
-                  marginBottom: '10px',
+                  margin: '0 0 8px 0',
                   display: '-webkit-box',
-                  WebkitLineClamp: 2,
+                  WebkitLineClamp: 3,
                   WebkitBoxOrient: 'vertical',
                   overflow: 'hidden',
                 }}>
@@ -655,8 +613,7 @@ function MainContent() {
                   fontSize: '13px',
                   lineHeight: 1.5,
                   color: theme.textSecondary,
-                  margin: 0,
-                  flex: 1,
+                  margin: '0 0 8px 0',
                   display: '-webkit-box',
                   WebkitLineClamp: 2,
                   WebkitBoxOrient: 'vertical',
@@ -668,13 +625,9 @@ function MainContent() {
                 {/* Meta */}
                 <div style={{
                   display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
+                  gap: '12px',
                   fontSize: '11px',
                   color: theme.textSecondary,
-                  borderTop: `1px solid ${theme.border}`,
-                  paddingTop: '10px',
-                  marginTop: 'auto',
                 }}>
                   <span style={{ fontFamily: 'var(--font-mono)' }}>{s.numSources} sources</span>
                   <span>{formatDate(s.createdAt)}</span>

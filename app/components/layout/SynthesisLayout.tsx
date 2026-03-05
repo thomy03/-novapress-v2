@@ -169,7 +169,7 @@ export default function SynthesisLayout({
       </main>
 
       {rightSidebar && (
-        <aside style={styles.rightSidebar}>
+        <aside className="synthesis-right-sidebar" style={styles.rightSidebar}>
           {rightSidebar}
         </aside>
       )}
@@ -214,6 +214,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   sidebarContent: {
     flex: 1,
     overflowY: 'auto',
+    scrollbarWidth: 'none',
     padding: '16px',
   },
   main: {
@@ -224,6 +225,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     top: '140px',
     height: 'calc(100vh - 120px)',
     overflowY: 'auto',
+    scrollbarWidth: 'none', // Firefox — hide scrollbar
     backgroundColor: '#F9FAFB',
     border: '1px solid #E5E5E5',
     padding: '16px',
