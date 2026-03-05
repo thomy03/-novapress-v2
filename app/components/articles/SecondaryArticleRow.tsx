@@ -67,7 +67,7 @@ const SecondaryCard = memo(function SecondaryCard({
       {/* Image - Larger and prominent */}
       <div style={{
         width: '100%',
-        height: '200px',
+        aspectRatio: '16 / 9',
         overflow: 'hidden',
         position: 'relative',
         backgroundColor: theme.border

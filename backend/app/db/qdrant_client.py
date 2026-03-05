@@ -1211,8 +1211,19 @@ class QdrantService:
                     break
                 scroll_offset = next_offset
 
-            # Sort by created_at descending (most recent first)
-            all_syntheses.sort(key=lambda x: x.get("created_at", 0), reverse=True)
+            # Sort by blended score: transparency (40%) + recency (60%)
+            # This ensures high-quality syntheses are prioritized while staying fresh
+            import time as _time
+            now_ts = _time.time()
+            max_age = 7 * 24 * 3600  # 7 days normalization window
+
+            def _blend_score(s):
+                ts = s.get("created_at", 0)
+                recency = max(0, 1 - (now_ts - ts) / max_age) if max_age else 0
+                quality = (s.get("transparency_score", 50) or 50) / 100
+                return quality * 0.4 + recency * 0.6
+
+            all_syntheses.sort(key=_blend_score, reverse=True)
 
             # Apply offset and limit after sorting (for API pagination)
             syntheses = all_syntheses[offset:offset + limit]

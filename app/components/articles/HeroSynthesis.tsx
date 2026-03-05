@@ -131,7 +131,7 @@ export function HeroSynthesis({ synthesis }: HeroSynthesisProps) {
       ) : synthesis.imageUrl ? (
         <div style={{
           width: '100%',
-          height: '280px',
+          aspectRatio: '16 / 9',
           overflow: 'hidden',
           borderRadius: '2px',
           backgroundColor: '#F9FAFB',

@@ -78,7 +78,7 @@ export const CompactArticleCard = memo(function CompactArticleCard({
         className="img-zoom"
         style={{
           width: '100%',
-          height: '160px',
+          aspectRatio: '16 / 9',
           overflow: 'hidden',
           position: 'relative',
           backgroundColor: theme.bgSecondary,

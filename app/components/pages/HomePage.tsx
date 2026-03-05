@@ -50,7 +50,7 @@ function CompactCard({ synthesis: s, theme, formatDate }: {
         {s.imageUrl && (
           <div style={{
             width: '100%',
-            height: '120px',
+            aspectRatio: '16 / 9',
             overflow: 'hidden',
             backgroundColor: '#F9FAFB',
           }}>
@@ -366,7 +366,7 @@ function MainContent() {
                 {s.imageUrl && (
                   <div style={{
                     width: '100%',
-                    height: '140px',
+                    aspectRatio: '16 / 9',
                     overflow: 'hidden',
                     borderRadius: '8px',
                     marginBottom: '12px',
@@ -463,12 +463,10 @@ function MainContent() {
             </Link>
           ))}
 
-          {/* Trending Topics - Compact version below secondary cards */}
-          {secondarySyntheses.length < 2 && (
-            <div className="lg:sticky lg:top-4">
-              <TrendingTopics />
-            </div>
-          )}
+          {/* Trending Topics - Always show below secondary cards */}
+          <div className="lg:sticky lg:top-4">
+            <TrendingTopics />
+          </div>
         </div>
       </section>
 

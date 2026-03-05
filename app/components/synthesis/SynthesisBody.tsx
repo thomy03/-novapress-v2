@@ -30,7 +30,46 @@ export interface SynthesisBodyProps {
 }
 
 /**
- * Parse text to replace [SOURCE:N] with clickable highlighted links
+ * Convert inline markdown (**bold**, *italic*, «quotes») to React nodes
+ */
+function renderMarkdown(text: string, keyPrefix: string): React.ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  // Match **bold**, *italic*, «guillemets»
+  const pattern = /(\*\*(.+?)\*\*|\*(.+?)\*|\u00ab(.+?)\u00bb)/g;
+  let lastIdx = 0;
+  let m;
+  let i = 0;
+
+  while ((m = pattern.exec(text)) !== null) {
+    if (m.index > lastIdx) {
+      parts.push(text.slice(lastIdx, m.index));
+    }
+    if (m[2]) {
+      // **bold**
+      parts.push(<strong key={`${keyPrefix}-b${i}`}>{m[2]}</strong>);
+    } else if (m[3]) {
+      // *italic*
+      parts.push(<em key={`${keyPrefix}-i${i}`}>{m[3]}</em>);
+    } else if (m[4]) {
+      // «guillemets» — render as styled quote
+      parts.push(
+        <span key={`${keyPrefix}-q${i}`} style={{ fontStyle: 'italic' }}>
+          {'\u00ab\u00a0'}{m[4]}{'\u00a0\u00bb'}
+        </span>
+      );
+    }
+    lastIdx = m.index + m[0].length;
+    i++;
+  }
+  if (lastIdx < text.length) {
+    parts.push(text.slice(lastIdx));
+  }
+  return parts;
+}
+
+/**
+ * Parse text to replace [SOURCE:N] with clickable highlighted links,
+ * and **bold** / *italic* with proper HTML elements
  */
 function renderTextWithCitations(
   text: string,
@@ -45,7 +84,8 @@ function renderTextWithCitations(
 
   while ((match = sourcePattern.exec(text)) !== null) {
     if (match.index > lastIndex) {
-      parts.push(text.slice(lastIndex, match.index));
+      // Process markdown in the text between source citations
+      parts.push(...renderMarkdown(text.slice(lastIndex, match.index), `md-${match.index}`));
     }
 
     const sourceNum = parseInt(match[1], 10);
@@ -94,7 +134,8 @@ function renderTextWithCitations(
   }
 
   if (lastIndex < text.length) {
-    parts.push(text.slice(lastIndex));
+    // Process markdown in the remaining text
+    parts.push(...renderMarkdown(text.slice(lastIndex), `md-end`));
   }
 
   return parts;
