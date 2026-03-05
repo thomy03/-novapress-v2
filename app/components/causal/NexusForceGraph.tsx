@@ -361,10 +361,10 @@ export default function NexusForceGraph({
     if (!graphRef.current) return;
 
     const nodeCount = graphData.nodes.length;
-    const repulsion = Math.max(-800, -200 - nodeCount * 25);
+    const repulsion = Math.max(-1200, -400 - nodeCount * 40);
 
     graphRef.current.d3Force('charge')?.strength(repulsion);
-    graphRef.current.d3Force('link')?.distance(140).strength(0.3);
+    graphRef.current.d3Force('link')?.distance(180).strength(0.25);
 
     // Temporal X positioning via the built-in forceX
     // react-force-graph-2d exposes d3Force which includes forceX/Y
@@ -422,7 +422,7 @@ export default function NexusForceGraph({
     const { r, g, b } = hexToRgb(colors.core);
 
     const connections = n._connectionCount || 0;
-    const mentionSize = Math.min(22, 7 + Math.sqrt((n.mention_count || 1) + connections) * 2.5);
+    const mentionSize = Math.min(30, 12 + Math.sqrt((n.mention_count || 1) + connections) * 3);
     const breathe = 1 + Math.sin(time / 1500 + n.id.charCodeAt(0) * 0.3) * 0.04;
     const size = mentionSize * breathe;
     const isHovered = hoveredNode?.id === n.id;
@@ -709,6 +709,7 @@ export default function NexusForceGraph({
         height: `${height}px`,
         backgroundColor: '#0A0A1A',
         overflow: 'hidden',
+        cursor: hoveredNode ? 'pointer' : 'default',
       }}
     >
       {/* Cosmic background */}
@@ -854,7 +855,7 @@ export default function NexusForceGraph({
         nodeCanvasObject={nodeCanvasObject}
         nodePointerAreaPaint={(node: any, color: string, ctx: CanvasRenderingContext2D) => {
           const n = node as NexusNode;
-          const size = 7 + Math.sqrt(n.mention_count || 1) * 2.5 + 18;
+          const size = 12 + Math.sqrt(n.mention_count || 1) * 3 + 25;
           ctx.fillStyle = color;
           ctx.beginPath();
           ctx.arc(n.x || 0, n.y || 0, size, 0, Math.PI * 2);

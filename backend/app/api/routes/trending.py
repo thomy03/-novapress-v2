@@ -443,3 +443,144 @@ async def get_topic_hero_image(
     except Exception as e:
         logger.error(f"Failed to generate topic hero image: {e}")
         return {"image_url": None, "source": "error"}
+
+
+@router.get("/topics/{topic_name}/narrative")
+@limiter.limit("10/minute")
+async def get_topic_narrative(
+    request: Request,
+    topic_name: str
+):
+    """
+    Generate an editorial narrative summary for a topic/dossier using LLM.
+    Cached in Redis for 6 hours. Uses DeepSeek V3.2 via OpenRouter.
+    """
+    import hashlib
+    try:
+        from app.core.config import settings
+        import redis.asyncio as aioredis
+
+        # Check cache first
+        cache_key = f"novapress:topic_narrative:{hashlib.md5(topic_name.encode()).hexdigest()}"
+        redis_client = None
+        try:
+            redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+            cached = await redis_client.get(cache_key)
+            if cached:
+                await redis_client.close()
+                return {"narrative": cached, "source": "cache"}
+        except Exception:
+            pass
+
+        # Fetch dashboard data to build context
+        from app.ml.topic_tracker import get_topic_tracker
+        tracker = get_topic_tracker()
+        dashboard = await tracker.get_topic_dashboard(topic_name)
+
+        if not dashboard:
+            return {"narrative": None, "source": "no_data"}
+
+        # Build rich context for the LLM
+        syntheses = dashboard.get("syntheses", [])
+        entities = dashboard.get("key_entities", [])
+        causal = dashboard.get("aggregated_causal_graph", {})
+        predictions = dashboard.get("predictions_summary", [])
+        geo = dashboard.get("geo_focus", [])
+
+        # Recent synthesis titles + summaries
+        synth_context = ""
+        for s in syntheses[:8]:
+            title = s.get("title", "")
+            summary = s.get("summary", "")[:200]
+            date = s.get("date", "")
+            synth_context += f"- [{date}] {title}: {summary}\n"
+
+        # Entities
+        entity_names = [e.get("name", e) if isinstance(e, dict) else str(e) for e in entities[:10]]
+
+        # Causal edges
+        causal_edges = causal.get("edges", [])
+        causal_text = ""
+        for e in causal_edges[:8]:
+            cause = e.get("cause_text", "")
+            effect = e.get("effect_text", "")
+            rel = e.get("relation_type", "causes")
+            if cause and effect:
+                causal_text += f"- {cause} → ({rel}) → {effect}\n"
+
+        # Predictions
+        pred_text = ""
+        for p in predictions[:4]:
+            pred_text += f"- {p.get('prediction', '')} (probabilite: {p.get('probability', 0):.0%})\n"
+
+        # Geo
+        geo_text = ", ".join(g.get("country", "") for g in geo[:5]) if geo else ""
+
+        arc = dashboard.get("narrative_arc", "developing")
+        duration = dashboard.get("duration_days", 0)
+        num_synth = dashboard.get("synthesis_count", 0)
+        num_sources = dashboard.get("sources_total", 0)
+        first_date = dashboard.get("first_date", "")
+
+        prompt = f"""Tu es un editorialiste de presse de premier plan. Redige un resume narratif riche et structure du dossier "{topic_name}" pour un lecteur curieux.
+
+DONNEES DU DOSSIER:
+- Suivi depuis: {first_date} ({duration} jours)
+- {num_synth} syntheses produites a partir de {num_sources} sources
+- Arc narratif: {arc}
+- Entites cles: {', '.join(entity_names)}
+- Zones geographiques: {geo_text}
+
+SYNTHESES RECENTES:
+{synth_context}
+
+RELATIONS CAUSALES IDENTIFIEES:
+{causal_text}
+
+PREDICTIONS:
+{pred_text}
+
+CONSIGNES:
+1. Redige 3-4 paragraphes narratifs en francais, style editorial de qualite (Le Monde, NYT)
+2. Commence par le contexte general, puis les dynamiques en jeu, puis les enjeux actuels
+3. Integre naturellement les entites, les relations causales et les predictions
+4. Utilise un ton informatif mais engage, comme un grand reporter qui explique une situation complexe
+5. Ne depasse pas 300 mots
+6. N'invente RIEN — base-toi uniquement sur les donnees fournies
+7. Pas de titre, pas de bullet points — uniquement des paragraphes narratifs fluides
+
+Reponds UNIQUEMENT avec le texte narratif."""
+
+        # Call LLM
+        from app.ml.llm import get_llm_service
+        llm = get_llm_service()
+        if not llm.client:
+            await llm.initialize()
+
+        response = await llm.client.chat.completions.create(
+            model=llm.model,
+            messages=[
+                {"role": "system", "content": "Tu es un editorialiste de presse international reconnu. Tu rediges des analyses claires et engagees."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=600,
+        )
+
+        narrative = response.choices[0].message.content
+        if narrative:
+            narrative = narrative.strip()
+            # Cache for 6 hours
+            if redis_client:
+                try:
+                    await redis_client.set(cache_key, narrative, ex=6 * 3600)
+                    await redis_client.close()
+                except Exception:
+                    pass
+            return {"narrative": narrative, "source": "generated"}
+
+        return {"narrative": None, "source": "llm_empty"}
+
+    except Exception as e:
+        logger.error(f"Failed to generate topic narrative: {e}")
+        return {"narrative": None, "source": "error"}

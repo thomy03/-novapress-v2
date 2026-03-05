@@ -180,6 +180,8 @@ function TopicDashboardPage() {
   const [selectedNode, setSelectedNode] = useState<SelectedNodeInfo | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<SelectedEdgeInfo | null>(null);
   const [heroImageUrl, setHeroImageUrl] = useState<string | null>(null);
+  const [narrative, setNarrative] = useState<string | null>(null);
+  const [narrativeLoading, setNarrativeLoading] = useState(false);
 
   useEffect(() => {
     const fetchDashboard = async () => {
@@ -217,6 +219,13 @@ function TopicDashboardPage() {
         .then(r => r.ok ? r.json() : null)
         .then(data => { if (data?.image_url) setHeroImageUrl(data.image_url); })
         .catch(() => {});
+      // Fetch LLM narrative
+      setNarrativeLoading(true);
+      fetch(`${API_URL}/api/trending/topics/${encodeURIComponent(topicName)}/narrative`)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => { if (data?.narrative) setNarrative(data.narrative); })
+        .catch(() => {})
+        .finally(() => setNarrativeLoading(false));
     }
   }, [topicName, searchParams]);
 
@@ -344,7 +353,7 @@ function TopicDashboardPage() {
               position: 'relative',
               overflow: 'hidden',
             }}>
-              {/* Background image overlay (subtle) */}
+              {/* Background image overlay */}
               {heroImageUrl && (
                 <div style={{
                   position: 'absolute',
@@ -360,10 +369,15 @@ function TopicDashboardPage() {
                       width: '100%',
                       height: '100%',
                       objectFit: 'cover',
-                      opacity: 0.06,
-                      filter: 'grayscale(100%)',
+                      opacity: 0.12,
+                      filter: 'grayscale(60%) contrast(1.1)',
                     }}
                   />
+                  <div style={{
+                    position: 'absolute',
+                    inset: 0,
+                    background: 'linear-gradient(to right, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.6) 30%, rgba(255,255,255,0.3) 100%)',
+                  }} />
                 </div>
               )}
 
@@ -388,96 +402,48 @@ function TopicDashboardPage() {
                   COMPRENDRE CE DOSSIER
                 </div>
 
-                {/* Narrative introduction */}
+                {/* LLM-generated narrative */}
                 <div style={{
                   fontFamily: 'Georgia, "Times New Roman", serif',
-                  fontSize: '15px',
+                  fontSize: '14.5px',
                   color: '#1F2937',
-                  lineHeight: 1.7,
+                  lineHeight: 1.75,
                   marginBottom: '24px',
                 }}>
-                  <p style={{ margin: '0 0 12px 0' }}>
-                    Le dossier <strong>{dashboard.topic}</strong> est suivi depuis le{' '}
-                    {formatDate(dashboard.first_date)}.
-                    {' '}En <strong>{dashboard.duration_days || 0} jours</strong>,{' '}
-                    <strong>{dashboard.synthesis_count} syntheses</strong> ont ete produites
-                    a partir de <strong>{dashboard.sources_total || 0} sources</strong> differentes.
-                  </p>
-
-                  {/* Key entities narrative */}
-                  {dashboard.key_entities.length > 0 && (
-                    <p style={{ margin: '0 0 12px 0' }}>
-                      Les acteurs centraux de ce dossier sont{' '}
-                      {dashboard.key_entities.slice(0, 4).map((e, i, arr) => (
-                        <span key={i}>
-                          <strong>{e.name}</strong>
-                          {i < arr.length - 2 ? ', ' : i === arr.length - 2 ? ' et ' : ''}
-                        </span>
-                      ))}.
-                      {dashboard.key_entities.length > 4 && (
-                        <span> ({dashboard.key_entities.length - 4} autres entites impliquees)</span>
+                  {narrativeLoading && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#9CA3AF', fontSize: '13px', marginBottom: '12px' }}>
+                      <div style={{
+                        width: '14px', height: '14px', borderRadius: '50%',
+                        border: '2px solid #E5E5E5', borderTopColor: '#2563EB',
+                        animation: 'spin 1s linear infinite',
+                      }} />
+                      Generation de l&apos;analyse...
+                    </div>
+                  )}
+                  {narrative ? (
+                    narrative.split('\n').filter(p => p.trim()).map((para, i) => (
+                      <p key={i} style={{ margin: '0 0 12px 0' }}>{para}</p>
+                    ))
+                  ) : !narrativeLoading ? (
+                    <>
+                      <p style={{ margin: '0 0 12px 0' }}>
+                        Le dossier <strong>{dashboard.topic}</strong> est suivi depuis le{' '}
+                        {formatDate(dashboard.first_date)}.
+                        {' '}En <strong>{dashboard.duration_days || 0} jours</strong>,{' '}
+                        <strong>{dashboard.synthesis_count} syntheses</strong> ont ete produites
+                        a partir de <strong>{dashboard.sources_total || 0} sources</strong> differentes.
+                      </p>
+                      {dashboard.key_entities.length > 0 && (
+                        <p style={{ margin: '0 0 12px 0' }}>
+                          Acteurs cles:{' '}
+                          {dashboard.key_entities.slice(0, 4).map(e => e.name).join(', ')}.
+                        </p>
                       )}
-                    </p>
-                  )}
-
-                  {/* Narrative arc */}
-                  <p style={{ margin: '0 0 12px 0' }}>
-                    Le sujet est actuellement en phase{' '}
-                    <strong style={{ color: arcConfig.color }}>
-                      {arcConfig.label.toLowerCase()}
-                    </strong>
-                    {' '}&mdash; {arcConfig.description.toLowerCase()}.
-                  </p>
-
-                  {/* Causal narrative from edges */}
-                  {causalEdges.length > 0 && (
-                    <p style={{ margin: '0 0 12px 0' }}>
-                      L&apos;analyse causale revele{' '}
-                      <strong>{causalEdges.length} relations</strong> entre{' '}
-                      <strong>{causalNodes.length} elements</strong>.
-                      {(() => {
-                        const topCauses = causalEdges
-                          .filter(e => e.relation_type === 'causes' || e.relation_type === 'triggers')
-                          .slice(0, 2);
-                        if (topCauses.length === 0) return null;
-                        return (
-                          <>
-                            {' '}Notamment, <em>{topCauses[0].cause_text}</em> {topCauses[0].relation_type === 'triggers' ? 'declenche' : 'provoque'}{' '}
-                            <em>{topCauses[0].effect_text}</em>
-                            {topCauses.length > 1 && (
-                              <>, tandis que <em>{topCauses[1].cause_text}</em>{' '}
-                                {topCauses[1].relation_type === 'triggers' ? 'declenche' : 'provoque'}{' '}
-                                <em>{topCauses[1].effect_text}</em>
-                              </>
-                            )}.
-                          </>
-                        );
-                      })()}
-                    </p>
-                  )}
-
-                  {/* Geo focus */}
-                  {dashboard.geo_focus.length > 0 && (
-                    <p style={{ margin: '0 0 12px 0' }}>
-                      Les zones geographiques concernees sont principalement{' '}
-                      {dashboard.geo_focus.slice(0, 3).map((g, i, arr) => (
-                        <span key={i}>
-                          <strong>{g.country}</strong>
-                          {i < arr.length - 2 ? ', ' : i === arr.length - 2 ? ' et ' : ''}
-                        </span>
-                      ))}.
-                    </p>
-                  )}
-
-                  {/* Transparency */}
-                  <p style={{ margin: '0' }}>
-                    L&apos;indice de transparence moyen est de{' '}
-                    <strong style={{
-                      color: (dashboard.transparency_avg || 0) >= 70 ? '#10B981' : (dashboard.transparency_avg || 0) >= 40 ? '#F59E0B' : '#DC2626',
-                    }}>
-                      {Math.round(dashboard.transparency_avg || 0)}/100
-                    </strong>.
-                  </p>
+                      <p style={{ margin: '0' }}>
+                        Phase: <strong style={{ color: arcConfig.color }}>{arcConfig.label}</strong>.
+                      </p>
+                    </>
+                  ) : null}
                 </div>
 
                 {/* Recent syntheses mini-list */}
@@ -577,6 +543,177 @@ function TopicDashboardPage() {
                     </div>
                   )}
                 </div>
+
+                {/* Clickable nodes grid — easy UX for exploring nodes */}
+                {hasCausalData && causalNodes.length > 0 && (
+                  <div style={{
+                    padding: '12px 16px',
+                    borderTop: '1px solid #E5E5E5',
+                    backgroundColor: 'rgba(249,250,251,0.95)',
+                  }}>
+                    <div style={{
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      letterSpacing: '1.5px',
+                      color: '#6B7280',
+                      textTransform: 'uppercase' as const,
+                      marginBottom: '8px',
+                    }}>
+                      EXPLORER LES NOEUDS ({causalNodes.length})
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {causalNodes
+                        .sort((a, b) => (b.mention_count || 1) - (a.mention_count || 1))
+                        .map((node) => {
+                          const typeConfig = NODE_TYPE_LEGEND.find(l => l.type === node.node_type);
+                          const color = typeConfig?.color || '#6B7280';
+                          return (
+                            <button
+                              key={node.id}
+                              onClick={() => {
+                                // Build connections for this node
+                                const causedBy: string[] = [];
+                                const causes: string[] = [];
+                                const sourceSynths: string[] = [];
+                                for (const e of causalEdges) {
+                                  if (e.effect_text === node.label || e.cause_text === node.label) {
+                                    if (e.cause_text === node.label) causes.push(e.effect_text);
+                                    if (e.effect_text === node.label) causedBy.push(e.cause_text);
+                                    for (const sid of (e.source_syntheses || [])) {
+                                      if (!sourceSynths.includes(sid)) sourceSynths.push(sid);
+                                    }
+                                  }
+                                }
+                                setSelectedNode({
+                                  id: node.id,
+                                  label: node.label,
+                                  type: node.node_type,
+                                  mentionCount: node.mention_count || 1,
+                                  sourceSyntheses: [...sourceSynths, ...(node.source_syntheses || [])],
+                                  causedBy,
+                                  causes,
+                                });
+                                setSelectedEdge(null);
+                              }}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                padding: '6px 12px',
+                                fontSize: '12px',
+                                fontWeight: 500,
+                                backgroundColor: selectedNode?.id === node.id ? `${color}15` : '#FFFFFF',
+                                color: '#1F2937',
+                                border: `1px solid ${selectedNode?.id === node.id ? color : '#E5E5E5'}`,
+                                borderLeft: `3px solid ${color}`,
+                                cursor: 'pointer',
+                                fontFamily: 'inherit',
+                                transition: 'all 0.15s',
+                              }}
+                            >
+                              {node.label.length > 30 ? node.label.slice(0, 30) + '\u2026' : node.label}
+                              {(node.mention_count || 0) > 1 && (
+                                <span style={{ fontSize: '10px', color: '#9CA3AF' }}>
+                                  {node.mention_count}x
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Selected node detail panel */}
+                {selectedNode && (
+                  <div style={{
+                    margin: '0 16px 16px',
+                    padding: '16px 20px',
+                    border: '1px solid #E5E5E5',
+                    backgroundColor: '#FFFFFF',
+                    borderLeft: `3px solid ${NODE_TYPE_LEGEND.find(l => l.type === selectedNode.type)?.color || '#6B7280'}`,
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                      <div>
+                        <span style={{
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          letterSpacing: '0.5px',
+                          color: NODE_TYPE_LEGEND.find(l => l.type === selectedNode.type)?.color || '#6B7280',
+                          textTransform: 'uppercase' as const,
+                        }}>
+                          {NODE_TYPE_LEGEND.find(l => l.type === selectedNode.type)?.label || selectedNode.type}
+                        </span>
+                        <h3 style={{
+                          fontFamily: 'Georgia, "Times New Roman", serif',
+                          fontSize: '18px',
+                          fontWeight: 700,
+                          color: '#000',
+                          margin: '4px 0 0 0',
+                          lineHeight: 1.3,
+                        }}>
+                          {selectedNode.label}
+                        </h3>
+                      </div>
+                      <button
+                        onClick={() => setSelectedNode(null)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', color: '#9CA3AF', padding: '0', fontFamily: 'inherit' }}
+                      >
+                        &times;
+                      </button>
+                    </div>
+
+                    <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '12px' }}>
+                      {selectedNode.mentionCount} mention{selectedNode.mentionCount > 1 ? 's' : ''}
+                      {selectedNode.causedBy.length + selectedNode.causes.length > 0 && (
+                        <> &middot; {selectedNode.causedBy.length + selectedNode.causes.length} connexion{(selectedNode.causedBy.length + selectedNode.causes.length) > 1 ? 's' : ''}</>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                      {selectedNode.causedBy.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '1px', color: '#DC2626', marginBottom: '6px' }}>
+                            ORIGINES
+                          </div>
+                          {selectedNode.causedBy.map((c, i) => (
+                            <div key={i} style={{ fontSize: '13px', color: '#000', padding: '3px 0', borderBottom: '1px solid #F3F4F6' }}>
+                              {c}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {selectedNode.causes.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '1px', color: '#10B981', marginBottom: '6px' }}>
+                            CONSEQUENCES
+                          </div>
+                          {selectedNode.causes.map((c, i) => (
+                            <div key={i} style={{ fontSize: '13px', color: '#000', padding: '3px 0', borderBottom: '1px solid #F3F4F6' }}>
+                              {c}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {selectedNode.sourceSyntheses.length > 0 && (
+                      <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #E5E5E5' }}>
+                        <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '1px', color: '#6B7280', marginBottom: '6px' }}>
+                          SYNTHESES LIEES
+                        </div>
+                        {selectedNode.sourceSyntheses.slice(0, 3).map((sid, i) => {
+                          const synth = dashboard.syntheses.find(s => s.id === sid);
+                          return synth ? (
+                            <Link key={i} href={`/synthesis/${sid}`} style={{ display: 'block', fontSize: '12px', color: '#2563EB', textDecoration: 'none', padding: '3px 0' }}>
+                              {synth.title.length > 60 ? synth.title.slice(0, 60) + '\u2026' : synth.title}
+                            </Link>
+                          ) : null;
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Connections list below graph */}
                 {hasCausalData && (
