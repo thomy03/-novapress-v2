@@ -854,7 +854,7 @@ export default function NexusForceGraph({
         nodeCanvasObject={nodeCanvasObject}
         nodePointerAreaPaint={(node: any, color: string, ctx: CanvasRenderingContext2D) => {
           const n = node as NexusNode;
-          const size = 7 + Math.sqrt(n.mention_count || 1) * 2.5 + 8;
+          const size = 7 + Math.sqrt(n.mention_count || 1) * 2.5 + 18;
           ctx.fillStyle = color;
           ctx.beginPath();
           ctx.arc(n.x || 0, n.y || 0, size, 0, Math.PI * 2);
@@ -1029,24 +1029,69 @@ export default function NexusForceGraph({
             )}
           </div>
 
-          {/* Connected nodes list */}
+          {/* Narrative explanation */}
           {(() => {
-            const causes: string[] = [];
-            const effects: string[] = [];
+            const causeEdges: { label: string; relationType: string }[] = [];
+            const effectEdges: { label: string; relationType: string }[] = [];
             for (const edge of graphData.links) {
               const srcId = typeof edge.source === 'object' ? edge.source.id : edge.source;
               const tgtId = typeof edge.target === 'object' ? edge.target.id : edge.target;
               if (srcId === focusedNode.id) {
                 const t = graphData.nodes.find(nd => nd.id === tgtId);
-                if (t) effects.push(t.label);
+                if (t) effectEdges.push({ label: t.label, relationType: edge.relation_type });
               } else if (tgtId === focusedNode.id) {
                 const s = graphData.nodes.find(nd => nd.id === srcId);
-                if (s) causes.push(s.label);
+                if (s) causeEdges.push({ label: s.label, relationType: edge.relation_type });
               }
             }
+
+            // Generate narrative paragraph
+            const typeLabel = NODE_COLORS[focusedNode.node_type]?.label || focusedNode.node_type;
+            const relationVerbs: Record<string, { active: string; passive: string }> = {
+              causes: { active: 'provoque', passive: 'est provoque par' },
+              triggers: { active: 'declenche', passive: 'est declenche par' },
+              enables: { active: 'permet', passive: 'est rendu possible par' },
+              prevents: { active: 'empeche', passive: 'est empeche par' },
+              relates_to: { active: 'est lie a', passive: 'est lie a' },
+            };
+
+            const narrativeParts: string[] = [];
+            if (causeEdges.length > 0) {
+              const grouped = causeEdges.map(c => {
+                const verb = relationVerbs[c.relationType]?.passive || 'est lie a';
+                return `${verb} ${c.label}`;
+              });
+              narrativeParts.push(grouped.join(', et '));
+            }
+            if (effectEdges.length > 0) {
+              const grouped = effectEdges.map(e => {
+                const verb = relationVerbs[e.relationType]?.active || 'est lie a';
+                return `${verb} ${e.label}`;
+              });
+              narrativeParts.push(grouped.join(', et '));
+            }
+
             return (
               <>
-                {causes.length > 0 && (
+                {/* Narrative text */}
+                {narrativeParts.length > 0 && (
+                  <div style={{
+                    fontSize: '12px',
+                    color: 'rgba(255,255,255,0.75)',
+                    lineHeight: 1.6,
+                    marginBottom: '14px',
+                    fontFamily: 'Georgia, "Times New Roman", serif',
+                    fontStyle: 'italic',
+                    borderLeft: '2px solid rgba(255,255,255,0.2)',
+                    paddingLeft: '10px',
+                  }}>
+                    {typeLabel} &mdash; <strong style={{ color: '#FFF', fontStyle: 'normal' }}>{focusedNode.label}</strong>{' '}
+                    {narrativeParts.join('. De plus, ')}.
+                  </div>
+                )}
+
+                {/* Clickable connections */}
+                {causeEdges.length > 0 && (
                   <div style={{ marginBottom: '10px' }}>
                     <div style={{
                       fontSize: '9px',
@@ -1055,28 +1100,34 @@ export default function NexusForceGraph({
                       color: 'rgba(255,255,255,0.4)',
                       marginBottom: '4px',
                     }}>
-                      CAUSES
+                      ORIGINES ({causeEdges.length})
                     </div>
-                    {causes.map((c, i) => (
+                    {causeEdges.map((c, i) => (
                       <div key={i} style={{
                         fontSize: '12px',
                         color: 'rgba(255,255,255,0.8)',
-                        padding: '3px 0',
+                        padding: '4px 0',
                         borderBottom: '1px solid rgba(255,255,255,0.08)',
                         cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
                       }}
                         onClick={() => {
-                          const targetNode = graphData.nodes.find(nd => nd.label === c);
+                          const targetNode = graphData.nodes.find(nd => nd.label === c.label);
                           if (targetNode) handleNodeClick(targetNode);
                         }}
                       >
-                        <span style={{ color: '#DC2626', marginRight: '6px' }}>&#8592;</span>
-                        {c}
+                        <span style={{ color: '#DC2626', fontSize: '10px' }}>&#9668;</span>
+                        <span style={{ flex: 1 }}>{c.label}</span>
+                        <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.3)' }}>
+                          {relationVerbs[c.relationType]?.passive.split(' ')[0] || c.relationType}
+                        </span>
                       </div>
                     ))}
                   </div>
                 )}
-                {effects.length > 0 && (
+                {effectEdges.length > 0 && (
                   <div>
                     <div style={{
                       fontSize: '9px',
@@ -1085,23 +1136,29 @@ export default function NexusForceGraph({
                       color: 'rgba(255,255,255,0.4)',
                       marginBottom: '4px',
                     }}>
-                      EFFETS
+                      CONSEQUENCES ({effectEdges.length})
                     </div>
-                    {effects.map((e, i) => (
+                    {effectEdges.map((e, i) => (
                       <div key={i} style={{
                         fontSize: '12px',
                         color: 'rgba(255,255,255,0.8)',
-                        padding: '3px 0',
+                        padding: '4px 0',
                         borderBottom: '1px solid rgba(255,255,255,0.08)',
                         cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
                       }}
                         onClick={() => {
-                          const targetNode = graphData.nodes.find(nd => nd.label === e);
+                          const targetNode = graphData.nodes.find(nd => nd.label === e.label);
                           if (targetNode) handleNodeClick(targetNode);
                         }}
                       >
-                        <span style={{ color: '#10B981', marginRight: '6px' }}>&#8594;</span>
-                        {e}
+                        <span style={{ color: '#10B981', fontSize: '10px' }}>&#9658;</span>
+                        <span style={{ flex: 1 }}>{e.label}</span>
+                        <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.3)' }}>
+                          {relationVerbs[e.relationType]?.active.split(' ')[0] || e.relationType}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -1117,7 +1174,7 @@ export default function NexusForceGraph({
             marginTop: '12px',
             textAlign: 'center',
           }}>
-            Cliquez sur un lien pour naviguer
+            Cliquez sur un lien pour explorer
           </div>
         </div>
       )}
