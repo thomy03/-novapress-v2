@@ -23,10 +23,10 @@ async def _get_topic_data(topic_name: str):
     tracker = get_topic_tracker()
     dashboard = await tracker.get_topic_dashboard(topic_name)
 
-    if not dashboard or dashboard.get("synthesis_count", 0) < 2:
+    if not dashboard or dashboard.get("synthesis_count", 0) < 1:
         raise HTTPException(
             status_code=404,
-            detail="Pas assez de syntheses pour generer un talkshow (minimum 2)",
+            detail="Pas assez de syntheses pour generer un talkshow",
         )
 
     return dashboard
@@ -210,3 +210,28 @@ async def get_panelists():
             for pid, p in PANELISTS.items()
         ]
     }
+
+
+@router.post("/generate/{topic_name}")
+@limiter.limit("3/minute")
+async def generate_episode_now(request: Request, topic_name: str):
+    """Generate a talkshow episode on demand for a specific topic."""
+    from app.services.talkshow_scheduler import generate_single_episode
+
+    result = await generate_single_episode(topic_name)
+    if not result:
+        raise HTTPException(
+            status_code=500,
+            detail="Echec de la generation de l'episode",
+        )
+    return result
+
+
+@router.post("/scheduler/run")
+@limiter.limit("1/minute")
+async def run_scheduler(request: Request):
+    """Run the talkshow scheduler (generates episodes for hot/warm topics)."""
+    from app.services.talkshow_scheduler import run_talkshow_scheduler
+
+    result = await run_talkshow_scheduler()
+    return result
