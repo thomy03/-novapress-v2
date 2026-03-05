@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     # Image Generation (Optional) - fal.ai z-image/turbo (~$0.003/image)
     FAL_API_KEY: str = ""  # https://fal.ai/dashboard/keys
 
+    # Public site URL (for podcast RSS feed, OG images, etc.)
+    SITE_URL: str = "https://novapressai.com"
+
     # Nexus SVG Generation (Gemini via OpenRouter)
     NEXUS_SVG_MODEL: str = "google/gemini-3.1-flash-lite-preview"
 

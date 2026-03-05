@@ -182,6 +182,7 @@ function TopicDashboardPage() {
   const [heroImageUrl, setHeroImageUrl] = useState<string | null>(null);
   const [narrative, setNarrative] = useState<string | null>(null);
   const [narrativeLoading, setNarrativeLoading] = useState(false);
+  const [showAllEdges, setShowAllEdges] = useState(false);
 
   useEffect(() => {
     const fetchDashboard = async () => {
@@ -243,7 +244,6 @@ function TopicDashboardPage() {
     }
     const causedBy = node.connections.filter(c => c.direction === 'cause').map(c => c.label);
     const causes = node.connections.filter(c => c.direction === 'effect').map(c => c.label);
-    // Build edges from dashboard data
     const rawEdges = dashboard.aggregated_causal_graph.edges;
     const rawNodes = dashboard.aggregated_causal_graph.nodes;
     const nodeLabels = Object.fromEntries(rawNodes.map(n => [n.id, n.label]));
@@ -269,6 +269,24 @@ function TopicDashboardPage() {
     });
     setSelectedEdge(null);
   }, [dashboard]);
+
+  // Callback for NexusForceGraph edge clicks
+  const handleGraphEdgeSelect = useCallback((edge: {
+    id: string;
+    causeLabel: string;
+    effectLabel: string;
+    relationType: string;
+    confidence: number;
+    mentionCount: number;
+    sourceSyntheses: string[];
+  } | null) => {
+    if (!edge) {
+      setSelectedEdge(null);
+      return;
+    }
+    setSelectedEdge(edge);
+    setSelectedNode(null);
+  }, []);
 
   if (loading) {
     return (
@@ -386,6 +404,37 @@ function TopicDashboardPage() {
         firstDate={dashboard.first_date}
       />
 
+      {/* Talkshow CTA */}
+      {dashboard.synthesis_count >= 2 && (
+        <div style={{
+          maxWidth: '1200px',
+          margin: '0 auto',
+          padding: '0 24px',
+          position: 'relative',
+          zIndex: 1,
+        }}>
+          <Link
+            href={`/topics/${encodeURIComponent(topicName)}/talkshow`}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '10px 20px',
+              backgroundColor: '#000',
+              color: '#FFF',
+              textDecoration: 'none',
+              fontSize: '13px',
+              fontWeight: 600,
+              marginBottom: '12px',
+            }}
+          >
+            <span style={{ fontSize: '16px' }}>{'\uD83C\uDFA4'}</span>
+            Talkshow IA — 5 experts debattent ce dossier
+            <span style={{ fontSize: '11px', opacity: 0.6 }}>{'\u2192'}</span>
+          </Link>
+        </div>
+      )}
+
       {/* Tab Navigation */}
       <div style={styles.tabBar}>
         <div style={styles.tabBarInner}>
@@ -423,17 +472,200 @@ function TopicDashboardPage() {
               overflow: 'hidden',
             }}>
 
-              {/* LEFT: Sidebar — narrative (default) or node detail (when selected) */}
+              {/* LEFT: Sidebar — sticky, three modes: narrative / node / edge */}
               <div style={{
-                position: 'relative',
+                position: 'sticky',
+                top: '50px',
+                alignSelf: 'start',
+                height: 'calc(100vh - 50px)',
                 zIndex: 1,
                 borderRight: '1px solid #E5E5E5',
                 backgroundColor: 'rgba(255,255,255,0.95)',
                 padding: '24px 20px',
                 overflowY: 'auto',
-                maxHeight: '800px',
               }}>
-                {selectedNode ? (
+                {selectedEdge && !selectedNode ? (
+                  /* ---- Edge detail view ---- */
+                  <div>
+                    <button
+                      onClick={() => setSelectedEdge(null)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '0',
+                        marginBottom: '16px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        color: '#2563EB',
+                        backgroundColor: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                      }}
+                    >
+                      &larr; Retour au narratif
+                    </button>
+
+                    <div style={{
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      letterSpacing: '1.5px',
+                      color: '#6B7280',
+                      textTransform: 'uppercase' as const,
+                      marginBottom: '20px',
+                    }}>
+                      RELATION CAUSALE
+                    </div>
+
+                    <div style={{ width: '100%', height: '1px', backgroundColor: '#E5E5E5', marginBottom: '16px' }} />
+
+                    {/* Cause label — clickable */}
+                    <button
+                      onClick={() => {
+                        const node = dashboard.aggregated_causal_graph.nodes.find(n => n.label === selectedEdge.causeLabel);
+                        if (node) {
+                          setSelectedNode({
+                            id: node.id,
+                            label: node.label,
+                            type: node.type || 'event',
+                            mentionCount: node.mention_count || 1,
+                            sourceSyntheses: node.source_syntheses || [],
+                            causedBy: [],
+                            causes: [],
+                          });
+                          setSelectedEdge(null);
+                        }
+                      }}
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        textAlign: 'left' as const,
+                        padding: '12px',
+                        border: '1px solid #E5E5E5',
+                        borderLeft: '3px solid #DC2626',
+                        backgroundColor: '#FFFFFF',
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                        marginBottom: '4px',
+                      }}
+                    >
+                      <div style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '1px', color: '#DC2626', marginBottom: '4px' }}>
+                        CAUSE
+                      </div>
+                      <div style={{
+                        fontFamily: 'Georgia, "Times New Roman", serif',
+                        fontSize: '15px',
+                        fontWeight: 700,
+                        color: '#000',
+                        lineHeight: 1.3,
+                      }}>
+                        {selectedEdge.causeLabel}
+                      </div>
+                    </button>
+
+                    {/* Vertical connector */}
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      padding: '8px 0',
+                    }}>
+                      <div style={{ width: '1px', height: '12px', backgroundColor: '#D1D5DB' }} />
+                      <div style={{
+                        padding: '4px 12px',
+                        borderRadius: '4px',
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        letterSpacing: '0.5px',
+                        color: '#FFFFFF',
+                        backgroundColor: (() => {
+                          if (selectedEdge.relationType === 'causes') return '#DC2626';
+                          if (selectedEdge.relationType === 'triggers') return '#F59E0B';
+                          if (selectedEdge.relationType === 'enables') return '#10B981';
+                          if (selectedEdge.relationType === 'prevents') return '#6B7280';
+                          return '#8B5CF6';
+                        })(),
+                      }}>
+                        {selectedEdge.relationType === 'causes' ? 'PROVOQUE' :
+                         selectedEdge.relationType === 'triggers' ? 'DECLENCHE' :
+                         selectedEdge.relationType === 'enables' ? 'PERMET' :
+                         selectedEdge.relationType === 'prevents' ? 'EMPECHE' : 'LIE A'}
+                      </div>
+                      <div style={{ width: '1px', height: '12px', backgroundColor: '#D1D5DB' }} />
+                      <div style={{ fontSize: '14px', color: '#9CA3AF' }}>{'\u25BC'}</div>
+                    </div>
+
+                    {/* Effect label — clickable */}
+                    <button
+                      onClick={() => {
+                        const node = dashboard.aggregated_causal_graph.nodes.find(n => n.label === selectedEdge.effectLabel);
+                        if (node) {
+                          setSelectedNode({
+                            id: node.id,
+                            label: node.label,
+                            type: node.type || 'event',
+                            mentionCount: node.mention_count || 1,
+                            sourceSyntheses: node.source_syntheses || [],
+                            causedBy: [],
+                            causes: [],
+                          });
+                          setSelectedEdge(null);
+                        }
+                      }}
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        textAlign: 'left' as const,
+                        padding: '12px',
+                        border: '1px solid #E5E5E5',
+                        borderLeft: '3px solid #2563EB',
+                        backgroundColor: '#FFFFFF',
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                        marginBottom: '16px',
+                      }}
+                    >
+                      <div style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '1px', color: '#2563EB', marginBottom: '4px' }}>
+                        EFFET
+                      </div>
+                      <div style={{
+                        fontFamily: 'Georgia, "Times New Roman", serif',
+                        fontSize: '15px',
+                        fontWeight: 700,
+                        color: '#000',
+                        lineHeight: 1.3,
+                      }}>
+                        {selectedEdge.effectLabel}
+                      </div>
+                    </button>
+
+                    <div style={{ width: '100%', height: '1px', backgroundColor: '#E5E5E5', marginBottom: '12px' }} />
+
+                    {/* Stats */}
+                    <div style={{ display: 'flex', gap: '16px', fontSize: '12px', color: '#6B7280', marginBottom: '16px' }}>
+                      <span>Confiance: <strong style={{ color: '#000' }}>{Math.round(selectedEdge.confidence * 100)}%</strong></span>
+                      <span>Mentions: <strong style={{ color: '#000' }}>{selectedEdge.mentionCount}</strong></span>
+                    </div>
+
+                    {/* Source syntheses */}
+                    {selectedEdge.sourceSyntheses.length > 0 && (
+                      <div style={{ borderTop: '1px solid #E5E5E5', paddingTop: '12px' }}>
+                        <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '1px', color: '#6B7280', marginBottom: '6px' }}>
+                          SYNTHESES LIEES
+                        </div>
+                        {selectedEdge.sourceSyntheses.slice(0, 5).map((sid, i) => {
+                          const synth = dashboard.syntheses.find(s => s.id === sid);
+                          return synth ? (
+                            <Link key={i} href={`/synthesis/${sid}`} style={{ display: 'block', fontSize: '12px', color: '#2563EB', textDecoration: 'none', padding: '4px 0' }}>
+                              {synth.title.length > 70 ? synth.title.slice(0, 70) + '\u2026' : synth.title}
+                            </Link>
+                          ) : null;
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ) : selectedNode ? (
                   /* ---- Node detail view ---- */
                   <div>
                     <button
@@ -489,11 +721,51 @@ function TopicDashboardPage() {
                         <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '1px', color: '#DC2626', marginBottom: '6px' }}>
                           ORIGINES
                         </div>
-                        {selectedNode.causedBy.map((c, i) => (
-                          <div key={i} style={{ fontSize: '13px', color: '#000', padding: '4px 0', borderBottom: '1px solid #F3F4F6' }}>
-                            {c}
-                          </div>
-                        ))}
+                        {selectedNode.causedBy.map((c, i) => {
+                          const nodeColor = (() => {
+                            const n = dashboard.aggregated_causal_graph.nodes.find(nd => nd.label === c);
+                            return NODE_TYPE_LEGEND.find(l => l.type === (n?.type || 'event'))?.color || '#6B7280';
+                          })();
+                          return (
+                            <div
+                              key={i}
+                              onClick={() => {
+                                const node = dashboard.aggregated_causal_graph.nodes.find(nd => nd.label === c);
+                                if (node) {
+                                  setSelectedNode({
+                                    id: node.id,
+                                    label: node.label,
+                                    type: node.type || 'event',
+                                    mentionCount: node.mention_count || 1,
+                                    sourceSyntheses: node.source_syntheses || [],
+                                    causedBy: [],
+                                    causes: [],
+                                  });
+                                }
+                              }}
+                              style={{
+                                fontSize: '13px',
+                                color: '#000',
+                                padding: '6px 0 6px 12px',
+                                borderBottom: '1px solid #F3F4F6',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                              }}
+                            >
+                              <span style={{
+                                width: '6px',
+                                height: '6px',
+                                borderRadius: '50%',
+                                backgroundColor: nodeColor,
+                                flexShrink: 0,
+                              }} />
+                              <span style={{ flex: 1 }}>{c}</span>
+                              <span style={{ fontSize: '10px', color: '#9CA3AF' }}>{'\u203A'}</span>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
 
@@ -502,11 +774,51 @@ function TopicDashboardPage() {
                         <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '1px', color: '#10B981', marginBottom: '6px' }}>
                           CONSEQUENCES
                         </div>
-                        {selectedNode.causes.map((c, i) => (
-                          <div key={i} style={{ fontSize: '13px', color: '#000', padding: '4px 0', borderBottom: '1px solid #F3F4F6' }}>
-                            {c}
-                          </div>
-                        ))}
+                        {selectedNode.causes.map((c, i) => {
+                          const nodeColor = (() => {
+                            const n = dashboard.aggregated_causal_graph.nodes.find(nd => nd.label === c);
+                            return NODE_TYPE_LEGEND.find(l => l.type === (n?.type || 'event'))?.color || '#6B7280';
+                          })();
+                          return (
+                            <div
+                              key={i}
+                              onClick={() => {
+                                const node = dashboard.aggregated_causal_graph.nodes.find(nd => nd.label === c);
+                                if (node) {
+                                  setSelectedNode({
+                                    id: node.id,
+                                    label: node.label,
+                                    type: node.type || 'event',
+                                    mentionCount: node.mention_count || 1,
+                                    sourceSyntheses: node.source_syntheses || [],
+                                    causedBy: [],
+                                    causes: [],
+                                  });
+                                }
+                              }}
+                              style={{
+                                fontSize: '13px',
+                                color: '#000',
+                                padding: '6px 0 6px 12px',
+                                borderBottom: '1px solid #F3F4F6',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                              }}
+                            >
+                              <span style={{
+                                width: '6px',
+                                height: '6px',
+                                borderRadius: '50%',
+                                backgroundColor: nodeColor,
+                                flexShrink: 0,
+                              }} />
+                              <span style={{ flex: 1 }}>{c}</span>
+                              <span style={{ fontSize: '10px', color: '#9CA3AF' }}>{'\u203A'}</span>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
 
@@ -583,6 +895,11 @@ function TopicDashboardPage() {
                       ) : null}
                     </div>
 
+                    {/* Stats line */}
+                    <div style={{ fontSize: '11px', color: '#9CA3AF', marginBottom: '16px' }}>
+                      {dashboard.aggregated_causal_graph.total_nodes} noeuds &middot; {dashboard.aggregated_causal_graph.total_edges} relations causales
+                    </div>
+
                     <div style={{
                       borderTop: '1px solid #E5E5E5',
                       paddingTop: '16px',
@@ -597,31 +914,58 @@ function TopicDashboardPage() {
                       }}>
                         DERNIERES SYNTHESES
                       </div>
-                      {dashboard.syntheses.slice(0, 5).map((s, i) => (
-                        <Link
-                          key={s.id}
-                          href={`/synthesis/${s.id}`}
+                      {dashboard.syntheses.slice(0, 3).map((s) => {
+                        const sentimentColor = s.sentiment === 'positive' ? '#10B981'
+                          : s.sentiment === 'negative' ? '#DC2626' : '#F59E0B';
+                        return (
+                          <Link
+                            key={s.id}
+                            href={`/synthesis/${s.id}`}
+                            style={{
+                              display: 'block',
+                              padding: '8px 0 8px 10px',
+                              borderLeft: `3px solid ${sentimentColor}`,
+                              marginBottom: '6px',
+                              textDecoration: 'none',
+                              color: '#000',
+                            }}
+                          >
+                            <div style={{ fontSize: '11px', color: '#9CA3AF', marginBottom: '2px' }}>
+                              {formatDate(s.date)}
+                            </div>
+                            <div style={{
+                              fontSize: '13px',
+                              fontWeight: 500,
+                              lineHeight: 1.3,
+                              color: '#1F2937',
+                              display: '-webkit-box',
+                              WebkitLineClamp: 1,
+                              WebkitBoxOrient: 'vertical',
+                              overflow: 'hidden',
+                            }}>
+                              {s.title}
+                            </div>
+                          </Link>
+                        );
+                      })}
+                      {dashboard.syntheses.length > 3 && (
+                        <button
+                          onClick={() => setActiveTab('timeline')}
                           style={{
                             display: 'block',
-                            padding: '8px 0',
-                            borderBottom: i < 4 ? '1px solid #F3F4F6' : 'none',
-                            textDecoration: 'none',
-                            color: '#000',
+                            fontSize: '12px',
+                            color: '#2563EB',
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            padding: '8px 0 0 0',
+                            fontFamily: 'inherit',
+                            fontWeight: 500,
                           }}
                         >
-                          <div style={{ fontSize: '11px', color: '#9CA3AF', marginBottom: '2px' }}>
-                            {formatDate(s.date)}
-                          </div>
-                          <div style={{
-                            fontSize: '13px',
-                            fontWeight: 500,
-                            lineHeight: 1.3,
-                            color: '#1F2937',
-                          }}>
-                            {s.title.length > 80 ? s.title.slice(0, 80) + '\u2026' : s.title}
-                          </div>
-                        </Link>
-                      ))}
+                          {'Voir la chronologie \u2192'}
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
@@ -674,6 +1018,7 @@ function TopicDashboardPage() {
                       centralEntity={dashboard.topic}
                       height={600}
                       onNodeSelect={handleGraphNodeSelect}
+                      onEdgeSelect={handleGraphEdgeSelect}
                     />
                   ) : (
                     <div style={styles.emptyState}>
@@ -682,207 +1027,109 @@ function TopicDashboardPage() {
                   )}
                 </div>
 
-                {/* Connections list below graph */}
-                {hasCausalData && (
-                  <div style={{
-                    padding: '16px',
-                    borderTop: '1px solid #E5E5E5',
-                    backgroundColor: 'rgba(255,255,255,0.95)',
-                  }}>
+                {/* Compact connections table below graph */}
+                {hasCausalData && (() => {
+                  const visibleEdges = showAllEdges ? causalEdges : causalEdges.slice(0, 8);
+                  return (
                     <div style={{
-                      fontSize: '10px',
-                      fontWeight: 700,
-                      letterSpacing: '1.5px',
-                      color: '#6B7280',
-                      textTransform: 'uppercase' as const,
-                      marginBottom: '10px',
+                      padding: '12px 16px',
+                      borderTop: '1px solid #E5E5E5',
+                      backgroundColor: 'rgba(255,255,255,0.95)',
                     }}>
-                      CONNEXIONS CAUSALES ({causalEdges.length})
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      {causalEdges.slice(0, 12).map((edge, idx) => {
-                        const isSelected = selectedEdge?.id === (edge.id || `edge-${idx}`);
-                        const typeColor = edge.relation_type === 'causes' ? '#DC2626'
-                          : edge.relation_type === 'triggers' ? '#F59E0B'
-                          : edge.relation_type === 'enables' ? '#10B981'
-                          : edge.relation_type === 'prevents' ? '#6B7280'
-                          : '#8B5CF6';
-                        return (
-                          <button
-                            key={edge.id || `edge-${idx}`}
-                            onClick={() => {
-                              setSelectedEdge({
-                                id: edge.id || `edge-${idx}`,
-                                causeLabel: edge.cause_text,
-                                effectLabel: edge.effect_text,
-                                relationType: edge.relation_type,
-                                confidence: edge.confidence,
-                                mentionCount: edge.mention_count || 1,
-                                sourceSyntheses: edge.source_syntheses || [],
-                              });
-                              setSelectedNode(null);
-                            }}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '8px',
-                              padding: '8px 12px',
-                              fontSize: '13px',
-                              backgroundColor: isSelected ? '#F9FAFB' : '#FFFFFF',
-                              color: '#000',
-                              border: `1px solid ${isSelected ? typeColor : '#E5E5E5'}`,
-                              borderLeft: `3px solid ${typeColor}`,
-                              cursor: 'pointer',
-                              fontFamily: 'inherit',
-                              textAlign: 'left' as const,
-                              width: '100%',
-                            }}
-                          >
-                            <span style={{ flex: 1, minWidth: 0 }}>
-                              <span style={{ fontWeight: 600 }}>
-                                {edge.cause_text.length > 35 ? edge.cause_text.slice(0, 35) + '\u2026' : edge.cause_text}
-                              </span>
-                              <span style={{ color: typeColor, fontWeight: 700, margin: '0 6px', fontSize: '11px' }}>
-                                {'\u2192'}
-                              </span>
-                              <span>
-                                {edge.effect_text.length > 35 ? edge.effect_text.slice(0, 35) + '\u2026' : edge.effect_text}
-                              </span>
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Inline edge detail panel (below connections) */}
-                {selectedEdge && !selectedNode && (
-                  <div style={{
-                    margin: '16px',
-                    padding: '20px',
-                    border: '1px solid #E5E5E5',
-                    backgroundColor: '#F9FAFB',
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
                       <div style={{
                         fontSize: '10px',
                         fontWeight: 700,
-                        letterSpacing: '1px',
+                        letterSpacing: '1.5px',
                         color: '#6B7280',
                         textTransform: 'uppercase' as const,
+                        marginBottom: '8px',
                       }}>
-                        RELATION CAUSALE
+                        CONNEXIONS CAUSALES ({causalEdges.length})
                       </div>
-                      <button
-                        onClick={() => setSelectedEdge(null)}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          cursor: 'pointer',
-                          fontSize: '18px',
-                          color: '#9CA3AF',
-                          padding: '0',
-                          fontFamily: 'inherit',
-                        }}
-                      >
-                        &times;
-                      </button>
-                    </div>
-
-                    <div style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1fr auto 1fr',
-                      gap: '16px',
-                      alignItems: 'center',
-                    }}>
-                      {/* Cause */}
-                      <div>
-                        <div style={{
-                          fontSize: '10px',
-                          fontWeight: 700,
-                          letterSpacing: '1px',
-                          color: '#DC2626',
-                          textTransform: 'uppercase' as const,
-                          marginBottom: '6px',
-                        }}>
-                          CAUSE
-                        </div>
-                        <div style={{
-                          fontFamily: 'Georgia, "Times New Roman", serif',
-                          fontSize: '16px',
-                          fontWeight: 700,
-                          color: '#000',
-                          lineHeight: 1.3,
-                        }}>
-                          {selectedEdge.causeLabel}
-                        </div>
-                      </div>
-
-                      {/* Arrow */}
-                      <div style={{
-                        textAlign: 'center',
-                        color: (() => {
-                          if (selectedEdge.relationType === 'causes') return '#DC2626';
-                          if (selectedEdge.relationType === 'triggers') return '#F59E0B';
-                          if (selectedEdge.relationType === 'enables') return '#10B981';
-                          if (selectedEdge.relationType === 'prevents') return '#6B7280';
-                          return '#8B5CF6';
-                        })(),
-                        fontSize: '20px',
-                        fontWeight: 700,
-                      }}>
-                        &rarr;
-                        <div style={{ fontSize: '9px', letterSpacing: '1px', fontWeight: 700, marginTop: '2px' }}>
-                          {selectedEdge.relationType === 'causes' ? 'CAUSE' :
-                           selectedEdge.relationType === 'triggers' ? 'DECLENCHE' :
-                           selectedEdge.relationType === 'enables' ? 'PERMET' :
-                           selectedEdge.relationType === 'prevents' ? 'EMPECHE' : 'LIE A'}
-                        </div>
-                      </div>
-
-                      {/* Effect */}
-                      <div>
-                        <div style={{
-                          fontSize: '10px',
-                          fontWeight: 700,
-                          letterSpacing: '1px',
-                          color: '#2563EB',
-                          textTransform: 'uppercase' as const,
-                          marginBottom: '6px',
-                        }}>
-                          EFFET
-                        </div>
-                        <div style={{
-                          fontFamily: 'Georgia, "Times New Roman", serif',
-                          fontSize: '16px',
-                          fontWeight: 700,
-                          color: '#000',
-                          lineHeight: 1.3,
-                        }}>
-                          {selectedEdge.effectLabel}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Stats row */}
-                    <div style={{
-                      display: 'flex',
-                      gap: '24px',
-                      marginTop: '16px',
-                      paddingTop: '12px',
-                      borderTop: '1px solid #E5E5E5',
-                      fontSize: '12px',
-                      color: '#6B7280',
-                    }}>
-                      <span>Confiance: <strong style={{ color: '#000' }}>{Math.round(selectedEdge.confidence * 100)}%</strong></span>
-                      <span>Mentions: <strong style={{ color: '#000' }}>{selectedEdge.mentionCount}</strong></span>
-                      {selectedEdge.sourceSyntheses.length > 0 && (
-                        <span>{selectedEdge.sourceSyntheses.length} synthese{selectedEdge.sourceSyntheses.length > 1 ? 's' : ''} liee{selectedEdge.sourceSyntheses.length > 1 ? 's' : ''}</span>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '2px solid #E5E5E5' }}>
+                            <th style={{ textAlign: 'left', padding: '4px 6px', color: '#6B7280', fontWeight: 600, fontSize: '10px', letterSpacing: '0.5px' }}>Cause</th>
+                            <th style={{ textAlign: 'center', padding: '4px 6px', color: '#6B7280', fontWeight: 600, fontSize: '10px', width: '60px' }}>Type</th>
+                            <th style={{ textAlign: 'left', padding: '4px 6px', color: '#6B7280', fontWeight: 600, fontSize: '10px', letterSpacing: '0.5px' }}>Effet</th>
+                            <th style={{ textAlign: 'right', padding: '4px 6px', color: '#6B7280', fontWeight: 600, fontSize: '10px', width: '40px' }}>Conf.</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {visibleEdges.map((edge, idx) => {
+                            const isSelected = selectedEdge?.id === (edge.id || `edge-${idx}`);
+                            const typeColor = edge.relation_type === 'causes' ? '#DC2626'
+                              : edge.relation_type === 'triggers' ? '#F59E0B'
+                              : edge.relation_type === 'enables' ? '#10B981'
+                              : edge.relation_type === 'prevents' ? '#6B7280'
+                              : '#8B5CF6';
+                            const typeLabel = edge.relation_type === 'causes' ? 'cause'
+                              : edge.relation_type === 'triggers' ? 'decl.'
+                              : edge.relation_type === 'enables' ? 'permet'
+                              : edge.relation_type === 'prevents' ? 'emp.'
+                              : 'lie';
+                            return (
+                              <tr
+                                key={edge.id || `edge-${idx}`}
+                                onClick={() => {
+                                  setSelectedEdge({
+                                    id: edge.id || `edge-${idx}`,
+                                    causeLabel: edge.cause_text,
+                                    effectLabel: edge.effect_text,
+                                    relationType: edge.relation_type,
+                                    confidence: edge.confidence,
+                                    mentionCount: edge.mention_count || 1,
+                                    sourceSyntheses: edge.source_syntheses || [],
+                                  });
+                                  setSelectedNode(null);
+                                }}
+                                style={{
+                                  cursor: 'pointer',
+                                  borderLeft: `3px solid ${typeColor}`,
+                                  backgroundColor: isSelected ? '#F0F4FF' : 'transparent',
+                                  borderBottom: '1px solid #F3F4F6',
+                                }}
+                              >
+                                <td style={{ padding: '5px 6px', fontWeight: 600, maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {edge.cause_text}
+                                </td>
+                                <td style={{ padding: '5px 6px', textAlign: 'center' }}>
+                                  <span style={{ color: typeColor, fontWeight: 700, fontSize: '10px' }}>
+                                    {'\u2192'} {typeLabel}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '5px 6px', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {edge.effect_text}
+                                </td>
+                                <td style={{ padding: '5px 6px', textAlign: 'right', color: '#6B7280' }}>
+                                  {Math.round(edge.confidence * 100)}%
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                      {causalEdges.length > 8 && (
+                        <button
+                          onClick={() => setShowAllEdges(prev => !prev)}
+                          style={{
+                            display: 'block',
+                            margin: '8px auto 0',
+                            fontSize: '11px',
+                            color: '#2563EB',
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            fontFamily: 'inherit',
+                            fontWeight: 500,
+                          }}
+                        >
+                          {showAllEdges ? 'Voir moins' : `Voir tout (${causalEdges.length})`}
+                        </button>
                       )}
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             </div>
 
