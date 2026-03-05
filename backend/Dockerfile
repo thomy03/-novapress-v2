@@ -48,8 +48,8 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY --chown=novapress:novapress . .
 
 # Create necessary directories
-RUN mkdir -p /app/data /app/models && \
-    chown -R novapress:novapress /app/data /app/models
+RUN mkdir -p /app/data /app/models /app/audio_cache/talkshows && \
+    chown -R novapress:novapress /app/data /app/models /app/audio_cache
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
