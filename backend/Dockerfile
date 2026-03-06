@@ -69,4 +69,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
 # Run FastAPI with production settings
 # 1 worker to save RAM on 16GB mini PC (BGE-M3 ~1.5GB per worker)
 # Pipeline also loads BGE-M3, so 1 worker avoids OOM/swap thrashing
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5000", "--workers", "1", "--timeout-keep-alive", "300", "--limit-max-requests", "1000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5000", "--workers", "1", "--timeout-keep-alive", "300"]
