@@ -24,6 +24,39 @@ VOICES_DIR.mkdir(exist_ok=True)
 _SENTENCE_RE = re.compile(r'(?<=[.!?])\s+')
 
 
+def _normalize_french(text):
+    """Normalize French text for better XTTS pronunciation.
+    XTTS struggles with accented chars and apostrophes — expand contractions
+    and strip diacritics so the model reads phonetically correct French.
+    """
+    # Expand common French contractions (l', d', n', s', j', c', qu')
+    text = re.sub(r"\bl'", "le ", text)
+    text = re.sub(r"\bL'", "Le ", text)
+    text = re.sub(r"\bd'", "de ", text)
+    text = re.sub(r"\bD'", "De ", text)
+    text = re.sub(r"\bn'", "ne ", text)
+    text = re.sub(r"\bN'", "Ne ", text)
+    text = re.sub(r"\bs'", "se ", text)
+    text = re.sub(r"\bS'", "Se ", text)
+    text = re.sub(r"\bj'", "je ", text)
+    text = re.sub(r"\bJ'", "Je ", text)
+    text = re.sub(r"\bc'", "ce ", text)
+    text = re.sub(r"\bC'", "Ce ", text)
+    text = re.sub(r"\bqu'", "que ", text)
+    text = re.sub(r"\bQu'", "Que ", text)
+    text = re.sub(r"\bm'", "me ", text)
+    text = re.sub(r"\bM'", "Me ", text)
+    text = re.sub(r"\bt'", "te ", text)
+    text = re.sub(r"\bT'", "Te ", text)
+    # Remove remaining apostrophes
+    text = text.replace("'", " ").replace("\u2019", " ")
+    # Strip diacritics: é→e, è→e, ê→e, à→a, ù→u, etc.
+    import unicodedata
+    nfkd = unicodedata.normalize('NFKD', text)
+    text = ''.join(c for c in nfkd if not unicodedata.combining(c))
+    return text
+
+
 def load_model():
     global _tts_model
     if _tts_model is not None:
@@ -63,6 +96,10 @@ def handler(event):
 
     if not text:
         return {"error": "No text provided"}
+
+    # Normalize French text for better pronunciation
+    if language == "fr":
+        text = _normalize_french(text)
 
     if speaker_wav_b64:
         wav_path = str(VOICES_DIR / (speaker_id + ".wav"))
