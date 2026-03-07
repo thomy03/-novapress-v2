@@ -25,15 +25,11 @@ _SENTENCE_RE = re.compile(r'(?<=[.!?])\s+')
 
 
 def _normalize_french(text):
-    """Normalize French text for better XTTS pronunciation.
-    Just remove apostrophes (join words) and strip diacritics.
+    """Normalize French text for XTTS pronunciation.
+    Keep all accents (essential for French), only remove apostrophes.
     """
     # Remove apostrophes by joining: c'est→cest, l'escalade→lescalade
     text = text.replace("'", "").replace("\u2019", "")
-    # Strip diacritics: é→e, è→e, ê→e, à→a, ù→u, etc.
-    import unicodedata
-    nfkd = unicodedata.normalize('NFKD', text)
-    text = ''.join(c for c in nfkd if not unicodedata.combining(c))
     return text
 
 
