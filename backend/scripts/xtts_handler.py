@@ -1,9 +1,11 @@
 """XTTS v2 RunPod Serverless Handler.
 Deployed as a RunPod serverless endpoint for voice cloning TTS.
+Splits long text into sentences to avoid XTTS chunk-boundary artifacts.
 """
 import base64
 import io
 import os
+import re
 import tempfile
 import urllib.request
 from pathlib import Path
@@ -17,6 +19,9 @@ _tts_model = None
 _speaker_cache = {}
 VOICES_DIR = Path("/tmp/xtts_voices")
 VOICES_DIR.mkdir(exist_ok=True)
+
+# Split on sentence-ending punctuation, keeping the punctuation attached
+_SENTENCE_RE = re.compile(r'(?<=[.!?])\s+')
 
 
 def load_model():
@@ -37,6 +42,14 @@ def download_speaker_wav(speaker_id, url):
     urllib.request.urlretrieve(url, local_path)
     _speaker_cache[speaker_id] = local_path
     return local_path
+
+
+def _split_sentences(text):
+    """Split text into sentences. Short texts (<200 chars) stay as-is."""
+    if len(text) < 200:
+        return [text]
+    parts = _SENTENCE_RE.split(text)
+    return [p.strip() for p in parts if p.strip()]
 
 
 def handler(event):
@@ -64,28 +77,27 @@ def handler(event):
         return {"error": "No speaker reference audio"}
 
     tts = load_model()
+    from pydub import AudioSegment
 
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-        tmp_path = tmp.name
+    sentences = _split_sentences(text)
+    combined = AudioSegment.empty()
 
-    tts.tts_to_file(
-        text=text, file_path=tmp_path,
-        speaker_wav=wav_path, language=language, speed=speed,
-    )
+    for sentence in sentences:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            tmp_path = tmp.name
+        tts.tts_to_file(
+            text=sentence, file_path=tmp_path,
+            speaker_wav=wav_path, language=language, speed=speed,
+        )
+        seg = AudioSegment.from_wav(tmp_path)
+        os.unlink(tmp_path)
+        combined += seg
 
-    try:
-        from pydub import AudioSegment
-        audio = AudioSegment.from_wav(tmp_path)
-        mp3_buf = io.BytesIO()
-        audio.export(mp3_buf, format="mp3", bitrate="128k")
-        mp3_data = mp3_buf.getvalue()
-        duration_ms = len(audio)
-    except Exception:
-        with open(tmp_path, "rb") as f:
-            mp3_data = f.read()
-        duration_ms = 0
+    mp3_buf = io.BytesIO()
+    combined.export(mp3_buf, format="mp3", bitrate="128k")
+    mp3_data = mp3_buf.getvalue()
+    duration_ms = len(combined)
 
-    os.unlink(tmp_path)
     return {
         "audio_b64": base64.b64encode(mp3_data).decode("ascii"),
         "duration_ms": duration_ms,
