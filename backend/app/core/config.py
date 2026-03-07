@@ -196,6 +196,43 @@ class Settings(BaseSettings):
     VAPID_PUBLIC_KEY: str = ""    # Set in .env + NEXT_PUBLIC_VAPID_PUBLIC_KEY in frontend .env.local
     VAPID_EMAIL: str = ""         # Contact email, e.g. mailto:admin@novapress.ai
 
+    # ElevenLabs TTS (Premium voices for talkshow)
+    ELEVENLABS_API_KEY: str = ""  # https://elevenlabs.io/
+    ELEVENLABS_MODEL: str = "eleven_multilingual_v2"
+    ELEVENLABS_VOICE_PRESENTATEUR: str = ""  # Voice ID for Valerie Moreau
+    ELEVENLABS_VOICE_EXPERT: str = ""  # Voice ID for Philippe Renard
+    ELEVENLABS_VOICE_JOURNALISTE: str = ""  # Voice ID for Claire Dubois
+    ELEVENLABS_VOICE_CONTRADICTEUR: str = ""  # Voice ID for Marc Lefevre
+
+    # OpenAI TTS (good quality, very cheap)
+    OPENAI_TTS_API_KEY: str = ""  # https://platform.openai.com/api-keys
+    OPENAI_TTS_MODEL: str = "tts-1-hd"  # tts-1 (fast/$15/1M) or tts-1-hd (quality/$30/1M)
+    OPENAI_TTS_VOICE_PRESENTATEUR: str = "nova"  # Female, warm
+    OPENAI_TTS_VOICE_EXPERT: str = "onyx"  # Male, deep
+
+    # Google Cloud TTS (Journey/Studio voices, 1M chars/month free)
+    GOOGLE_TTS_API_KEY: str = ""  # https://console.cloud.google.com/apis/credentials
+    GOOGLE_TTS_VOICE_PRESENTATEUR: str = "fr-FR-Neural2-A"  # Female
+    GOOGLE_TTS_VOICE_EXPERT: str = "fr-FR-Neural2-D"  # Male
+
+    # Azure AI Speech (SSML support, newscast styles)
+    AZURE_SPEECH_KEY: str = ""  # https://portal.azure.com > Speech resource
+    AZURE_SPEECH_REGION: str = "westeurope"
+    AZURE_SPEECH_VOICE_PRESENTATEUR: str = "fr-FR-VivienneMultilingualNeural"
+    AZURE_SPEECH_VOICE_EXPERT: str = "fr-FR-RemyMultilingualNeural"
+    AZURE_SPEECH_VOICE_JOURNALISTE: str = "fr-FR-DeniseNeural"
+    AZURE_SPEECH_VOICE_CONTRADICTEUR: str = "fr-FR-HenriNeural"
+
+    # XTTS v2 via RunPod Serverless (voice cloning)
+    RUNPOD_API_KEY: str = ""  # https://www.runpod.io/console/user/settings (API Keys)
+    RUNPOD_XTTS_ENDPOINT_ID: str = ""  # Serverless endpoint ID after deploying handler
+    RUNPOD_XTTS_TIMEOUT: int = 120  # Timeout in seconds (first call may be slower due to cold start)
+    XTTS_VOICE_PRESENTATEUR_URL: str = ""  # URL to female voice sample WAV (10-30s)
+    XTTS_VOICE_EXPERT_URL: str = ""  # URL to male voice sample WAV (10-30s)
+
+    # TTS Provider selection: "xtts", "elevenlabs", "openai", "azure", "edge" (or empty = auto)
+    TTS_PROVIDER: str = ""
+
     # Stripe Billing
     STRIPE_SECRET_KEY: str = ""  # sk_test_... or sk_live_...
     STRIPE_WEBHOOK_SECRET: str = ""  # whsec_...

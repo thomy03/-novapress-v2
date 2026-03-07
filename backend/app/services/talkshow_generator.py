@@ -1,11 +1,12 @@
 """
 NovaPress Talkshow Generator
-Generates multi-panelist debate audio from topic syntheses + causal data.
+Generates interview-format audio from topic syntheses + causal data.
 
+Format: 1 presentatrice + 1 expert, episodes de 12-15 minutes.
+The presenter also plays devil's advocate (contradictions, tough questions).
+Uses Azure AI Speech (SSML) or Edge TTS (fallback) for audio generation.
 Uses Gemini Flash 3.1 Preview via OpenRouter for script generation.
-Uses Edge TTS (fr-FR native voices) for audio generation.
 """
-import asyncio
 import hashlib
 import json
 import os
@@ -18,47 +19,19 @@ from loguru import logger
 
 TALKSHOW_CACHE_DIR = Path("audio_cache/talkshows")
 
-# 5 panelists with distinct French voices and roles
+# 2 participants: 1 presentatrice (also plays devil's advocate) + 1 expert
 PANELISTS = {
-    "moderateur": {
+    "presentateur": {
         "name": "Valerie Moreau",
-        "role": "Moderatrice",
-        "voice": "fr-FR-DeniseNeural",
-        "style": "Pose les questions, relance, synthetise. Ton professionnel, neutre.",
-        "rate": "-3%",
-        "pitch": "+0Hz",
+        "role": "Presentatrice & contradictrice",
+        "voice": "presentateur",
+        "style": "Presente, relance, contredit, joue l'avocat du diable. Pose les questions difficiles.",
     },
     "expert": {
         "name": "Philippe Renard",
-        "role": "Expert geopolitique",
-        "voice": "fr-FR-HenriNeural",
-        "style": "Analyse en profondeur, cite des precedents historiques. Ton grave, pose.",
-        "rate": "-5%",
-        "pitch": "-2Hz",
-    },
-    "journaliste": {
-        "name": "Claire Dubois",
-        "role": "Grand reporter",
-        "voice": "fr-FR-EloiseNeural",
-        "style": "Temoignages terrain, vecu, anecdotes. Ton vif, engage.",
-        "rate": "+0%",
-        "pitch": "+0Hz",
-    },
-    "contradicteur": {
-        "name": "Marc Lefevre",
-        "role": "Editorialiste",
-        "voice": "fr-FR-AlainNeural",
-        "style": "Contradicteur, joue l'avocat du diable, questionne les evidences. Ton incisif.",
-        "rate": "+0%",
-        "pitch": "-1Hz",
-    },
-    "prospectiviste": {
-        "name": "Sofia Benali",
-        "role": "Prospectiviste",
-        "voice": "fr-FR-CoralieNeural",
-        "style": "Projections futures, scenarios, consequences a long terme. Ton reflechi.",
-        "rate": "-2%",
-        "pitch": "+1Hz",
+        "role": "Expert & analyste",
+        "voice": "expert",
+        "style": "Analyse en profondeur, precedents historiques, scenarios futurs. Ton grave, pose.",
     },
 }
 
@@ -79,10 +52,11 @@ class TalkshowGenerator:
         causal_graph: Optional[Dict[str, Any]] = None,
         predictions: Optional[List[Dict[str, Any]]] = None,
         narrative: Optional[str] = None,
-        duration_target: int = 300,
+        duration_target: int = 780,
     ) -> Optional[Dict[str, Any]]:
         """
         Generate a complete talkshow with script + audio.
+        Default duration: 780s (13 minutes).
 
         Returns:
             {
@@ -110,7 +84,7 @@ class TalkshowGenerator:
                 pass
 
         try:
-            # 1. Generate debate script via Gemini Flash
+            # 1. Generate debate script via LLM
             script = await self._generate_script(
                 topic, syntheses, causal_graph, predictions, narrative, duration_target
             )
@@ -153,7 +127,7 @@ class TalkshowGenerator:
         causal_graph: Optional[Dict[str, Any]] = None,
         predictions: Optional[List[Dict[str, Any]]] = None,
         narrative: Optional[str] = None,
-        duration_target: int = 300,
+        duration_target: int = 780,
     ) -> Optional[Dict[str, Any]]:
         """Generate only the script (no audio). Faster, cheaper."""
         if not syntheses:
@@ -213,7 +187,7 @@ class TalkshowGenerator:
 
         enrichment: Dict[str, str] = {}
 
-        # Perplexity — web context + latest developments
+        # Perplexity -- web context + latest developments
         if settings.PERPLEXITY_API_KEY:
             try:
                 from openai import AsyncOpenAI
@@ -249,7 +223,7 @@ class TalkshowGenerator:
             except Exception as e:
                 logger.debug(f"Talkshow Perplexity enrichment failed: {e}")
 
-        # Grok — social sentiment + breaking angles
+        # Grok -- social sentiment + breaking angles
         if settings.XAI_API_KEY:
             try:
                 from openai import AsyncOpenAI
@@ -287,6 +261,12 @@ class TalkshowGenerator:
 
         return enrichment
 
+    def _is_elevenlabs_active(self) -> bool:
+        """Check if ElevenLabs is the active TTS provider."""
+        from app.services.tts_service import get_tts_service, ElevenLabsTTSService
+        tts = get_tts_service()
+        return isinstance(tts, ElevenLabsTTSService)
+
     async def _generate_script(
         self,
         topic: str,
@@ -296,11 +276,12 @@ class TalkshowGenerator:
         narrative: Optional[str],
         duration_target: int,
     ) -> Optional[List[Dict[str, str]]]:
-        """Generate debate script via Gemini Flash 3.1 Lite with full intelligence."""
+        """Generate debate script via LLM with full intelligence context."""
         from openai import AsyncOpenAI
         from app.core.config import settings
 
-        n_exchanges = max(10, duration_target // 15)
+        # ~40-50 exchanges for 12-15 min (each line ~15-20 seconds spoken)
+        n_exchanges = max(15, duration_target // 18)
 
         # Enrich with real-time search (Perplexity + Grok)
         search_enrichment = await self._enrich_with_search(topic)
@@ -312,11 +293,11 @@ class TalkshowGenerator:
         for i, s in enumerate(syntheses[:6], 1):
             title = s.get("title", "")
             summary = s.get("summary", s.get("introduction", ""))
-            body = s.get("body", "")[:500]
+            body = s.get("body", "")[:1500]
             date = s.get("date", s.get("created_at", ""))
             sources = s.get("num_sources", 0)
             context_parts.append(
-                f"=== SYNTHESE {i} ({date}) — {sources} sources ===\n"
+                f"=== SYNTHESE {i} ({date}) -- {sources} sources ===\n"
                 f"Titre: {title}\n"
                 f"Resume: {summary}\n"
                 f"{body}\n"
@@ -329,7 +310,7 @@ class TalkshowGenerator:
                 cause = e.get("cause_text", e.get("source", ""))
                 effect = e.get("effect_text", e.get("target", ""))
                 rel = e.get("relation_type", e.get("type", "causes"))
-                edges_text.append(f"  - {cause} → ({rel}) → {effect}")
+                edges_text.append(f"  - {cause} -> ({rel}) -> {effect}")
             context_parts.append(
                 "=== RELATIONS CAUSALES ===\n" + "\n".join(edges_text)
             )
@@ -369,45 +350,75 @@ class TalkshowGenerator:
 
         # Panelist descriptions
         panelist_desc = "\n".join(
-            f"- {pid}: {p['name']} ({p['role']}) — {p['style']}"
+            f"- {pid}: {p['name']} ({p['role']}) -- {p['style']}"
             for pid, p in PANELISTS.items()
         )
 
-        system_prompt = f"""Tu es un scriptwriter d'elite pour une emission de debat televisee francaise de reference (style C dans l'air / 28 Minutes / LCI).
+        # Audio tags instructions (only for ElevenLabs)
+        audio_tags_block = ""
+        if self._is_elevenlabs_active():
+            audio_tags_block = """
 
-PANELISTES DISPONIBLES:
+INSTRUCTIONS AUDIO (marqueurs naturels):
+- Tu peux inserer des marqueurs pour rendre le debat vivant et naturel:
+  [soupir] — avant une contradiction ou un constat amer
+  [rire] ou [rire leger] — reaction a une ironie ou anecdote
+  [pause] — effet dramatique, moment de reflexion
+  [murmure] — apartes, confidences
+  [hm] — hesitation naturelle
+- Le contradicteur peut commencer par [soupir] avant de contredire
+- La presentatrice peut dire [pause] pour un effet dramatique
+- La journaliste peut [rire leger] en racontant une anecdote
+- PARCIMONIE: 4-6 marqueurs maximum par episode. Pas plus."""
+
+        system_prompt = f"""Tu es un scriptwriter d'elite pour une interview d'actualite francaise de reference (style Thinkerview / HardTalk / C dans l'air).
+
+FORMAT: Interview en tete-a-tete entre une presentatrice et un expert.
+
+PARTICIPANTS:
 {panelist_desc}
 
 REGLES DU SCRIPT:
-1. Commence par la moderatrice qui presente le sujet et les panelistes (1 replique)
-2. Chaque intervenant a un POINT DE VUE DISTINCT — pas de consensus mou
-3. Le contradicteur DOIT challenger au moins 2 arguments des autres
-4. La prospectiviste DOIT aborder les scenarios futurs et consequences
-5. L'expert DOIT citer des faits precis issus des syntheses
-6. La journaliste DOIT apporter du concret, du terrain, du vecu
-7. La moderatrice relance, reformule, et fait la transition entre les themes
-8. Termine par un tour de table final (chacun 1 phrase de conclusion)
-9. Environ {n_exchanges} repliques au total
-10. Chaque replique fait 2-4 phrases. JAMAIS de repliques d'une seule phrase.
-11. Les repliques doivent etre SUBSTANTIELLES — analyses, arguments, pas des platitudes
-12. UTILISE les relations causales et predictions pour enrichir le debat
-13. Le debat doit ECLAIRER le sujet, pas juste le decrire
-14. INTEGRE le contexte web temps reel et le sentiment des reseaux sociaux quand disponible
-15. La journaliste peut CITER les reactions sur les reseaux sociaux
-16. Le contradicteur peut OPPOSER le sentiment public aux analyses des experts
+1. La presentatrice ouvre en presentant le sujet et l'expert (1 replique d'introduction)
+2. L'interview alterne entre presentatrice et expert — c'est un DIALOGUE, pas un monologue
+3. La presentatrice DOIT jouer l'avocat du diable: contredire, challenger, poser les questions qui derangent
+4. La presentatrice DOIT reformuler les points cles pour l'auditeur ("Si je comprends bien...")
+5. L'expert DOIT citer des faits precis, des precedents historiques, des chiffres
+6. L'expert DOIT proposer des scenarios futurs avec probabilites et consequences
+7. La presentatrice DOIT citer les reactions du public ou des reseaux sociaux pour contrebalancer
+8. Environ {n_exchanges} repliques au total (alternance rapide presentatrice/expert)
+9. Chaque replique fait 2-4 phrases. Rythme dynamique, pas de longs monologues.
+10. Les repliques doivent etre SUBSTANTIELLES — analyses, arguments, pas des platitudes
+11. UTILISE les relations causales et predictions pour enrichir l'echange
+12. INTEGRE le contexte web temps reel et le sentiment des reseaux sociaux
+13. Au moins 3 moments ou la presentatrice CONTREDIT ou CHALLENGE l'expert
+14. L'expert doit parfois conceder un point ou nuancer sa position
+15. Terminer par une question ouverte de la presentatrice + reponse finale de l'expert
+
+EXIGENCES EDITORIALES (CRITIQUES):
+- L'expert DOIT RAISONNER au-dela des faits: expliquer le POURQUOI, les mecanismes sous-jacents
+- La presentatrice DOIT poser les questions que le public se pose vraiment
+- Au moins 2 scenarios d'avenir doivent etre discutes avec des visions divergentes
+- Les auditeurs viennent pour MIEUX COMPRENDRE et ANTICIPER — pas pour un resume des faits
+- Privilegier les enchainements logiques: "si X alors Y, mais attention a Z"
+- L'interview doit avoir une PROGRESSION: faits -> analyse -> mecanismes -> consequences -> futurs possibles
+- La presentatrice doit parfois bousculer l'expert: "Mais n'est-ce pas naif de penser que...?"
+- L'expert peut repondre avec assurance mais aussi avec humilite quand il ne sait pas{audio_tags_block}
 
 RETOURNE UNIQUEMENT un JSON array valide.
-Format: [{{"speaker": "moderateur", "text": "..."}}, {{"speaker": "expert", "text": "..."}}, ...]
-Les speakers valides sont: moderateur, expert, journaliste, contradicteur, prospectiviste"""
+Format: [{{"speaker": "presentateur", "text": "..."}}, {{"speaker": "expert", "text": "..."}}, ...]
+Les speakers valides sont UNIQUEMENT: presentateur, expert"""
 
-        user_prompt = f"""Genere un debat televise de haute qualite sur le sujet: "{topic}"
+        user_prompt = f"""Genere une interview d'actualite de haute qualite sur le sujet: "{topic}"
 
 Voici toute l'intelligence disponible sur ce dossier:
 
 {full_context}
 
-Le debat doit durer environ {duration_target // 60} minutes ({n_exchanges} repliques).
-Fais en sorte que chaque intervenant apporte une perspective UNIQUE et SUBSTANTIELLE."""
+L'interview doit durer environ {duration_target // 60} minutes ({n_exchanges} repliques).
+La presentatrice pose les questions, contredit, joue l'avocat du diable.
+L'expert analyse, argumente, propose des scenarios.
+L'interview doit etre DYNAMIQUE, avec des desaccords, des relances incisives, et du rythme."""
 
         try:
             client = AsyncOpenAI(
@@ -422,8 +433,8 @@ Fais en sorte que chaque intervenant apporte une perspective UNIQUE et SUBSTANTI
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
-                temperature=0.8,
-                max_tokens=4000,
+                temperature=0.85,
+                max_tokens=8000,
             )
 
             raw = response.choices[0].message.content or ""
@@ -435,14 +446,43 @@ Fais en sorte que chaque intervenant apporte une perspective UNIQUE et SUBSTANTI
 
     @staticmethod
     def _parse_script(response: str) -> Optional[List[Dict[str, str]]]:
-        """Parse LLM JSON response into script lines."""
+        """Parse LLM JSON response into script lines with robust fallbacks."""
         try:
             text = response.strip()
             if text.startswith("```"):
                 text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
 
-            parsed = json.loads(text)
-            if not isinstance(parsed, list):
+            # Try direct parse first
+            parsed = None
+            try:
+                parsed = json.loads(text)
+            except json.JSONDecodeError:
+                # Try to fix common LLM JSON issues:
+                # 1. Find the JSON array boundaries
+                start = text.find("[")
+                end = text.rfind("]")
+                if start >= 0 and end > start:
+                    json_text = text[start:end + 1]
+                    # 2. Fix unescaped quotes inside strings
+                    import re
+                    # Try parsing the extracted array
+                    try:
+                        parsed = json.loads(json_text)
+                    except json.JSONDecodeError:
+                        # 3. Try fixing trailing commas
+                        cleaned = re.sub(r',\s*]', ']', json_text)
+                        cleaned = re.sub(r',\s*}', '}', cleaned)
+                        try:
+                            parsed = json.loads(cleaned)
+                        except json.JSONDecodeError:
+                            # 4. Extract line by line with regex
+                            pattern = r'\{\s*"speaker"\s*:\s*"([^"]+)"\s*,\s*"text"\s*:\s*"((?:[^"\\]|\\.)*)"\s*\}'
+                            matches = re.findall(pattern, json_text, re.DOTALL)
+                            if matches:
+                                parsed = [{"speaker": m[0], "text": m[1].replace('\\"', '"').replace('\\n', ' ')} for m in matches]
+                                logger.info(f"Talkshow script recovered via regex: {len(parsed)} lines")
+
+            if not parsed or not isinstance(parsed, list):
                 return None
 
             valid_speakers = set(PANELISTS.keys())
@@ -451,13 +491,16 @@ Fais en sorte que chaque intervenant apporte une perspective UNIQUE et SUBSTANTI
                 if not isinstance(item, dict):
                     continue
                 speaker = item.get("speaker", "").strip()
+                # Accept "moderateur" as alias for "presentateur"
+                if speaker == "moderateur":
+                    speaker = "presentateur"
                 if speaker not in valid_speakers:
                     continue
                 text_line = str(item.get("text", "")).strip()
                 if text_line and len(text_line) > 5:
                     result.append({"speaker": speaker, "text": text_line})
 
-            if len(result) < 5:
+            if len(result) < 8:
                 logger.warning(f"Talkshow script too short: {len(result)} lines")
                 return None
 
@@ -475,59 +518,79 @@ Fais en sorte que chaque intervenant apporte une perspective UNIQUE et SUBSTANTI
 
         tts = get_tts_service()
         if not tts.is_available():
-            logger.info("TTS not available — talkshow will be text-only")
+            logger.info("TTS not available -- talkshow will be text-only")
             return None
 
-        tasks = []
+        # Generate each line sequentially to respect ElevenLabs rate limits
+        segments = []
         for line in script:
             panelist = PANELISTS.get(line["speaker"])
             if not panelist:
                 continue
-            tasks.append(
-                tts.generate_audio(
+            try:
+                audio = await tts.generate_audio(
                     line["text"],
                     voice=panelist["voice"],
                     rate=panelist.get("rate", "+0%"),
                     pitch=panelist.get("pitch", "+0Hz"),
                 )
-            )
-
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        segments = []
-        for r in results:
-            if isinstance(r, bytes) and r:
-                segments.append(r)
-            elif isinstance(r, Exception):
-                logger.debug(f"TTS segment failed: {r}")
+                if audio:
+                    segments.append({
+                        "audio": audio,
+                        "speaker": line["speaker"],
+                    })
+            except Exception as e:
+                logger.debug(f"TTS segment failed: {e}")
 
         if not segments:
             return None
 
-        # Concatenate
+        # Concatenate with dynamic pauses
         return await self._concat_segments(segments, cache_key)
 
     @staticmethod
     async def _concat_segments(
-        segments: List[bytes], cache_key: str
+        segments: List[Dict[str, Any]], cache_key: str
     ) -> Optional[bytes]:
-        """Concatenate MP3 segments into a single audio file."""
+        """Concatenate MP3 segments with context-aware pauses and cross-talk overlap."""
         try:
             from pydub import AudioSegment  # type: ignore
 
             combined = AudioSegment.empty()
-            pause = AudioSegment.silent(duration=600)  # 600ms between speakers
 
-            for seg_bytes in segments:
+            for i, seg in enumerate(segments):
+                seg_bytes = seg["audio"]
+                speaker = seg["speaker"]
+
                 with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
                     f.write(seg_bytes)
                     tmp = f.name
                 try:
                     audio = AudioSegment.from_mp3(tmp)
-                    combined += audio + pause
                 finally:
                     os.unlink(tmp)
 
-            # Export as MP3 (required by Spotify/Apple Podcasts)
+                # Dynamic pause/overlap before next segment
+                if i < len(segments) - 1:
+                    next_speaker = segments[i + 1]["speaker"]
+                    pause_ms = _compute_pause(speaker, next_speaker)
+
+                    if pause_ms < 0:
+                        # Cross-talk: overlap the end of current with start of next
+                        overlap_ms = abs(pause_ms)
+                        # Don't overlap more than 30% of the segment
+                        overlap_ms = min(overlap_ms, len(audio) // 3)
+                        combined += audio
+                        # Move playhead back by overlap_ms to create overlap effect
+                        combined = combined[:len(combined) - overlap_ms]
+                        # The next segment will start overlapping here
+                    else:
+                        combined += audio
+                        combined += AudioSegment.silent(duration=pause_ms)
+                else:
+                    combined += audio
+
+            # Export as MP3
             output_path = TALKSHOW_CACHE_DIR / f"{cache_key}.mp3"
             with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
                 tmp_mp3 = f.name
@@ -536,7 +599,7 @@ Fais en sorte que chaque intervenant apporte une perspective UNIQUE et SUBSTANTI
                     tmp_mp3, format="mp3",
                     bitrate="128k",
                     tags={
-                        "title": f"NovaPress Talkshow",
+                        "title": "NovaPress Talkshow",
                         "artist": "NovaPress AI",
                         "album": "NovaPress Talkshow",
                         "genre": "Podcast",
@@ -555,8 +618,8 @@ Fais en sorte que chaque intervenant apporte une perspective UNIQUE et SUBSTANTI
 
         except ImportError:
             # Naive fallback: concatenate raw MP3
-            logger.warning("pydub not installed — naive MP3 concat")
-            mp3_bytes = b"".join(segments)
+            logger.warning("pydub not installed -- naive MP3 concat")
+            mp3_bytes = b"".join(s["audio"] for s in segments)
             output_path = TALKSHOW_CACHE_DIR / f"{cache_key}.mp3"
             output_path.write_bytes(mp3_bytes)
             return mp3_bytes
@@ -571,6 +634,26 @@ Fais en sorte que chaque intervenant apporte une perspective UNIQUE et SUBSTANTI
         )
         content = f"talkshow:{topic}:{ids}:{duration}"
         return hashlib.md5(content.encode()).hexdigest()
+
+
+def _compute_pause(current_speaker: str, next_speaker: str) -> int:
+    """Compute dynamic pause duration (ms) based on speaker transitions.
+    Negative values = cross-talk overlap (voices overlap for realism).
+    """
+    # Same speaker continues (rare)
+    if current_speaker == next_speaker:
+        return 250
+
+    # Expert finishes -> presenter jumps in with follow-up (slight overlap)
+    if current_speaker == "expert" and next_speaker == "presentateur":
+        return -150
+
+    # Presenter asks question -> expert takes a beat to respond
+    if current_speaker == "presentateur" and next_speaker == "expert":
+        return 500
+
+    # Default
+    return 350
 
 
 # Global instance

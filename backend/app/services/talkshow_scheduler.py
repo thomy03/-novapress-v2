@@ -184,7 +184,7 @@ async def _generate_episode(
             syntheses=dashboard.get("syntheses", []),
             causal_graph=dashboard.get("aggregated_causal_graph"),
             predictions=dashboard.get("predictions_summary", []),
-            duration_target=300,
+            duration_target=780,
         )
 
         if not result:

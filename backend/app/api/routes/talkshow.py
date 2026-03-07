@@ -37,7 +37,7 @@ async def _get_topic_data(topic_name: str):
 async def get_talkshow_script(
     request: Request,
     topic_name: str,
-    duration: int = Query(300, ge=120, le=600),
+    duration: int = Query(780, ge=120, le=1200),
 ):
     """
     Generate a debate script for a topic (text only, fast).
@@ -75,7 +75,7 @@ async def get_talkshow_script(
 async def get_talkshow_full(
     request: Request,
     topic_name: str,
-    duration: int = Query(300, ge=120, le=600),
+    duration: int = Query(780, ge=120, le=1200),
 ):
     """
     Generate a full talkshow with script + audio.
