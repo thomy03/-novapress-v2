@@ -578,7 +578,7 @@ class XttsTTSService:
                     "speaker_id": speaker_id,
                     "speaker_wav_url": speaker_wav_url,
                     "language": "fr",
-                    "speed": 0.95,
+                    "speed": 1.1,
                 }
             }
 
