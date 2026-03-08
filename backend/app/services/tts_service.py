@@ -511,7 +511,180 @@ class ElevenLabsTTSService:
 
 
 # ---------------------------------------------------------------------------
-# XTTS v2 via RunPod Serverless (voice cloning, broadcast quality)
+# Chatterbox Multilingual via RunPod Serverless (voice cloning + emotion)
+# ---------------------------------------------------------------------------
+class ChatterboxTTSService:
+    """Chatterbox Multilingual TTS via RunPod Serverless endpoint.
+    Zero-shot voice cloning, 23 languages, emotion control.
+
+    Requires:
+      - RUNPOD_API_KEY: RunPod API key
+      - RUNPOD_CHATTERBOX_ENDPOINT_ID: Serverless endpoint ID
+      - Voice reference files in backend/voices/ (5s WAV/MP3 per speaker)
+    """
+
+    VOICE_MAP = {}
+
+    def __init__(self):
+        from app.core.config import settings
+        self.api_key = settings.RUNPOD_API_KEY
+        self.endpoint_id = settings.RUNPOD_CHATTERBOX_ENDPOINT_ID
+        self.timeout = getattr(settings, "RUNPOD_CHATTERBOX_TIMEOUT", 120)
+        # Map panelist roles to voice reference file paths
+        voices_dir = Path(__file__).parent.parent.parent / "voices"
+        self.VOICE_MAP = {
+            "presentateur": voices_dir / "presentateur.wav",
+            "expert": voices_dir / "expert.wav",
+            "journaliste": voices_dir / "journaliste.wav",
+            "contradicteur": voices_dir / "contradicteur.wav",
+            # Legacy Edge TTS voice name mappings
+            "fr-FR-DeniseNeural": voices_dir / "presentateur.wav",
+            "fr-FR-HenriNeural": voices_dir / "expert.wav",
+            "fr-FR-EloiseNeural": voices_dir / "journaliste.wav",
+            "fr-FR-AlainNeural": voices_dir / "contradicteur.wav",
+        }
+        # Emotion presets per panelist role
+        self.EMOTION_MAP = {
+            "presentateur": {"exaggeration": 0.5, "cfg_weight": 0.5},
+            "expert": {"exaggeration": 0.3, "cfg_weight": 0.6},
+            "journaliste": {"exaggeration": 0.6, "cfg_weight": 0.4},
+            "contradicteur": {"exaggeration": 0.7, "cfg_weight": 0.4},
+        }
+        # Voice pool slots for dynamic experts
+        self.VOICE_MAP["host"] = voices_dir / "presentateur.wav"
+        self.VOICE_MAP["voice_m1"] = voices_dir / "expert.wav"
+        self.VOICE_MAP["voice_f1"] = voices_dir / "journaliste.wav"
+        self.VOICE_MAP["voice_m2"] = voices_dir / "contradicteur.wav"
+        # Add persona voice mappings (fallback to presentateur/expert based on gender)
+        self._load_persona_voices(voices_dir)
+        CACHE_DIR.mkdir(exist_ok=True)
+        logger.info(f"Chatterbox RunPod TTS initialized (endpoint={self.endpoint_id})")
+
+    def _load_persona_voices(self, voices_dir: Path) -> None:
+        """Map all personas to voice reference files."""
+        try:
+            from app.ml.persona import PERSONAS
+            for persona in PERSONAS.values():
+                if persona.id not in self.VOICE_MAP:
+                    # Check for persona-specific voice file
+                    persona_voice = voices_dir / f"{persona.id}.wav"
+                    if persona_voice.exists():
+                        self.VOICE_MAP[persona.id] = persona_voice
+                    else:
+                        # Fallback by gender
+                        fallback = "presentateur" if persona.voice_gender == "female" else "expert"
+                        self.VOICE_MAP[persona.id] = self.VOICE_MAP.get(fallback, voices_dir / f"{fallback}.wav")
+                    # Emotion preset by debate style
+                    if persona.id not in self.EMOTION_MAP:
+                        style_emotion = {
+                            "provocateur": {"exaggeration": 0.7, "cfg_weight": 0.4},
+                            "narratif": {"exaggeration": 0.5, "cfg_weight": 0.5},
+                            "analytique": {"exaggeration": 0.3, "cfg_weight": 0.6},
+                            "pedagogique": {"exaggeration": 0.4, "cfg_weight": 0.5},
+                            "balanced": {"exaggeration": 0.5, "cfg_weight": 0.5},
+                        }
+                        self.EMOTION_MAP[persona.id] = style_emotion.get(
+                            persona.debate_style, {"exaggeration": 0.5, "cfg_weight": 0.5}
+                        )
+        except Exception as e:
+            logger.debug(f"Could not load persona voices for Chatterbox: {e}")
+
+    def is_available(self) -> bool:
+        return bool(self.api_key and self.endpoint_id)
+
+    def _get_voice_b64(self, voice: str) -> Optional[str]:
+        """Load voice reference file and return as base64."""
+        import base64 as b64mod
+        voice_path = self.VOICE_MAP.get(voice)
+        if voice_path and Path(voice_path).exists():
+            return b64mod.b64encode(Path(voice_path).read_bytes()).decode("ascii")
+        # Try presentateur as fallback
+        fallback = self.VOICE_MAP.get("presentateur")
+        if fallback and Path(fallback).exists():
+            return b64mod.b64encode(Path(fallback).read_bytes()).decode("ascii")
+        return None
+
+    async def generate_audio(self, text: str, voice: str = "presentateur",
+                             rate: str = "+0%", pitch: str = "+0Hz") -> Optional[bytes]:
+        if not text or len(text.strip()) < 10:
+            return None
+        text = _strip_audio_tags(text)
+        h = _hash(text, voice, "chatterbox")
+        cached = _get_cache(h)
+        if cached:
+            return cached
+
+        try:
+            import aiohttp
+            import base64 as b64mod
+
+            audio_ref_b64 = self._get_voice_b64(voice)
+            emotion = self.EMOTION_MAP.get(voice, self.EMOTION_MAP["presentateur"])
+
+            url = f"https://api.runpod.ai/v2/{self.endpoint_id}/runsync"
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            }
+            payload = {
+                "input": {
+                    "text": text,
+                    "language": "fr",
+                    "format": "mp3",
+                    "exaggeration": emotion["exaggeration"],
+                    "cfg_weight": emotion["cfg_weight"],
+                }
+            }
+            if audio_ref_b64:
+                payload["input"]["audio_ref_base64"] = audio_ref_b64
+
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=payload, headers=headers,
+                                       timeout=aiohttp.ClientTimeout(total=self.timeout)) as resp:
+                    if resp.status != 200:
+                        body = await resp.text()
+                        logger.error(f"Chatterbox RunPod HTTP {resp.status}: {body[:300]}")
+                        return None
+                    result = await resp.json()
+
+            output = result.get("output", {})
+            if isinstance(output, dict) and "error" in output:
+                logger.error(f"Chatterbox RunPod error: {output['error']}")
+                return None
+
+            audio_b64 = output.get("audio_base64", "")
+            if not audio_b64:
+                logger.error("Chatterbox RunPod: empty audio response")
+                return None
+
+            data = b64mod.b64decode(audio_b64)
+            _set_cache(h, data)
+            duration = output.get("duration_seconds", 0)
+            logger.info(f"Chatterbox: {len(text)} chars -> {len(data)//1024}KB "
+                        f"({duration}s, voice={voice})")
+            return data
+
+        except ImportError:
+            logger.error("aiohttp not installed — required for Chatterbox RunPod")
+            return None
+        except Exception as e:
+            logger.error(f"Chatterbox RunPod failed: {e}")
+            return None
+
+    async def generate_synthesis_audio(self, synthesis: Dict[str, Any],
+                                       voice_gender: str = "female", language: str = "fr-FR") -> Optional[bytes]:
+        script = _build_synthesis_script(synthesis)
+        if not script:
+            return None
+        voice = "presentateur" if voice_gender == "female" else "expert"
+        return await self.generate_audio(text=script, voice=voice)
+
+    def get_audio_url(self, synthesis_id: str) -> str:
+        return f"/api/syntheses/by-id/{synthesis_id}/audio"
+
+
+# ---------------------------------------------------------------------------
+# XTTS v2 via RunPod Serverless (legacy — voice cloning)
 # ---------------------------------------------------------------------------
 class XttsTTSService:
     """XTTS v2 voice cloning via RunPod Serverless endpoint.
@@ -538,8 +711,32 @@ class XttsTTSService:
             "journaliste": settings.XTTS_VOICE_PRESENTATEUR_URL,
             "contradicteur": settings.XTTS_VOICE_EXPERT_URL,
         }
+        # Voice pool slots for dynamic experts
+        self.VOICE_MAP["host"] = settings.XTTS_VOICE_PRESENTATEUR_URL
+        self.VOICE_MAP["voice_m1"] = settings.XTTS_VOICE_EXPERT_URL
+        self.VOICE_MAP["voice_f1"] = settings.XTTS_VOICE_PRESENTATEUR_URL
+        self.VOICE_MAP["voice_m2"] = settings.XTTS_VOICE_EXPERT_URL
+        # Dynamic persona voice URLs from settings
+        self._load_persona_voices(settings)
         CACHE_DIR.mkdir(exist_ok=True)
         logger.info(f"XTTS RunPod TTS initialized (endpoint={self.endpoint_id})")
+
+    def _load_persona_voices(self, settings) -> None:
+        """Load persona voice reference URLs from settings or persona config."""
+        try:
+            from app.ml.persona import PERSONAS
+            for persona in PERSONAS.values():
+                if persona.id not in self.VOICE_MAP and persona.voice_ref_file:
+                    # Check if there's a settings-based URL override
+                    env_key = f"XTTS_VOICE_{persona.id.upper()}_URL"
+                    url = getattr(settings, env_key, "")
+                    if url:
+                        self.VOICE_MAP[persona.id] = url
+                    else:
+                        # Use presentateur URL as fallback for all personas
+                        self.VOICE_MAP[persona.id] = settings.XTTS_VOICE_PRESENTATEUR_URL
+        except Exception as e:
+            logger.debug(f"Could not load persona voices: {e}")
 
     def is_available(self) -> bool:
         return bool(self.api_key and self.endpoint_id)
@@ -666,9 +863,12 @@ def get_tts_service():
     from app.core.config import settings
     provider = settings.TTS_PROVIDER.lower().strip()
 
-    if provider == "xtts" and settings.RUNPOD_API_KEY and settings.RUNPOD_XTTS_ENDPOINT_ID:
+    if provider == "chatterbox" and settings.RUNPOD_API_KEY and settings.RUNPOD_CHATTERBOX_ENDPOINT_ID:
+        _tts_service = ChatterboxTTSService()
+        logger.info("Using Chatterbox Multilingual via RunPod")
+    elif provider == "xtts" and settings.RUNPOD_API_KEY and settings.RUNPOD_XTTS_ENDPOINT_ID:
         _tts_service = XttsTTSService()
-        logger.info("Using XTTS v2 via RunPod")
+        logger.info("Using XTTS v2 via RunPod (legacy)")
     elif provider == "google" and settings.GOOGLE_TTS_API_KEY:
         _tts_service = GoogleTTSService()
         logger.info("Using Google Cloud TTS")
@@ -686,9 +886,12 @@ def get_tts_service():
         logger.info("Using Edge TTS")
     elif not provider:
         # Auto-detect: first configured wins
-        if settings.RUNPOD_API_KEY and settings.RUNPOD_XTTS_ENDPOINT_ID:
+        if settings.RUNPOD_API_KEY and getattr(settings, 'RUNPOD_CHATTERBOX_ENDPOINT_ID', ''):
+            _tts_service = ChatterboxTTSService()
+            logger.info("Auto-selected: Chatterbox Multilingual via RunPod")
+        elif settings.RUNPOD_API_KEY and settings.RUNPOD_XTTS_ENDPOINT_ID:
             _tts_service = XttsTTSService()
-            logger.info("Auto-selected: XTTS v2 via RunPod")
+            logger.info("Auto-selected: XTTS v2 via RunPod (legacy)")
         elif settings.GOOGLE_TTS_API_KEY:
             _tts_service = GoogleTTSService()
             logger.info("Auto-selected: Google Cloud TTS")
