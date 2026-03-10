@@ -675,13 +675,16 @@ Rends-le VIVANT, avec des clashes, des relances, et du rythme."""
                 voice = expert.voice_slot if expert else HOST_VOICE_SLOT
 
             try:
-                audio = await tts.generate_audio(line["text"], voice=voice)
+                line_speed = float(line.get("speed", 1.05))
+                audio = await tts.generate_audio(
+                    line["text"], voice=voice, speed=line_speed,
+                )
                 if audio:
                     segments.append({
                         "audio": audio,
                         "speaker": speaker,
                         "emotion": line.get("emotion", "neutral"),
-                        "speed": line.get("speed", 1.0),
+                        "speed": line_speed,
                         "interrupt": line.get("interrupt", False),
                         "volume_boost": 0,
                     })

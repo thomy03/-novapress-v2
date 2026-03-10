@@ -757,7 +757,8 @@ class XttsTTSService:
         return self.VOICE_MAP.get(voice)
 
     async def generate_audio(self, text: str, voice: str = "presentateur",
-                             rate: str = "+0%", pitch: str = "+0Hz") -> Optional[bytes]:
+                             rate: str = "+0%", pitch: str = "+0Hz",
+                             speed: float = 1.1) -> Optional[bytes]:
         if not text or len(text.strip()) < 10:
             return None
         text = _strip_audio_tags(text)
@@ -773,6 +774,9 @@ class XttsTTSService:
         if cached:
             return cached
 
+        # Clamp speed to safe range
+        speed = max(0.85, min(1.3, speed))
+
         try:
             import aiohttp
             import base64 as b64mod
@@ -787,7 +791,7 @@ class XttsTTSService:
                     "text": text,
                     "speaker_id": speaker_id,
                     "language": "fr",
-                    "speed": 1.1,
+                    "speed": speed,
                 }
             }
 
