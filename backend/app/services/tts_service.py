@@ -555,6 +555,12 @@ class ChatterboxTTSService:
         self.VOICE_MAP["voice_m1"] = voices_dir / "expert.wav"
         self.VOICE_MAP["voice_f1"] = voices_dir / "journaliste.wav"
         self.VOICE_MAP["voice_m2"] = voices_dir / "contradicteur.wav"
+        # Extended pool from LibriVox candidates
+        for slot_id in ("voice_m3", "voice_m4", "voice_m5", "voice_m6", "voice_m7",
+                         "voice_f2", "voice_f3", "voice_f4", "voice_f5", "voice_f6"):
+            path = voices_dir / "pool" / f"{slot_id}.wav"
+            if path.exists():
+                self.VOICE_MAP[slot_id] = path
         # Add persona voice mappings (fallback to presentateur/expert based on gender)
         self._load_persona_voices(voices_dir)
         CACHE_DIR.mkdir(exist_ok=True)
@@ -689,33 +695,38 @@ class ChatterboxTTSService:
 class XttsTTSService:
     """XTTS v2 voice cloning via RunPod Serverless endpoint.
 
+    Supports both URL-based and local file-based voice references.
+    Local files are sent as base64 via speaker_wav_b64.
+
     Requires:
       - RUNPOD_API_KEY: RunPod API key
       - RUNPOD_XTTS_ENDPOINT_ID: Serverless endpoint ID
-      - XTTS_VOICE_*: URLs to speaker reference WAV files (hosted anywhere)
+      - XTTS_VOICE_*: URLs to speaker reference WAV files (or local paths)
     """
 
-    VOICE_MAP = {}
+    VOICE_MAP = {}  # str -> URL or Path
 
     def __init__(self):
         from app.core.config import settings
         self.api_key = settings.RUNPOD_API_KEY
         self.endpoint_id = settings.RUNPOD_XTTS_ENDPOINT_ID
         self.timeout = settings.RUNPOD_XTTS_TIMEOUT
+        voices_dir = Path(__file__).parent.parent.parent / "voices"
         self.VOICE_MAP = {
-            "presentateur": settings.XTTS_VOICE_PRESENTATEUR_URL,
-            "expert": settings.XTTS_VOICE_EXPERT_URL,
+            # Host / presentateur
+            "host": voices_dir / "host.mp3",
+            "presentateur": voices_dir / "host.mp3",
+            "neutral": voices_dir / "host.mp3",
             # Legacy Edge TTS voice name mappings
-            "fr-FR-DeniseNeural": settings.XTTS_VOICE_PRESENTATEUR_URL,
-            "fr-FR-HenriNeural": settings.XTTS_VOICE_EXPERT_URL,
-            "journaliste": settings.XTTS_VOICE_PRESENTATEUR_URL,
-            "contradicteur": settings.XTTS_VOICE_EXPERT_URL,
+            "fr-FR-DeniseNeural": voices_dir / "host.mp3",
+            "fr-FR-HenriNeural": voices_dir / "voice_m1.mp3",
         }
         # Voice pool slots for dynamic experts
-        self.VOICE_MAP["host"] = settings.XTTS_VOICE_PRESENTATEUR_URL
-        self.VOICE_MAP["voice_m1"] = settings.XTTS_VOICE_EXPERT_URL
-        self.VOICE_MAP["voice_f1"] = settings.XTTS_VOICE_PRESENTATEUR_URL
-        self.VOICE_MAP["voice_m2"] = settings.XTTS_VOICE_EXPERT_URL
+        for slot_id in ("voice_m1", "voice_m2", "voice_m3", "voice_m4", "voice_m5",
+                         "voice_f1", "voice_f2", "voice_f3", "voice_f4"):
+            path = voices_dir / f"{slot_id}.mp3"
+            if path.exists():
+                self.VOICE_MAP[slot_id] = path
         # Dynamic persona voice URLs from settings
         self._load_persona_voices(settings)
         CACHE_DIR.mkdir(exist_ok=True)
@@ -741,21 +752,22 @@ class XttsTTSService:
     def is_available(self) -> bool:
         return bool(self.api_key and self.endpoint_id)
 
-    def _resolve_voice_url(self, voice: str) -> str:
-        return self.VOICE_MAP.get(voice, "")
+    def _resolve_voice(self, voice: str):
+        """Resolve voice to URL string or local Path."""
+        return self.VOICE_MAP.get(voice)
 
     async def generate_audio(self, text: str, voice: str = "presentateur",
                              rate: str = "+0%", pitch: str = "+0Hz") -> Optional[bytes]:
         if not text or len(text.strip()) < 10:
             return None
         text = _strip_audio_tags(text)
-        speaker_wav_url = self._resolve_voice_url(voice)
-        if not speaker_wav_url:
-            logger.warning(f"XTTS: No voice URL configured for '{voice}'")
+        voice_ref = self._resolve_voice(voice)
+        if not voice_ref:
+            logger.warning(f"XTTS: No voice configured for '{voice}'")
             return None
 
         # Speaker ID for RunPod-side caching
-        speaker_id = voice if voice in ("presentateur", "expert") else "presentateur"
+        speaker_id = voice
         h = _hash(text, speaker_id, "xtts")
         cached = _get_cache(h)
         if cached:
@@ -763,6 +775,7 @@ class XttsTTSService:
 
         try:
             import aiohttp
+            import base64 as b64mod
 
             url = f"https://api.runpod.ai/v2/{self.endpoint_id}/runsync"
             headers = {
@@ -773,13 +786,26 @@ class XttsTTSService:
                 "input": {
                     "text": text,
                     "speaker_id": speaker_id,
-                    "speaker_wav_url": speaker_wav_url,
                     "language": "fr",
                     "speed": 1.1,
                 }
             }
 
+            # Local file -> send as base64, URL string -> send as URL
+            if isinstance(voice_ref, Path) or (isinstance(voice_ref, str) and not voice_ref.startswith("http")):
+                voice_path = Path(voice_ref)
+                if voice_path.exists():
+                    payload["input"]["speaker_wav_b64"] = b64mod.b64encode(
+                        voice_path.read_bytes()
+                    ).decode("ascii")
+                else:
+                    logger.warning(f"XTTS: Voice file not found: {voice_path}")
+                    return None
+            else:
+                payload["input"]["speaker_wav_url"] = str(voice_ref)
+
             async with aiohttp.ClientSession() as session:
+                # Try runsync first (fast path, <90s jobs)
                 async with session.post(url, json=payload, headers=headers,
                                        timeout=aiohttp.ClientTimeout(total=self.timeout)) as resp:
                     if resp.status != 200:
@@ -787,6 +813,17 @@ class XttsTTSService:
                         logger.error(f"XTTS RunPod HTTP {resp.status}: {body[:300]}")
                         return None
                     result = await resp.json()
+
+                # Check if runsync completed or timed out (returns IN_QUEUE/IN_PROGRESS)
+                status = result.get("status", "")
+                if status in ("IN_QUEUE", "IN_PROGRESS"):
+                    # runsync timed out — poll for result
+                    job_id = result.get("id", "")
+                    if job_id:
+                        logger.info(f"XTTS: runsync timeout, polling job {job_id}...")
+                        result = await self._poll_job(session, job_id, headers)
+                        if not result:
+                            return None
 
             # RunPod returns: {"output": {"audio_b64": "...", "duration_ms": ..., ...}}
             output = result.get("output", {})
@@ -796,7 +833,7 @@ class XttsTTSService:
 
             audio_b64 = output.get("audio_b64", "")
             if not audio_b64:
-                logger.error("XTTS RunPod: empty audio response")
+                logger.error(f"XTTS RunPod: empty audio response (status={result.get('status', '?')})")
                 return None
 
             import base64
@@ -813,6 +850,34 @@ class XttsTTSService:
         except Exception as e:
             logger.error(f"XTTS RunPod failed: {e}")
             return None
+
+    async def _poll_job(self, session, job_id: str, headers: dict,
+                        max_wait: int = 180, interval: int = 5) -> Optional[dict]:
+        """Poll a RunPod async job until completion."""
+        import asyncio as _asyncio
+        import aiohttp
+        status_url = f"https://api.runpod.ai/v2/{self.endpoint_id}/status/{job_id}"
+        elapsed = 0
+        while elapsed < max_wait:
+            await _asyncio.sleep(interval)
+            elapsed += interval
+            try:
+                async with session.get(status_url, headers=headers,
+                                       timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                    if resp.status != 200:
+                        continue
+                    result = await resp.json()
+                    status = result.get("status", "")
+                    if status == "COMPLETED":
+                        logger.info(f"XTTS: job {job_id} completed after {elapsed}s")
+                        return result
+                    elif status == "FAILED":
+                        logger.error(f"XTTS: job {job_id} failed: {result.get('error', '?')[:200]}")
+                        return None
+            except Exception:
+                continue
+        logger.error(f"XTTS: job {job_id} timed out after {max_wait}s")
+        return None
 
     async def generate_synthesis_audio(self, synthesis: Dict[str, Any],
                                        voice_gender: str = "female", language: str = "fr-FR") -> Optional[bytes]:

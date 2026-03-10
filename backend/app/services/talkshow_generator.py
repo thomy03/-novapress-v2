@@ -110,7 +110,8 @@ class TalkshowGenerator:
         director = DIRECTOR_MODES.get(mode, DIRECTOR_MODES["talkshow"])
         use_dynamic = dynamic_experts and not panelists
 
-        cache_key = self._cache_key(topic, syntheses, duration_target) + f"_{mode}"
+        dyn_tag = "_dyn" if use_dynamic else "_leg"
+        cache_key = self._cache_key(topic, syntheses, duration_target) + f"_{mode}{dyn_tag}"
 
         # Check cache
         script_cache = TALKSHOW_CACHE_DIR / f"{cache_key}_script.json"
@@ -233,7 +234,8 @@ class TalkshowGenerator:
         director = DIRECTOR_MODES.get(mode, DIRECTOR_MODES["talkshow"])
         use_dynamic = dynamic_experts and not panelists
 
-        cache_key = self._cache_key(topic, syntheses, duration_target) + f"_{mode}"
+        dyn_tag = "_dyn" if use_dynamic else "_leg"
+        cache_key = self._cache_key(topic, syntheses, duration_target) + f"_{mode}{dyn_tag}"
         script_cache = TALKSHOW_CACHE_DIR / f"{cache_key}_script.json"
         if script_cache.exists():
             try:

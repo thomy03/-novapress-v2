@@ -21,11 +21,17 @@ class TalkshowExpert:
     voice_slot: str = ""  # Assigned after creation: "voice_m1", "voice_f1", etc.
 
 
-# Voice pool — extensible by adding entries
+# Voice pool — all available voice reference files
 VOICE_POOL = [
-    {"id": "voice_m1", "file": "expert.wav", "gender": "male"},
-    {"id": "voice_f1", "file": "journaliste.wav", "gender": "female"},
-    {"id": "voice_m2", "file": "contradicteur.wav", "gender": "male"},
+    {"id": "voice_m1", "file": "voice_m1.mp3", "gender": "male"},   # homme expressif
+    {"id": "voice_m2", "file": "voice_m2.mp3", "gender": "male"},   # homme 30aine
+    {"id": "voice_m3", "file": "voice_m3.mp3", "gender": "male"},   # homme voix 30 ans
+    {"id": "voice_m4", "file": "voice_m4.mp3", "gender": "male"},   # homme voix cassée 40 ans
+    {"id": "voice_m5", "file": "voice_m5.mp3", "gender": "male"},   # homme 40 ans actif
+    {"id": "voice_f1", "file": "voice_f1.mp3", "gender": "female"}, # femme active 20aine
+    {"id": "voice_f2", "file": "voice_f2.mp3", "gender": "female"}, # femme expressive
+    {"id": "voice_f3", "file": "voice_f3.mp3", "gender": "female"}, # femme 40aine
+    {"id": "voice_f4", "file": "voice_f4.mp3", "gender": "female"}, # femme 40aine (autre)
 ]
 
 # Host is always fixed
