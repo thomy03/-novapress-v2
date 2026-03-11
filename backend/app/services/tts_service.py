@@ -781,7 +781,6 @@ class XttsTTSService:
             import aiohttp
             import base64 as b64mod
 
-            url = f"https://api.runpod.ai/v2/{self.endpoint_id}/runsync"
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
@@ -809,25 +808,27 @@ class XttsTTSService:
                 payload["input"]["speaker_wav_url"] = str(voice_ref)
 
             async with aiohttp.ClientSession() as session:
-                # Try runsync first (fast path, <90s jobs)
-                async with session.post(url, json=payload, headers=headers,
-                                       timeout=aiohttp.ClientTimeout(total=self.timeout)) as resp:
+                # Use async /run endpoint + polling (avoids runsync 90s timeout)
+                run_url = f"https://api.runpod.ai/v2/{self.endpoint_id}/run"
+                async with session.post(run_url, json=payload, headers=headers,
+                                       timeout=aiohttp.ClientTimeout(total=30)) as resp:
                     if resp.status != 200:
                         body = await resp.text()
                         logger.error(f"XTTS RunPod HTTP {resp.status}: {body[:300]}")
                         return None
                     result = await resp.json()
 
-                # Check if runsync completed or timed out (returns IN_QUEUE/IN_PROGRESS)
+                job_id = result.get("id", "")
                 status = result.get("status", "")
-                if status in ("IN_QUEUE", "IN_PROGRESS"):
-                    # runsync timed out — poll for result
-                    job_id = result.get("id", "")
-                    if job_id:
-                        logger.info(f"XTTS: runsync timeout, polling job {job_id}...")
-                        result = await self._poll_job(session, job_id, headers)
-                        if not result:
-                            return None
+                if status == "COMPLETED":
+                    pass  # Unlikely but handle it
+                elif job_id:
+                    result = await self._poll_job(session, job_id, headers)
+                    if not result:
+                        return None
+                else:
+                    logger.error(f"XTTS RunPod: no job ID in response: {str(result)[:200]}")
+                    return None
 
             # RunPod returns: {"output": {"audio_b64": "...", "duration_ms": ..., ...}}
             output = result.get("output", {})
@@ -856,7 +857,7 @@ class XttsTTSService:
             return None
 
     async def _poll_job(self, session, job_id: str, headers: dict,
-                        max_wait: int = 180, interval: int = 5) -> Optional[dict]:
+                        max_wait: int = 300, interval: int = 3) -> Optional[dict]:
         """Poll a RunPod async job until completion."""
         import asyncio as _asyncio
         import aiohttp
