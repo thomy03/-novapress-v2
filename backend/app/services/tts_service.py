@@ -30,9 +30,19 @@ CACHE_DIR = Path("audio_cache")
 AUDIO_TAG_PATTERN = re.compile(r'\[(?:soupir|rire|rire leger|pause|murmure|hm|hesitation)\]')
 
 
-def _strip_audio_tags(text: str) -> str:
-    """Remove audio tag markers that would be read literally."""
-    return AUDIO_TAG_PATTERN.sub('', text).strip()
+def _preprocess_text(text: str) -> str:
+    """Remove audio tags and apply French text preprocessing for TTS."""
+    text = AUDIO_TAG_PATTERN.sub('', text).strip()
+    try:
+        from app.services.french_text_preprocessor import preprocess_french
+        text = preprocess_french(text)
+    except ImportError:
+        pass
+    return text
+
+
+# Keep old name as alias for backward compatibility
+_strip_audio_tags = _preprocess_text
 
 
 def _hash(text: str, voice: str, prefix: str = "") -> str:
@@ -690,6 +700,201 @@ class ChatterboxTTSService:
 
 
 # ---------------------------------------------------------------------------
+# Fish Speech via RunPod Serverless (high-quality open-source TTS)
+# ---------------------------------------------------------------------------
+class FishSpeechTTSService:
+    """Fish Speech S1-mini via RunPod Serverless endpoint.
+
+    Features:
+    - 48 native emotion tags (happy, serious, angry, etc.)
+    - Zero-shot voice cloning from reference audio
+    - Apache 2.0 licensed, 0.5B parameters
+
+    Requires:
+      - RUNPOD_API_KEY: RunPod API key
+      - RUNPOD_FISH_SPEECH_ENDPOINT_ID: Serverless endpoint ID
+      - Voice reference files in backend/voices/ (5-15s WAV/MP3 per speaker)
+    """
+
+    # Script emotion -> Fish Speech native tag
+    EMOTION_TAG_MAP = {
+        "neutral": "",
+        "assertive": "serious",
+        "angry": "angry",
+        "frustrated": "annoyed",
+        "amused": "happy",
+        "emphatic": "emphatic",
+        "ironic": "sarcastic",
+        "thoughtful": "contemplative",
+    }
+
+    VOICE_MAP = {}
+
+    def __init__(self):
+        from app.core.config import settings
+        self.api_key = settings.RUNPOD_API_KEY
+        self.endpoint_id = settings.RUNPOD_FISH_SPEECH_ENDPOINT_ID
+        self.timeout = settings.RUNPOD_FISH_SPEECH_TIMEOUT
+        voices_dir = Path(__file__).parent.parent.parent / "voices"
+        # Same voice map structure as XTTS
+        self.VOICE_MAP = {
+            "host": voices_dir / "host.mp3",
+            "presentateur": voices_dir / "host.mp3",
+            "neutral": voices_dir / "host.mp3",
+            "fr-FR-DeniseNeural": voices_dir / "host.mp3",
+            "fr-FR-HenriNeural": voices_dir / "voice_m1.mp3",
+        }
+        for slot_id in ("voice_m1", "voice_m2", "voice_m3", "voice_m4", "voice_m5",
+                         "voice_f1", "voice_f2", "voice_f3", "voice_f4"):
+            path = voices_dir / f"{slot_id}.mp3"
+            if path.exists():
+                self.VOICE_MAP[slot_id] = path
+        CACHE_DIR.mkdir(exist_ok=True)
+        logger.info(f"Fish Speech RunPod TTS initialized (endpoint={self.endpoint_id})")
+
+    def is_available(self) -> bool:
+        return bool(self.api_key and self.endpoint_id)
+
+    async def generate_audio(self, text: str, voice: str = "presentateur",
+                             rate: str = "+0%", pitch: str = "+0Hz",
+                             speed: float = 1.0, emotion: str = "neutral") -> Optional[bytes]:
+        if not text or len(text.strip()) < 10:
+            return None
+        text = _preprocess_text(text)
+        emotion_tag = self.EMOTION_TAG_MAP.get(emotion, "")
+        h = _hash(text, voice, f"fish:{emotion_tag}")
+        cached = _get_cache(h)
+        if cached:
+            return cached
+
+        try:
+            import aiohttp
+            import base64 as b64mod
+
+            # Load voice reference
+            voice_path = self.VOICE_MAP.get(voice)
+            payload_input = {
+                "text": text,
+                "speaker_id": voice,
+                "language": "fr",
+                "speed": max(0.85, min(1.3, speed)),
+                "emotion_tag": emotion_tag,
+            }
+
+            if voice_path and Path(voice_path).exists():
+                payload_input["speaker_wav_b64"] = b64mod.b64encode(
+                    Path(voice_path).read_bytes()
+                ).decode("ascii")
+
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            }
+            payload = {"input": payload_input}
+
+            async with aiohttp.ClientSession() as session:
+                # Use async /run + polling (same pattern as XTTS)
+                run_url = f"https://api.runpod.ai/v2/{self.endpoint_id}/run"
+                async with session.post(run_url, json=payload, headers=headers,
+                                       timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                    if resp.status != 200:
+                        body = await resp.text()
+                        logger.error(f"Fish Speech RunPod HTTP {resp.status}: {body[:300]}")
+                        return None
+                    result = await resp.json()
+
+                job_id = result.get("id", "")
+                status = result.get("status", "")
+                if status == "COMPLETED":
+                    pass
+                elif job_id:
+                    result = await self._poll_job(session, job_id, headers)
+                    if not result:
+                        return None
+                else:
+                    logger.error(f"Fish Speech: no job ID: {str(result)[:200]}")
+                    return None
+
+            output = result.get("output", {})
+            if isinstance(output, dict) and "error" in output:
+                logger.error(f"Fish Speech error: {output['error']}")
+                return None
+
+            audio_b64 = output.get("audio_b64", "")
+            if not audio_b64:
+                logger.error("Fish Speech: empty audio response")
+                return None
+
+            import base64
+            data = base64.b64decode(audio_b64)
+
+            # If handler returned WAV, convert to MP3 for caching
+            out_format = output.get("format", "mp3")
+            if out_format == "wav":
+                try:
+                    from pydub import AudioSegment as PydubSeg
+                    import io
+                    seg = PydubSeg.from_wav(io.BytesIO(data))
+                    mp3_buf = io.BytesIO()
+                    seg.export(mp3_buf, format="mp3", bitrate="192k")
+                    data = mp3_buf.getvalue()
+                except Exception:
+                    pass  # Keep WAV data as-is
+
+            _set_cache(h, data)
+            duration_ms = output.get("duration_ms", 0)
+            logger.info(f"Fish Speech: {len(text)} chars -> {len(data)//1024}KB "
+                        f"({duration_ms}ms, voice={voice}, emotion={emotion_tag or 'none'})")
+            return data
+
+        except ImportError:
+            logger.error("aiohttp not installed — required for Fish Speech RunPod")
+            return None
+        except Exception as e:
+            logger.error(f"Fish Speech RunPod failed: {e}")
+            return None
+
+    async def _poll_job(self, session, job_id: str, headers: dict,
+                        max_wait: int = 300, interval: int = 3) -> Optional[dict]:
+        """Poll a RunPod async job until completion."""
+        import asyncio as _asyncio
+        import aiohttp
+        status_url = f"https://api.runpod.ai/v2/{self.endpoint_id}/status/{job_id}"
+        elapsed = 0
+        while elapsed < max_wait:
+            await _asyncio.sleep(interval)
+            elapsed += interval
+            try:
+                async with session.get(status_url, headers=headers,
+                                       timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                    if resp.status != 200:
+                        continue
+                    result = await resp.json()
+                    status = result.get("status", "")
+                    if status == "COMPLETED":
+                        logger.info(f"Fish Speech: job {job_id} completed after {elapsed}s")
+                        return result
+                    elif status == "FAILED":
+                        logger.error(f"Fish Speech: job {job_id} failed: {result.get('error', '?')[:200]}")
+                        return None
+            except Exception:
+                continue
+        logger.error(f"Fish Speech: job {job_id} timed out after {max_wait}s")
+        return None
+
+    async def generate_synthesis_audio(self, synthesis: Dict[str, Any],
+                                       voice_gender: str = "female", language: str = "fr-FR") -> Optional[bytes]:
+        script = _build_synthesis_script(synthesis)
+        if not script:
+            return None
+        voice = "presentateur" if voice_gender == "female" else "voice_m1"
+        return await self.generate_audio(text=script, voice=voice)
+
+    def get_audio_url(self, synthesis_id: str) -> str:
+        return f"/api/syntheses/by-id/{synthesis_id}/audio"
+
+
+# ---------------------------------------------------------------------------
 # XTTS v2 via RunPod Serverless (legacy — voice cloning)
 # ---------------------------------------------------------------------------
 class XttsTTSService:
@@ -933,7 +1138,10 @@ def get_tts_service():
     from app.core.config import settings
     provider = settings.TTS_PROVIDER.lower().strip()
 
-    if provider == "chatterbox" and settings.RUNPOD_API_KEY and settings.RUNPOD_CHATTERBOX_ENDPOINT_ID:
+    if provider == "fish_speech" and settings.RUNPOD_API_KEY and settings.RUNPOD_FISH_SPEECH_ENDPOINT_ID:
+        _tts_service = FishSpeechTTSService()
+        logger.info("Using Fish Speech via RunPod")
+    elif provider == "chatterbox" and settings.RUNPOD_API_KEY and settings.RUNPOD_CHATTERBOX_ENDPOINT_ID:
         _tts_service = ChatterboxTTSService()
         logger.info("Using Chatterbox Multilingual via RunPod")
     elif provider == "xtts" and settings.RUNPOD_API_KEY and settings.RUNPOD_XTTS_ENDPOINT_ID:
@@ -956,7 +1164,10 @@ def get_tts_service():
         logger.info("Using Edge TTS")
     elif not provider:
         # Auto-detect: first configured wins
-        if settings.RUNPOD_API_KEY and getattr(settings, 'RUNPOD_CHATTERBOX_ENDPOINT_ID', ''):
+        if settings.RUNPOD_API_KEY and getattr(settings, 'RUNPOD_FISH_SPEECH_ENDPOINT_ID', ''):
+            _tts_service = FishSpeechTTSService()
+            logger.info("Auto-selected: Fish Speech via RunPod")
+        elif settings.RUNPOD_API_KEY and getattr(settings, 'RUNPOD_CHATTERBOX_ENDPOINT_ID', ''):
             _tts_service = ChatterboxTTSService()
             logger.info("Auto-selected: Chatterbox Multilingual via RunPod")
         elif settings.RUNPOD_API_KEY and settings.RUNPOD_XTTS_ENDPOINT_ID:

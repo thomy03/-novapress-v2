@@ -1078,12 +1078,6 @@ Speakers valides UNIQUEMENT: {speakers_str}"""
                 except Exception:
                     return None
 
-            PITCH_MAP = {
-                "angry": 1.5, "frustrated": 1.0, "emphatic": 0.8,
-                "assertive": 0.5, "amused": 0.5, "ironic": 0.3,
-                "neutral": 0.0, "thoughtful": -0.5,
-            }
-
             def _apply_speed(audio_seg, speed):
                 if abs(speed - 1.0) < 0.03:
                     return audio_seg
@@ -1110,15 +1104,12 @@ Speakers valides UNIQUEMENT: {speakers_str}"""
                         if os.path.exists(p):
                             os.unlink(p)
 
-            def _apply_pitch(audio_seg, semitones):
-                if abs(semitones) < 0.2:
+            def _peak_normalize(audio_seg, target_dbfs=-1.0):
+                """Normalize peak to target dBFS to eliminate volume jumps between segments."""
+                if audio_seg.dBFS == float('-inf'):
                     return audio_seg
-                ratio = 2.0 ** (semitones / 12.0)
-                new_frame_rate = int(audio_seg.frame_rate * ratio)
-                return audio_seg._spawn(
-                    audio_seg.raw_data,
-                    overrides={"frame_rate": new_frame_rate},
-                ).set_frame_rate(audio_seg.frame_rate)
+                change = target_dbfs - audio_seg.max_dBFS
+                return audio_seg.apply_gain(change)
 
             FILLER_DIR = Path("audio_cache/fillers")
 
@@ -1166,16 +1157,14 @@ Speakers valides UNIQUEMENT: {speakers_str}"""
                 if speed and speed != 1.0:
                     audio = _apply_speed(audio, speed)
 
-                # Pitch
-                pitch_shift = PITCH_MAP.get(emotion, 0.0)
-                if pitch_shift != 0.0:
-                    audio = _apply_pitch(audio, pitch_shift)
+                # Per-segment peak normalization (eliminates volume jumps)
+                audio = _peak_normalize(audio, target_dbfs=-1.0)
 
-                # Volume
+                # Emotion-based relative volume (subtle, on normalized base)
                 if emotion in ("angry", "emphatic", "frustrated"):
-                    audio = audio + 2
+                    audio = audio + 1.5
                 elif emotion == "thoughtful":
-                    audio = audio - 1
+                    audio = audio - 1.5
                 if vol_boost:
                     audio = audio + vol_boost
 
@@ -1228,13 +1217,17 @@ Speakers valides UNIQUEMENT: {speakers_str}"""
                 full_room = full_room[:len(combined)]
                 combined = combined.overlay(full_room)
 
-            # Export MP3
+            # LUFS loudness normalization (podcast standard: -16 LUFS)
+            combined = _normalize_lufs(combined, target_lufs=-16.0)
+
+            # Export MP3 at 192kbps / 44.1kHz
             output_path = TALKSHOW_CACHE_DIR / f"{cache_key}.mp3"
             with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
                 tmp_mp3 = f.name
             try:
                 combined.export(
-                    tmp_mp3, format="mp3", bitrate="128k",
+                    tmp_mp3, format="mp3", bitrate="192k",
+                    parameters=["-ar", "44100"],
                     tags={
                         "title": "NovaPress Talkshow",
                         "artist": "NovaPress AI",
@@ -1271,6 +1264,46 @@ Speakers valides UNIQUEMENT: {speakers_str}"""
         )
         content = f"talkshow:{topic}:{ids}:{duration}"
         return hashlib.md5(content.encode()).hexdigest()
+
+
+def _normalize_lufs(audio_seg, target_lufs: float = -16.0):
+    """Normalize audio to target LUFS (podcast standard: -16 LUFS).
+
+    Uses pyloudnorm if available, falls back to simple dBFS normalization.
+    """
+    try:
+        import numpy as np
+        import pyloudnorm as pyln
+
+        # Convert pydub AudioSegment to numpy array
+        samples = np.array(audio_seg.get_array_of_samples(), dtype=np.float64)
+        if audio_seg.channels == 2:
+            samples = samples.reshape((-1, 2))
+        else:
+            samples = samples.reshape((-1, 1))
+        samples = samples / (2 ** (audio_seg.sample_width * 8 - 1))
+
+        meter = pyln.Meter(audio_seg.frame_rate)
+        current_lufs = meter.integrated_loudness(samples)
+
+        if current_lufs == float('-inf'):
+            return audio_seg
+
+        gain_db = target_lufs - current_lufs
+        # Clamp to avoid extreme adjustments
+        gain_db = max(-20.0, min(20.0, gain_db))
+        return audio_seg.apply_gain(gain_db)
+
+    except ImportError:
+        # Fallback: simple dBFS normalization (approximate LUFS)
+        if audio_seg.dBFS == float('-inf'):
+            return audio_seg
+        # -16 LUFS ≈ -16 dBFS for speech (rough approximation)
+        gain_db = target_lufs - audio_seg.dBFS
+        gain_db = max(-20.0, min(20.0, gain_db))
+        return audio_seg.apply_gain(gain_db)
+    except Exception:
+        return audio_seg
 
 
 def _compute_pause_director(

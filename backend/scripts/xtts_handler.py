@@ -1,6 +1,6 @@
-"""XTTS v2 RunPod Serverless Handler.
-Deployed as a RunPod serverless endpoint for voice cloning TTS.
-Splits long text into sentences to avoid XTTS chunk-boundary artifacts.
+"""XTTS French-Optimized RunPod Serverless Handler.
+Uses nellaw/xtts-french-voice-cloning-optimized (fine-tuned for French).
+No diacritic stripping needed — this model handles French accents natively.
 """
 import base64
 import io
@@ -10,38 +10,47 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-import TTS.utils.manage as m
-m.ModelManager.ask_tos = lambda self, *a, **k: True
-
+import torch
 import runpod
+from pydub import AudioSegment
 
 _tts_model = None
+_tts_config = None
 _speaker_cache = {}
 VOICES_DIR = Path("/tmp/xtts_voices")
 VOICES_DIR.mkdir(exist_ok=True)
+MODEL_DIR = Path("/app/model")
 
 # Split on sentence-ending punctuation, keeping the punctuation attached
 _SENTENCE_RE = re.compile(r'(?<=[.!?])\s+')
 
 
-def _normalize_french(text):
-    """Normalize French text for XTTS pronunciation.
-    Keep all accents (essential for French), only remove apostrophes.
-    """
-    # Remove apostrophes by joining: c'est→cest, l'escalade→lescalade
-    text = text.replace("'", "").replace("\u2019", "")
-    return text
-
-
 def load_model():
-    global _tts_model
+    global _tts_model, _tts_config
     if _tts_model is not None:
-        return _tts_model
-    from TTS.api import TTS
-    _tts_model = TTS("tts_models/multilingual/multi-dataset/xtts_v2")
-    _tts_model.to("cuda")
-    print("XTTS v2 model loaded on GPU")
-    return _tts_model
+        return _tts_model, _tts_config
+
+    from TTS.tts.configs.xtts_config import XttsConfig
+    from TTS.tts.models.xtts import Xtts
+
+    config = XttsConfig()
+    config.load_json(str(MODEL_DIR / "config.json"))
+
+    model = Xtts.init_from_config(config)
+    model.load_checkpoint(
+        config,
+        checkpoint_dir=str(MODEL_DIR),
+        checkpoint_path=str(MODEL_DIR / "best_model.pth"),
+        vocab_path=str(MODEL_DIR / "vocab.json"),
+        eval=True,
+        use_deepspeed=False,
+    )
+    model.cuda()
+
+    _tts_model = model
+    _tts_config = config
+    print("XTTS French-optimized model loaded on GPU")
+    return model, config
 
 
 def download_speaker_wav(speaker_id, url):
@@ -73,14 +82,26 @@ def handler(event):
     if not text:
         return {"error": "No text provided"}
 
-    # Normalize French text for better pronunciation
-    if language == "fr":
-        text = _normalize_french(text)
+    # Preprocess French text (numbers, abbreviations, punctuation)
+    try:
+        from app.services.french_text_preprocessor import preprocess_french
+        text = preprocess_french(text)
+    except ImportError:
+        pass  # Preprocessor not available in this environment
 
     if speaker_wav_b64:
         wav_path = str(VOICES_DIR / (speaker_id + ".wav"))
-        with open(wav_path, "wb") as f:
-            f.write(base64.b64decode(speaker_wav_b64))
+        # Properly decode and convert to WAV 24kHz mono 16-bit
+        # (input may be MP3, M4A, or any format — pydub handles conversion)
+        raw_bytes = base64.b64decode(speaker_wav_b64)
+        try:
+            seg = AudioSegment.from_file(io.BytesIO(raw_bytes))
+            seg = seg.set_frame_rate(24000).set_channels(1).set_sample_width(2)
+            seg.export(wav_path, format="wav")
+        except Exception:
+            # Fallback: write raw bytes and hope for the best
+            with open(wav_path, "wb") as f:
+                f.write(raw_bytes)
         _speaker_cache[speaker_id] = wav_path
     elif speaker_wav_url:
         wav_path = download_speaker_wav(speaker_id, speaker_wav_url)
@@ -89,37 +110,61 @@ def handler(event):
     else:
         return {"error": "No speaker reference audio"}
 
-    tts = load_model()
-    from pydub import AudioSegment
+    model, config = load_model()
+    import scipy.io.wavfile as wavfile
+    import numpy as np
+
+    # Compute speaker conditioning from reference audio
+    # gpt_cond_len=12 captures more speaker characteristics (XTTS docs recommend 6-30)
+    gpt_cond_latent, speaker_embedding = model.get_conditioning_latents(
+        audio_path=[wav_path],
+        gpt_cond_len=12,
+    )
 
     sentences = _split_sentences(text)
     combined = AudioSegment.empty()
 
     for sentence in sentences:
+        outputs = model.inference(
+            text=sentence,
+            language=language,
+            gpt_cond_latent=gpt_cond_latent,
+            speaker_embedding=speaker_embedding,
+            temperature=0.75,
+            speed=speed,
+            enable_text_splitting=True,
+        )
+
+        # Write wav to temp file
+        wav_data = outputs["wav"]
+        if isinstance(wav_data, torch.Tensor):
+            wav_data = wav_data.cpu().numpy()
+        wav_data = (wav_data * 32767).astype(np.int16)
+
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
             tmp_path = tmp.name
-        tts.tts_to_file(
-            text=sentence, file_path=tmp_path,
-            speaker_wav=wav_path, language=language, speed=speed,
-        )
+        wavfile.write(tmp_path, 24000, wav_data)
+
         seg = AudioSegment.from_wav(tmp_path)
         os.unlink(tmp_path)
         combined += seg
 
-    mp3_buf = io.BytesIO()
-    combined.export(mp3_buf, format="mp3", bitrate="128k")
-    mp3_data = mp3_buf.getvalue()
+    # Export as WAV to avoid double compression (handler WAV -> client MP3)
+    wav_buf = io.BytesIO()
+    combined.export(wav_buf, format="wav")
+    wav_data = wav_buf.getvalue()
     duration_ms = len(combined)
 
     return {
-        "audio_b64": base64.b64encode(mp3_data).decode("ascii"),
+        "audio_b64": base64.b64encode(wav_data).decode("ascii"),
         "duration_ms": duration_ms,
         "speaker_id": speaker_id,
         "chars": len(text),
+        "format": "wav",
     }
 
 
-print("Loading XTTS v2 model...")
+print("Loading XTTS French-optimized model...")
 load_model()
 print("Ready!")
 runpod.serverless.start({"handler": handler})

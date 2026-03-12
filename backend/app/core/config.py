@@ -223,14 +223,22 @@ class Settings(BaseSettings):
     AZURE_SPEECH_VOICE_JOURNALISTE: str = "fr-FR-DeniseNeural"
     AZURE_SPEECH_VOICE_CONTRADICTEUR: str = "fr-FR-HenriNeural"
 
-    # XTTS v2 via RunPod Serverless (voice cloning)
+    # Chatterbox Multilingual via RunPod Serverless (voice cloning + emotion, MIT license)
     RUNPOD_API_KEY: str = ""  # https://www.runpod.io/console/user/settings (API Keys)
-    RUNPOD_XTTS_ENDPOINT_ID: str = ""  # Serverless endpoint ID after deploying handler
-    RUNPOD_XTTS_TIMEOUT: int = 120  # Timeout in seconds (first call may be slower due to cold start)
-    XTTS_VOICE_PRESENTATEUR_URL: str = ""  # URL to female voice sample WAV (10-30s)
-    XTTS_VOICE_EXPERT_URL: str = ""  # URL to male voice sample WAV (10-30s)
+    RUNPOD_CHATTERBOX_ENDPOINT_ID: str = ""  # Serverless endpoint ID for Chatterbox
+    RUNPOD_CHATTERBOX_TIMEOUT: int = 120  # Timeout in seconds
 
-    # TTS Provider selection: "xtts", "elevenlabs", "openai", "azure", "edge" (or empty = auto)
+    # XTTS v2 via RunPod Serverless (legacy)
+    RUNPOD_XTTS_ENDPOINT_ID: str = ""
+    RUNPOD_XTTS_TIMEOUT: int = 120
+    XTTS_VOICE_PRESENTATEUR_URL: str = ""
+    XTTS_VOICE_EXPERT_URL: str = ""
+
+    # Fish Speech via RunPod Serverless (high-quality open-source TTS)
+    RUNPOD_FISH_SPEECH_ENDPOINT_ID: str = ""
+    RUNPOD_FISH_SPEECH_TIMEOUT: int = 120
+
+    # TTS Provider selection: "fish_speech", "chatterbox", "xtts", "elevenlabs", "openai", "azure", "google", "edge" (or empty = auto)
     TTS_PROVIDER: str = ""
 
     # Stripe Billing

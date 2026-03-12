@@ -65,6 +65,9 @@ apscheduler>=3.10.0
 edge-tts>=6.1.0  # Microsoft Edge TTS for audio summaries (fallback)
 elevenlabs>=1.0  # ElevenLabs premium TTS (broadcast-quality voices)
 pydub>=0.25.1    # Audio concatenation for podcast generator (requires ffmpeg)
+num2words>=0.5.13  # French number-to-words for TTS preprocessing
+pyloudnorm>=0.1.1  # LUFS loudness normalization for podcast audio
+soundfile>=0.12.1  # Audio I/O for loudness measurement
 
 # Charts & Data Visualization
 matplotlib>=3.8.0  # PNG chart generation for Telegram bot

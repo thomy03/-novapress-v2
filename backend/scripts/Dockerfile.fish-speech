@@ -1,0 +1,32 @@
+FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.0-devel-ubuntu22.04
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+
+# Pin torch to avoid re-downloading during cold start
+RUN pip install --no-cache-dir \
+    torch==2.4.0 \
+    torchaudio==2.4.0 \
+    --index-url https://download.pytorch.org/whl/cu124
+
+# Install Fish Speech
+RUN pip install --no-cache-dir \
+    fish-speech>=1.5.0 \
+    runpod>=1.6.0 \
+    pydub>=0.25.1 \
+    soundfile>=0.12.1 \
+    num2words>=0.5.13
+
+# Download model weights at build time (avoids cold start download)
+RUN python -c "from fish_speech.inference import TTSInference; TTSInference(model_name='fishaudio/fish-speech-1.5', device='cpu')" || true
+
+# Copy handler and preprocessor
+COPY fish_speech_handler.py /app/handler.py
+COPY ../app/services/french_text_preprocessor.py /app/app/services/french_text_preprocessor.py
+
+# Ensure app module is importable
+RUN mkdir -p /app/app/services && touch /app/app/__init__.py /app/app/services/__init__.py
+
+CMD ["python", "/app/handler.py"]
