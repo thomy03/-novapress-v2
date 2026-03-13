@@ -1,32 +1,35 @@
-FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.0-devel-ubuntu22.04
+# Fish Speech OpenAudio S1-mini — RunPod Serverless
+# Model: fishaudio/openaudio-s1-mini (0.5B params, Apache 2.0)
+# Build: docker build -f Dockerfile.fish-speech -t epicurien03/fish-speech-runpod:v1 .
+FROM runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+# System deps
+RUN apt-get update && apt-get install -y ffmpeg portaudio19-dev libsox-dev git && \
+    rm -rf /var/lib/apt/lists/*
 
-# Pin torch to avoid re-downloading during cold start
-RUN pip install --no-cache-dir \
-    torch==2.4.0 \
-    torchaudio==2.4.0 \
-    --index-url https://download.pytorch.org/whl/cu124
+# Clone Fish Speech repo (needed for tools.api_server)
+RUN git clone --depth 1 https://github.com/fishaudio/fish-speech.git /app/fish-speech
 
-# Install Fish Speech
+# Install Fish Speech with CUDA support
+RUN cd /app/fish-speech && pip install --no-cache-dir -e ".[cu124]"
+
+# Install additional deps for handler
 RUN pip install --no-cache-dir \
-    fish-speech>=1.5.0 \
     runpod>=1.6.0 \
     pydub>=0.25.1 \
-    soundfile>=0.12.1 \
-    num2words>=0.5.13
+    num2words>=0.5.13 \
+    requests>=2.31.0 \
+    huggingface_hub[cli]>=0.20.0
 
-# Download model weights at build time (avoids cold start download)
-RUN python -c "from fish_speech.inference import TTSInference; TTSInference(model_name='fishaudio/fish-speech-1.5', device='cpu')" || true
+# Download model weights at build time (avoids cold start)
+RUN mkdir -p /app/checkpoints && \
+    huggingface-cli download fishaudio/openaudio-s1-mini \
+    --local-dir /app/checkpoints/openaudio-s1-mini
 
 # Copy handler and preprocessor
 COPY fish_speech_handler.py /app/handler.py
-COPY ../app/services/french_text_preprocessor.py /app/app/services/french_text_preprocessor.py
-
-# Ensure app module is importable
-RUN mkdir -p /app/app/services && touch /app/app/__init__.py /app/app/services/__init__.py
+COPY ../app/services/french_text_preprocessor.py /app/french_text_preprocessor.py
 
 CMD ["python", "/app/handler.py"]
