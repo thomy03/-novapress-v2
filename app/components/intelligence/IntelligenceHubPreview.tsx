@@ -57,9 +57,9 @@ export function IntelligenceHubPreview({ compact = false }: IntelligenceHubPrevi
         style={{
           backgroundColor: darkMode ? 'rgba(37, 99, 235, 0.05)' : 'rgba(37, 99, 235, 0.03)',
           border: `1px solid ${darkMode ? 'rgba(37, 99, 235, 0.2)' : 'rgba(37, 99, 235, 0.1)'}`,
-          borderRadius: '16px',
+          borderRadius: '12px',
           padding: compact ? '24px' : '32px',
-          marginBottom: '32px',
+          marginBottom: '48px',
         }}
       >
         <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
@@ -71,7 +71,7 @@ export function IntelligenceHubPreview({ compact = false }: IntelligenceHubPrevi
                 flex: '1 1 150px',
                 height: '80px',
                 backgroundColor: theme.border,
-                borderRadius: '8px',
+                borderRadius: '12px',
                 animation: 'pulse 1.5s ease-in-out infinite',
               }}
             />
@@ -113,9 +113,9 @@ export function IntelligenceHubPreview({ compact = false }: IntelligenceHubPrevi
       style={{
         backgroundColor: darkMode ? 'rgba(37, 99, 235, 0.05)' : 'rgba(37, 99, 235, 0.03)',
         border: `1px solid ${darkMode ? 'rgba(37, 99, 235, 0.2)' : 'rgba(37, 99, 235, 0.1)'}`,
-        borderRadius: '16px',
+        borderRadius: '12px',
         padding: compact ? '24px' : '32px',
-        marginBottom: '32px',
+        marginBottom: '48px',
         position: 'relative',
         overflow: 'hidden',
       }}
@@ -156,11 +156,11 @@ export function IntelligenceHubPreview({ compact = false }: IntelligenceHubPrevi
           >
             <span
               style={{
-                backgroundColor: '#2563EB',
+                backgroundColor: theme.brand.secondary,
                 color: '#fff',
                 padding: '4px 10px',
                 borderRadius: '4px',
-                fontSize: '10px',
+                fontSize: '11px',
                 fontWeight: 700,
                 textTransform: 'uppercase',
                 letterSpacing: '0.1em',
@@ -170,7 +170,7 @@ export function IntelligenceHubPreview({ compact = false }: IntelligenceHubPrevi
             </span>
             <span
               style={{
-                fontSize: '10px',
+                fontSize: '11px',
                 color: theme.textSecondary,
               }}
             >
@@ -183,7 +183,7 @@ export function IntelligenceHubPreview({ compact = false }: IntelligenceHubPrevi
               fontWeight: 700,
               color: theme.text,
               margin: 0,
-              fontFamily: 'Georgia, "Times New Roman", serif',
+              fontFamily: '"Fraunces", Georgia, "Times New Roman", serif',
             }}
           >
             Nexus Causal NovaPress
@@ -207,9 +207,9 @@ export function IntelligenceHubPreview({ compact = false }: IntelligenceHubPrevi
             display: 'inline-flex',
             alignItems: 'center',
             gap: '8px',
-            backgroundColor: '#2563EB',
+            backgroundColor: theme.brand.secondary,
             color: '#fff',
-            padding: '12px 20px',
+            padding: '12px 24px',
             borderRadius: '8px',
             fontSize: '14px',
             fontWeight: 600,
@@ -221,7 +221,7 @@ export function IntelligenceHubPreview({ compact = false }: IntelligenceHubPrevi
             e.currentTarget.style.transform = 'translateY(-2px)';
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = '#2563EB';
+            e.currentTarget.style.backgroundColor = theme.brand.secondary;
             e.currentTarget.style.transform = 'translateY(0)';
           }}
         >

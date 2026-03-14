@@ -105,7 +105,7 @@ export function BentoGridSection({
                   fontSize: '11px',
                   fontWeight: 700,
                   textTransform: 'uppercase',
-                  letterSpacing: '0.15em',
+                  letterSpacing: '0.1em',
                   color: theme.textSecondary,
                   margin: 0,
                   marginBottom: subtitle ? '8px' : 0,
@@ -120,7 +120,7 @@ export function BentoGridSection({
                   fontSize: '24px',
                   fontWeight: 600,
                   color: theme.text,
-                  fontFamily: 'Georgia, "Times New Roman", serif',
+                  fontFamily: '"Fraunces", Georgia, "Times New Roman", serif',
                   margin: 0,
                 }}
               >

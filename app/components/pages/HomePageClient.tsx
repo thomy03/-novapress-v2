@@ -23,8 +23,8 @@ function IntelligenceHubSkeleton() {
   return (
     <div style={{
       padding: '32px',
-      marginBottom: '40px',
-      borderRadius: '16px',
+      marginBottom: '48px',
+      borderRadius: '12px',
       background: 'rgba(37, 99, 235, 0.02)',
       border: '1px solid rgba(37, 99, 235, 0.1)',
     }}>
@@ -43,7 +43,7 @@ function IntelligenceHubSkeleton() {
 
 function FilsRougesSkeleton() {
   return (
-    <div style={{ marginBottom: '32px', padding: '20px 0', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+    <div style={{ marginBottom: '48px', padding: '20px 0', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
       {[1, 2, 3, 4, 5].map((i) => (
         <div key={i} style={{
           width: `${80 + i * 20}px`,
@@ -65,7 +65,7 @@ function NewsletterSection() {
       borderTop: `1px solid ${theme.border}`,
       borderBottom: `1px solid ${theme.border}`,
       padding: '48px 0',
-      marginTop: '64px',
+      marginTop: '48px',
       marginBottom: '48px',
       textAlign: 'center',
       backgroundColor: darkMode ? 'rgba(255,255,255,0.02)' : 'transparent',
@@ -74,7 +74,7 @@ function NewsletterSection() {
         fontSize: '11px',
         fontWeight: '700',
         textTransform: 'uppercase',
-        letterSpacing: '0.15em',
+        letterSpacing: '0.1em',
         color: theme.textSecondary,
         marginBottom: '16px'
       }}>
@@ -84,7 +84,7 @@ function NewsletterSection() {
         fontSize: '24px',
         fontWeight: '600',
         color: theme.text,
-        fontFamily: 'Georgia, "Times New Roman", serif',
+        fontFamily: '"Fraunces", Georgia, "Times New Roman", serif',
         marginBottom: '24px',
         maxWidth: '500px',
         margin: '0 auto 24px'
@@ -159,9 +159,9 @@ function BentoSynthesisCard({ synthesis, size }: BentoSynthesisCardProps) {
           display: 'inline-block',
           padding: '4px 10px',
           backgroundColor: darkMode ? 'rgba(37, 99, 235, 0.2)' : 'rgba(37, 99, 235, 0.1)',
-          color: '#2563EB',
+          color: theme.brand.secondary,
           borderRadius: '4px',
-          fontSize: '10px',
+          fontSize: '11px',
           fontWeight: 700,
           textTransform: 'uppercase',
           letterSpacing: '0.05em',
@@ -178,7 +178,7 @@ function BentoSynthesisCard({ synthesis, size }: BentoSynthesisCardProps) {
         color: isFeatured && synthesis.imageUrl ? '#fff' : theme.text,
         margin: 0,
         marginBottom: '8px',
-        fontFamily: 'Georgia, "Times New Roman", serif',
+        fontFamily: '"Fraunces", Georgia, "Times New Roman", serif',
         lineHeight: 1.3,
         display: '-webkit-box',
         WebkitLineClamp: isFeatured ? 3 : 2,

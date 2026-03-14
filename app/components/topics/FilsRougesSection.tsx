@@ -39,7 +39,7 @@ export default function FilsRougesSection() {
   if (loading) {
     return (
       <section style={{
-        marginBottom: '32px',
+        marginBottom: '48px',
         padding: '20px 0',
         borderBottom: `1px solid ${theme.border}`
       }}>
@@ -74,7 +74,7 @@ export default function FilsRougesSection() {
     return (
       <section
         style={{
-          marginBottom: '32px',
+          marginBottom: '48px',
           padding: '20px 0',
           borderBottom: `1px solid ${theme.border}`
         }}
@@ -114,7 +114,7 @@ export default function FilsRougesSection() {
   return (
     <section
       style={{
-        marginBottom: '32px',
+        marginBottom: '48px',
         padding: '20px 0',
         borderBottom: `1px solid ${theme.border}`
       }}
@@ -153,7 +153,7 @@ export default function FilsRougesSection() {
           href="/intelligence"
           style={{
             fontSize: '12px',
-            color: '#2563EB',
+            color: theme.brand.secondary,
             fontWeight: 600,
             textDecoration: 'none',
             whiteSpace: 'nowrap',
