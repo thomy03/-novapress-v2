@@ -66,7 +66,6 @@ class ClusteringEngine:
         sub_clusterer = HDBSCAN(
             min_cluster_size=max(2, len(cluster_embeddings) // 5),  # Dynamic min size
             min_samples=2,
-            cluster_selection_epsilon=0.03,  # Stricter for sub-clusters
             metric='euclidean',
             cluster_selection_method='eom'
         )
@@ -190,9 +189,8 @@ class ClusteringEngine:
         clusterer = HDBSCAN(
             min_cluster_size=min_cluster_size or self.min_cluster_size,
             min_samples=min_samples or self.min_samples,
-            cluster_selection_epsilon=self.cluster_selection_epsilon,
             metric='euclidean',
-            cluster_selection_method='eom',  # 'eom' is more stable across sklearn versions
+            cluster_selection_method='eom',
             store_centers='centroid'
         )
 
