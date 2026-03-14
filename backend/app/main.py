@@ -133,6 +133,7 @@ async def lifespan(app: FastAPI):
 
             scheduler = AsyncIOScheduler()
             _scheduler = scheduler
+            from datetime import datetime
             scheduler.add_job(
                 scheduled_pipeline_run,
                 trigger=IntervalTrigger(hours=settings.PIPELINE_SCHEDULE_HOURS),
@@ -140,6 +141,7 @@ async def lifespan(app: FastAPI):
                 name="NovaPress Pipeline Auto-Run",
                 misfire_grace_time=3600,
                 max_instances=1,
+                next_run_time=datetime.now(),
             )
             scheduler.start()
             logger.success(f"✅ APScheduler started — pipeline every {settings.PIPELINE_SCHEDULE_HOURS}h")
