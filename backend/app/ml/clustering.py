@@ -68,7 +68,7 @@ class ClusteringEngine:
             min_samples=2,
             cluster_selection_epsilon=0.03,  # Stricter for sub-clusters
             metric='euclidean',
-            cluster_selection_method='leaf'
+            cluster_selection_method='eom'
         )
 
         sub_labels = sub_clusterer.fit_predict(cluster_embeddings)
@@ -192,7 +192,7 @@ class ClusteringEngine:
             min_samples=min_samples or self.min_samples,
             cluster_selection_epsilon=self.cluster_selection_epsilon,
             metric='euclidean',
-            cluster_selection_method='leaf',  # 'leaf' creates smaller, tighter clusters
+            cluster_selection_method='eom',  # 'eom' is more stable across sklearn versions
             store_centers='centroid'
         )
 
