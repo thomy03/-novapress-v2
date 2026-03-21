@@ -21,11 +21,13 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { causalService } from '@/app/lib/api/services/causal';
+import { getNodeIcon, getNodeSize } from '@/app/lib/causal-icons';
 import type {
   CausalGraphResponse,
   CausalNode as ApiCausalNode,
   CausalEdge as ApiCausalEdge,
   RelationType,
+  Prediction,
 } from '@/app/types/causal';
 
 // ============================================================================
@@ -43,16 +45,6 @@ const TYPE_COLORS: Record<string, string> = {
   scenario: '#8B5CF6',
 };
 
-const TYPE_ICONS: Record<string, string> = {
-  event: '\u26A1',     // ⚡
-  entity: '\uD83D\uDC64', // 👤
-  decision: '\u2696\uFE0F', // ⚖️
-  outcome: '\u2713',  // ✓
-  keyword: '\u2713',
-  focus: '\uD83D\uDC64',
-  prediction: '\uD83D\uDD2E', // 🔮
-  scenario: '\u2753',  // ❓
-};
 
 const EDGE_COLORS: Record<string, string> = {
   causes: '#DC2626',
@@ -103,16 +95,38 @@ interface CausalSquareNodeData {
   label: string;
   nodeType: string;
   isCentral: boolean;
+  size: number;
+  probability?: number;
   [key: string]: unknown;
 }
 
 function CausalSquareNode({ data }: NodeProps) {
   const nodeData = data as unknown as CausalSquareNodeData;
-  const { label, nodeType, isCentral } = nodeData;
+  const { label, nodeType, isCentral, probability } = nodeData;
   const color = TYPE_COLORS[nodeType] || '#6B7280';
-  const icon = TYPE_ICONS[nodeType] || '\u26A1';
   const isPrediction = nodeType === 'prediction' || nodeType === 'scenario';
-  const size = isCentral ? 80 : isPrediction ? 72 : 64;
+  const size = nodeData.size || (isCentral ? 80 : isPrediction ? 72 : 64);
+  const icon = getNodeIcon(label, nodeType);
+  const iconSize = Math.round(size * 0.4);
+
+  // Probability-based styling for prediction nodes
+  let borderStyle = isPrediction ? 'dashed' : 'solid';
+  let borderWidth = 2;
+  let borderColor = color;
+  let labelColor = isPrediction ? color : '#FFFFFF';
+  if (isPrediction && probability !== undefined) {
+    if (probability >= 0.7) {
+      borderStyle = 'solid';
+      borderWidth = 3;
+      borderColor = '#A855F7'; // bright purple
+      labelColor = '#A855F7';
+    } else if (probability < 0.4) {
+      borderStyle = 'dashed';
+      borderWidth = 1;
+      borderColor = '#6B7280'; // muted
+      labelColor = '#6B7280';
+    }
+  }
 
   return (
     <div
@@ -120,7 +134,7 @@ function CausalSquareNode({ data }: NodeProps) {
         width: size,
         height: size,
         background: isPrediction ? `${color}15` : '#141414',
-        border: `2px ${isPrediction ? 'dashed' : 'solid'} ${color}`,
+        border: `${borderWidth}px ${borderStyle} ${borderColor}`,
         borderRadius: 0,
         display: 'flex',
         flexDirection: 'column',
@@ -142,11 +156,9 @@ function CausalSquareNode({ data }: NodeProps) {
       <Handle type="target" position={Position.Left} style={{ background: color, border: 'none', width: 6, height: 6 }} />
       <Handle type="source" position={Position.Right} style={{ background: color, border: 'none', width: 6, height: 6 }} />
 
-      <span style={{
-        fontSize: isCentral ? 24 : 20,
-        lineHeight: 1,
-        transform: isPrediction ? 'rotate(-45deg)' : 'none',
-      }}>{icon}</span>
+      <svg viewBox={icon.viewBox} width={iconSize} height={iconSize} fill={isPrediction ? color : '#FFFFFF'} style={{ transform: isPrediction ? 'rotate(-45deg)' : 'none' }}>
+        <path d={icon.path} />
+      </svg>
 
       {/* Label below the node */}
       <div style={{
@@ -156,9 +168,9 @@ function CausalSquareNode({ data }: NodeProps) {
         transform: `translateX(-50%) ${isPrediction ? 'rotate(-45deg)' : ''}`,
         whiteSpace: 'nowrap',
         fontSize: 10,
-        fontWeight: 600,
+        fontWeight: isPrediction && probability !== undefined && probability >= 0.7 ? 700 : 600,
         fontFamily: "'Space Grotesk', sans-serif",
-        color: isPrediction ? color : '#FFFFFF',
+        color: labelColor,
         textAlign: 'center',
         maxWidth: 160,
         overflow: 'visible',
@@ -184,6 +196,7 @@ interface RawNode {
   id: string;
   label: string;
   type: string;
+  mention_count?: number;
 }
 
 interface RawEdge {
@@ -250,8 +263,8 @@ function computePositions(
   }
 
   // Layout: X = level * horizontal spacing, Y = evenly distributed vertically
-  const HORIZONTAL_SPACING = 280;
-  const VERTICAL_SPACING = 140;
+  const HORIZONTAL_SPACING = 320;
+  const VERTICAL_SPACING = 180;
 
   const sortedLevels = Array.from(byLevel.keys()).sort((a, b) => a - b);
   for (const level of sortedLevels) {
@@ -384,6 +397,7 @@ function NexusGraphInner() {
   const [rawNodes, setRawNodes] = useState<RawNode[]>([]);
   const [rawEdges, setRawEdges] = useState<RawEdge[]>([]);
   const [centralEntity, setCentralEntity] = useState('');
+  const [apiPredictions, setApiPredictions] = useState<Prediction[]>([]);
 
   // React Flow state
   const [flowNodes, setFlowNodes, onNodesChange] = useNodesState([] as Node[]);
@@ -400,9 +414,16 @@ function NexusGraphInner() {
       setError(null);
 
       try {
-        const data: CausalGraphResponse = await causalService.getCausalGraph(synthesisId);
+        const [data, predResponse] = await Promise.all([
+          causalService.getCausalGraph(synthesisId),
+          causalService.getPredictions(synthesisId).catch(() => ({ predictions: [], has_predictions: false } as { predictions: Prediction[]; has_predictions: boolean })),
+        ]);
 
         if (cancelled) return;
+
+        if (predResponse?.predictions?.length > 0) {
+          setApiPredictions(predResponse.predictions);
+        }
 
         const hasData = data.nodes && data.nodes.length > 0 && data.edges && data.edges.length > 0;
 
@@ -470,29 +491,45 @@ function NexusGraphInner() {
     const predictionNodes: RawNode[] = [];
     const predictionEdges: RawEdge[] = [];
 
-    leafNodes.slice(0, 3).forEach((leaf, i) => {
-      const predId = `pred-${i}`;
-      const scenarios = [
-        { suffix: 'Scenario A', conf: 0.75 },
-        { suffix: 'Scenario B', conf: 0.45 },
-      ];
-      scenarios.forEach((s, j) => {
-        const sId = `${predId}-${j}`;
+    // If we have API predictions, use them
+    if (apiPredictions.length > 0) {
+      apiPredictions.forEach((pred, i) => {
+        const predId = `pred-api-${i}`;
         predictionNodes.push({
-          id: sId,
-          label: `${s.suffix}: ${leaf.label}`,
+          id: predId,
+          label: pred.prediction.length > 50 ? pred.prediction.substring(0, 50) + '...' : pred.prediction,
           type: 'prediction',
+          mention_count: Math.round(pred.probability * 10),
         });
+        // Connect to the most relevant leaf node (or last node)
+        const parentNode = leafNodes[i % leafNodes.length] || rawNodes[rawNodes.length - 1];
         predictionEdges.push({
-          source: leaf.id,
-          target: sId,
+          source: parentNode.id,
+          target: predId,
           relation_type: 'enables' as RelationType,
-          confidence: s.conf,
-          cause_text: leaf.label,
-          effect_text: `${s.suffix}: ${leaf.label}`,
+          confidence: pred.probability,
+          cause_text: parentNode.label,
+          effect_text: pred.prediction.length > 50 ? pred.prediction.substring(0, 50) + '...' : pred.prediction,
         });
       });
-    });
+    } else {
+      // Fallback: generate differentiated scenarios
+      leafNodes.slice(0, 3).forEach((leaf, i) => {
+        const scenarios = [
+          { id: `pred-esc-${i}`, label: `Escalade: ${leaf.label}`, conf: 0.65 },
+          { id: `pred-res-${i}`, label: `Resolution: ${leaf.label}`, conf: 0.35 },
+          { id: `pred-stq-${i}`, label: `Statu quo: ${leaf.label}`, conf: 0.50 },
+        ];
+        scenarios.forEach(s => {
+          predictionNodes.push({ id: s.id, label: s.label, type: 'prediction' });
+          predictionEdges.push({
+            source: leaf.id, target: s.id,
+            relation_type: 'enables' as RelationType, confidence: s.conf,
+            cause_text: leaf.label, effect_text: s.label,
+          });
+        });
+      });
+    }
 
     const allNodes = [...rawNodes, ...predictionNodes];
     const allEdges = [...rawEdges, ...predictionEdges];
@@ -501,6 +538,11 @@ function NexusGraphInner() {
 
     const nodes: Node[] = allNodes.map((n) => {
       const pos = positions.get(n.id) || { x: 0, y: 0 };
+      const connectionCount = allEdges.filter(e => e.source === n.id || e.target === n.id).length;
+      const mentionCount = n.mention_count || 1;
+      const isPred = n.type === 'prediction' || n.type === 'scenario';
+      const matchedApiPred = isPred ? apiPredictions.find((_p, idx) => `pred-api-${idx}` === n.id) : undefined;
+      const nodeSize = getNodeSize(mentionCount, connectionCount, n.id === centralEntity, isPred, matchedApiPred ? matchedApiPred.probability : isPred ? 0.5 : undefined);
       return {
         id: n.id,
         type: 'causalSquare',
@@ -509,6 +551,8 @@ function NexusGraphInner() {
           label: n.label,
           nodeType: n.type,
           isCentral: n.id === centralEntity,
+          size: nodeSize,
+          probability: matchedApiPred?.probability,
         } as CausalSquareNodeData,
       };
     });
@@ -555,7 +599,7 @@ function NexusGraphInner() {
 
     setFlowNodes(nodes);
     setFlowEdges(edges);
-  }, [rawNodes, rawEdges, centralEntity, highlightedEdgeId, setFlowNodes, setFlowEdges]);
+  }, [rawNodes, rawEdges, centralEntity, highlightedEdgeId, apiPredictions, setFlowNodes, setFlowEdges]);
 
   // Sidebar steps
   const sidebarSteps: SidebarStep[] = useMemo(() => {
@@ -721,6 +765,98 @@ function NexusGraphInner() {
               />
             ))}
           </div>
+
+          {/* PREDICTIONS */}
+          {apiPredictions.length > 0 && (
+            <div style={{
+              borderTop: '1px solid rgba(255,255,255,0.06)',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }}>
+              <div style={{
+                padding: '16px 16px 8px',
+                borderBottom: '1px solid rgba(255,255,255,0.06)',
+              }}>
+                <span style={{
+                  fontSize: 9,
+                  fontFamily: "'Space Grotesk', monospace",
+                  color: '#8B5CF6',
+                  letterSpacing: '0.12em',
+                  textTransform: 'uppercase',
+                }}>
+                  PREDICTIONS ({apiPredictions.length})
+                </span>
+              </div>
+              <div style={{
+                padding: '8px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 6,
+                maxHeight: 200,
+                overflowY: 'auto',
+              }}>
+                {apiPredictions.map((pred, i) => {
+                  const probPct = Math.round(pred.probability * 100);
+                  const probColor = pred.probability >= 0.7 ? '#A855F7' : pred.probability >= 0.4 ? '#8B5CF6' : '#6B7280';
+                  return (
+                    <div key={i} style={{
+                      padding: '8px 10px',
+                      background: 'rgba(139,92,246,0.06)',
+                      borderRadius: 4,
+                      borderLeft: `2px solid ${probColor}`,
+                    }}>
+                      <div style={{
+                        fontSize: 11,
+                        fontFamily: "'Space Grotesk', sans-serif",
+                        color: '#FFFFFF',
+                        lineHeight: 1.3,
+                        marginBottom: 6,
+                      }}>
+                        {pred.prediction.length > 80 ? pred.prediction.substring(0, 80) + '...' : pred.prediction}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{
+                          flex: 1,
+                          height: 4,
+                          background: 'rgba(255,255,255,0.08)',
+                          borderRadius: 2,
+                        }}>
+                          <div style={{
+                            width: `${probPct}%`,
+                            height: '100%',
+                            background: probColor,
+                            borderRadius: 2,
+                            transition: 'width 0.3s ease',
+                          }} />
+                        </div>
+                        <span style={{
+                          fontSize: 10,
+                          fontFamily: "'Space Grotesk', monospace",
+                          color: probColor,
+                          fontWeight: 600,
+                          minWidth: 32,
+                          textAlign: 'right',
+                        }}>
+                          {probPct}%
+                        </span>
+                      </div>
+                      <div style={{
+                        fontSize: 9,
+                        fontFamily: "'Space Grotesk', monospace",
+                        color: 'rgba(255,255,255,0.35)',
+                        marginTop: 4,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                      }}>
+                        {pred.timeframe.replace('_', ' ')} &middot; {pred.type}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* LEGEND */}
           <div style={{

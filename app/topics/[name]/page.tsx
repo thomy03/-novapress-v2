@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useTheme } from '@/app/contexts/ThemeContext';
+import { getNodeIcon, getNodeSize } from '@/app/lib/causal-icons';
 import { Header } from '@/app/components/layout/Header';
 
 // Lazy-load the interactive force graph
@@ -773,8 +774,10 @@ function TopicDashboardPage() {
                                 const p = positions[node.id];
                                 if (!p) return null;
                                 const color = typeColor(node.node_type || 'event');
-                                const size = i === 0 ? 22 : 16;
-                                const icon = node.node_type === 'event' ? '⚡' : node.node_type === 'entity' ? '👤' : node.node_type === 'decision' ? '⚖️' : '✓';
+                                const mentionCount = node.mention_count || 1;
+                                const connections = rawEdges.filter(e => (e.source === node.id || e.target === node.id)).length;
+                                const size = 12 + Math.min(mentionCount * 2, 12) + Math.min(connections * 3, 9);
+                                const iconDef = getNodeIcon(node.label, node.node_type || 'event');
                                 return (
                                   <g key={node.id} style={{ cursor: 'pointer' }}
                                     onClick={() => {
@@ -785,9 +788,13 @@ function TopicDashboardPage() {
                                       handleGraphNodeSelect?.({ id: node.id, label: node.label, type: node.node_type || 'event', mentionCount: node.mention_count || 1, connections });
                                     }}>
                                     <rect x={p.x - size} y={p.y - size} width={size * 2} height={size * 2} fill={color} opacity={0.9} />
-                                    <text x={p.x} y={p.y + 5} fill="white" fontSize="12" textAnchor="middle" dominantBaseline="middle">{icon}</text>
-                                    <text x={p.x} y={p.y + size + 12} fill="rgba(255,255,255,0.7)" fontSize="9" fontWeight="600" textAnchor="middle" fontFamily="var(--font-label)">
-                                      {node.label.length > 22 ? node.label.substring(0, 22) + '...' : node.label}
+                                    <g transform={`translate(${p.x - size * 0.4}, ${p.y - size * 0.4})`}>
+                                      <svg viewBox={iconDef.viewBox} width={size * 0.8} height={size * 0.8}>
+                                        <path d={iconDef.path} fill="white" />
+                                      </svg>
+                                    </g>
+                                    <text x={p.x} y={p.y + size + 12} fill="rgba(255,255,255,0.7)" fontSize={Math.max(8, Math.min(size * 0.5, 11))} fontWeight="600" textAnchor="middle" fontFamily="var(--font-label)">
+                                      {node.label.length > 28 ? node.label.substring(0, 28) + '...' : node.label}
                                     </text>
                                   </g>
                                 );
