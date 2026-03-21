@@ -156,15 +156,15 @@ export function getNodeSize(
   if (isPrediction) {
     // Predictions: size proportional to probability
     const prob = probability ?? 0.5;
-    return 48 + Math.round(prob * 36); // Range: 48-84px
+    return 44 + Math.round(prob * 44); // Range: 44-88px (big diff between 30% and 80%)
   }
 
-  const base = 56;
-  const mentionBoost = Math.min((mentionCount || 1) * 3, 20);
-  const connectionBoost = Math.min(connectionCount * 4, 16);
-  const centralBoost = isCentral ? 20 : 0;
+  const base = 50;
+  const mentionBoost = Math.min((mentionCount || 1) * 5, 30); // More aggressive scaling
+  const connectionBoost = Math.min(connectionCount * 6, 24); // More aggressive scaling
+  const centralBoost = isCentral ? 24 : 0;
 
-  return base + mentionBoost + connectionBoost + centralBoost; // Range: 59-112px
+  return base + mentionBoost + connectionBoost + centralBoost; // Range: 55-128px
 }
 
 /**

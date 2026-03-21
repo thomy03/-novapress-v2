@@ -166,16 +166,27 @@ function CausalSquareNode({ data }: NodeProps) {
         top: size + 8,
         left: '50%',
         transform: `translateX(-50%) ${isPrediction ? 'rotate(-45deg)' : ''}`,
-        whiteSpace: 'nowrap',
-        fontSize: 10,
+        whiteSpace: 'normal',
+        fontSize: isPrediction ? 9 : 10,
         fontWeight: isPrediction && probability !== undefined && probability >= 0.7 ? 700 : 600,
         fontFamily: "'Space Grotesk', sans-serif",
         color: labelColor,
         textAlign: 'center',
-        maxWidth: 160,
-        overflow: 'visible',
+        maxWidth: isPrediction ? 200 : 180,
+        lineHeight: 1.3,
+        wordBreak: 'break-word' as const,
       }}>
         {label}
+        {isPrediction && probability !== undefined && (
+          <div style={{
+            marginTop: 4,
+            fontSize: 11,
+            fontWeight: 700,
+            color: probability >= 0.7 ? '#10B981' : probability >= 0.4 ? '#F59E0B' : '#DC2626',
+          }}>
+            {Math.round(probability * 100)}%
+          </div>
+        )}
       </div>
     </div>
   );
@@ -392,6 +403,12 @@ function NexusGraphInner() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [highlightedEdgeId, setHighlightedEdgeId] = useState<string | null>(null);
+  const [selectedNodeDetail, setSelectedNodeDetail] = useState<{
+    label: string;
+    type: string;
+    connections: string[];
+    prediction?: { text: string; probability: number; timeframe?: string; rationale?: string };
+  } | null>(null);
 
   // Raw data from API or demo
   const [rawNodes, setRawNodes] = useState<RawNode[]>([]);
@@ -497,7 +514,7 @@ function NexusGraphInner() {
         const predId = `pred-api-${i}`;
         predictionNodes.push({
           id: predId,
-          label: pred.prediction.length > 50 ? pred.prediction.substring(0, 50) + '...' : pred.prediction,
+          label: pred.prediction,
           type: 'prediction',
           mention_count: Math.round(pred.probability * 10),
         });
@@ -509,7 +526,7 @@ function NexusGraphInner() {
           relation_type: 'enables' as RelationType,
           confidence: pred.probability,
           cause_text: parentNode.label,
-          effect_text: pred.prediction.length > 50 ? pred.prediction.substring(0, 50) + '...' : pred.prediction,
+          effect_text: pred.prediction,
         });
       });
     } else {
@@ -906,10 +923,34 @@ function NexusGraphInner() {
             nodeTypes={nodeTypes}
             fitView
             fitViewOptions={{ padding: 0.3 }}
-            minZoom={0.2}
-            maxZoom={2}
+            minZoom={0.1}
+            maxZoom={3}
             style={{ background: '#0A0A0A' }}
             proOptions={{ hideAttribution: true }}
+            onNodeClick={(_event, node) => {
+              const data = node.data as unknown as CausalSquareNodeData;
+              const nodeEdges = [...rawEdges, ...flowEdges.map(e => ({ source: e.source, target: e.target }))];
+              const connected = nodeEdges
+                .filter(e => e.source === node.id || e.target === node.id)
+                .map(e => {
+                  const otherId = e.source === node.id ? e.target : e.source;
+                  const otherNode = [...rawNodes, ...(apiPredictions.map((p, i) => ({ id: `pred-api-${i}`, label: p.prediction })))].find(n => n.id === otherId);
+                  return otherNode?.label || otherId;
+                });
+              const matchedPred = apiPredictions.find((_p, idx) => `pred-api-${idx}` === node.id);
+              setSelectedNodeDetail({
+                label: data.label,
+                type: data.nodeType,
+                connections: connected,
+                prediction: matchedPred ? {
+                  text: matchedPred.prediction,
+                  probability: matchedPred.probability,
+                  timeframe: matchedPred.timeframe,
+                  rationale: matchedPred.rationale,
+                } : undefined,
+              });
+            }}
+            onPaneClick={() => setSelectedNodeDetail(null)}
           >
             <Background
               variant={BackgroundVariant.Dots}
@@ -931,13 +972,115 @@ function NexusGraphInner() {
             />
             <Controls
               position="bottom-right"
+              showInteractive={false}
               style={{
                 background: '#1A1A1A',
                 border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: 4,
+                borderRadius: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 1,
               }}
             />
           </ReactFlow>
+
+          {/* Node detail overlay */}
+          {selectedNodeDetail && (
+            <div style={{
+              position: 'absolute',
+              top: 16,
+              right: 16,
+              width: 320,
+              background: 'rgba(19,19,19,0.95)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              padding: 20,
+              zIndex: 50,
+              backdropFilter: 'blur(10px)',
+            }}>
+              <button
+                onClick={() => setSelectedNodeDetail(null)}
+                style={{
+                  position: 'absolute', top: 8, right: 8,
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: 'rgba(255,255,255,0.4)', fontSize: 16, fontFamily: 'inherit', padding: 4,
+                }}
+              >
+                ✕
+              </button>
+
+              <div style={{
+                fontSize: 9, fontWeight: 700, letterSpacing: '0.15em',
+                color: TYPE_COLORS[selectedNodeDetail.type] || '#6B7280',
+                textTransform: 'uppercase' as const, marginBottom: 6,
+                fontFamily: "'Space Grotesk', sans-serif",
+              }}>
+                {selectedNodeDetail.type}
+              </div>
+
+              <div style={{
+                fontSize: 16, fontWeight: 700, color: '#FFFFFF',
+                fontFamily: "'Newsreader', serif", fontStyle: 'italic',
+                lineHeight: 1.3, marginBottom: 12,
+              }}>
+                {selectedNodeDetail.label}
+              </div>
+
+              {selectedNodeDetail.prediction && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{
+                    fontSize: 9, fontWeight: 700, letterSpacing: '0.1em',
+                    color: '#8B5CF6', textTransform: 'uppercase' as const, marginBottom: 8,
+                    fontFamily: "'Space Grotesk', sans-serif",
+                  }}>
+                    PREDICTION DETAIL
+                  </div>
+                  <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', lineHeight: 1.5, marginBottom: 8, fontFamily: "'Newsreader', serif", fontStyle: 'italic' }}>
+                    {selectedNodeDetail.prediction.text}
+                  </p>
+                  {/* Probability bar */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <div style={{ flex: 1, height: 4, background: 'rgba(255,255,255,0.1)' }}>
+                      <div style={{
+                        width: `${selectedNodeDetail.prediction.probability * 100}%`,
+                        height: '100%',
+                        background: selectedNodeDetail.prediction.probability >= 0.7 ? '#10B981' : selectedNodeDetail.prediction.probability >= 0.4 ? '#F59E0B' : '#DC2626',
+                      }} />
+                    </div>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#FFFFFF', fontFamily: "'Space Grotesk', sans-serif" }}>
+                      {Math.round(selectedNodeDetail.prediction.probability * 100)}%
+                    </span>
+                  </div>
+                  {selectedNodeDetail.prediction.timeframe && (
+                    <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' as const, letterSpacing: '0.1em', fontFamily: "'Space Grotesk', sans-serif" }}>
+                      {selectedNodeDetail.prediction.timeframe}
+                    </span>
+                  )}
+                  {selectedNodeDetail.prediction.rationale && (
+                    <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', lineHeight: 1.4, marginTop: 8 }}>
+                      {selectedNodeDetail.prediction.rationale}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {selectedNodeDetail.connections.length > 0 && (
+                <div>
+                  <div style={{
+                    fontSize: 9, fontWeight: 700, letterSpacing: '0.1em',
+                    color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' as const, marginBottom: 6,
+                    fontFamily: "'Space Grotesk', sans-serif",
+                  }}>
+                    CONNEXIONS ({selectedNodeDetail.connections.length})
+                  </div>
+                  {selectedNodeDetail.connections.slice(0, 6).map((c, i) => (
+                    <div key={i} style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', padding: '3px 0', fontFamily: "'Space Grotesk', sans-serif" }}>
+                      → {c}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
