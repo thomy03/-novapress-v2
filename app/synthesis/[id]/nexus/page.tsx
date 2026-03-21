@@ -163,31 +163,40 @@ function CausalSquareNode({ data }: NodeProps) {
       {/* Label below the node */}
       <div style={{
         position: 'absolute',
-        top: size + 8,
+        top: size + 6,
         left: '50%',
         transform: `translateX(-50%) ${isPrediction ? 'rotate(-45deg)' : ''}`,
-        whiteSpace: 'normal',
+        whiteSpace: 'nowrap',
         fontSize: isPrediction ? 9 : 10,
         fontWeight: isPrediction && probability !== undefined && probability >= 0.7 ? 700 : 600,
         fontFamily: "'Space Grotesk', sans-serif",
         color: labelColor,
         textAlign: 'center',
-        maxWidth: isPrediction ? 200 : 180,
-        lineHeight: 1.3,
-        wordBreak: 'break-word' as const,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        maxWidth: 160,
       }}>
-        {label}
-        {isPrediction && probability !== undefined && (
-          <div style={{
-            marginTop: 4,
-            fontSize: 11,
-            fontWeight: 700,
-            color: probability >= 0.7 ? '#10B981' : probability >= 0.4 ? '#F59E0B' : '#DC2626',
-          }}>
-            {Math.round(probability * 100)}%
-          </div>
-        )}
+        {label.length > 30 ? label.substring(0, 28) + '...' : label}
       </div>
+      {/* Probability badge for predictions */}
+      {isPrediction && probability !== undefined && (
+        <div style={{
+          position: 'absolute',
+          top: -10,
+          right: -10,
+          transform: isPrediction ? 'rotate(-45deg)' : 'none',
+          fontSize: 10,
+          fontWeight: 700,
+          fontFamily: "'Space Grotesk', sans-serif",
+          color: '#FFFFFF',
+          backgroundColor: probability >= 0.7 ? '#10B981' : probability >= 0.4 ? '#F59E0B' : '#DC2626',
+          padding: '2px 6px',
+          minWidth: 32,
+          textAlign: 'center',
+        }}>
+          {Math.round(probability * 100)}%
+        </div>
+      )}
     </div>
   );
 }
