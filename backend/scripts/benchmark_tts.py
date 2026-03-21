@@ -108,8 +108,6 @@ async def main():
     from app.core.config import settings
 
     if settings.RUNPOD_API_KEY:
-        if settings.RUNPOD_FISH_SPEECH_ENDPOINT_ID:
-            providers_to_test.append("fish_speech")
         if settings.RUNPOD_XTTS_ENDPOINT_ID:
             providers_to_test.append("xtts")
         if settings.RUNPOD_CHATTERBOX_ENDPOINT_ID:

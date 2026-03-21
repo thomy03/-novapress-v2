@@ -226,7 +226,7 @@ class Settings(BaseSettings):
     # Chatterbox Multilingual via RunPod Serverless (voice cloning + emotion, MIT license)
     RUNPOD_API_KEY: str = ""  # https://www.runpod.io/console/user/settings (API Keys)
     RUNPOD_CHATTERBOX_ENDPOINT_ID: str = ""  # Serverless endpoint ID for Chatterbox
-    RUNPOD_CHATTERBOX_TIMEOUT: int = 120  # Timeout in seconds
+    RUNPOD_CHATTERBOX_TIMEOUT: int = 300  # Timeout in seconds (async polling)
 
     # XTTS v2 via RunPod Serverless (legacy)
     RUNPOD_XTTS_ENDPOINT_ID: str = ""
@@ -234,12 +234,22 @@ class Settings(BaseSettings):
     XTTS_VOICE_PRESENTATEUR_URL: str = ""
     XTTS_VOICE_EXPERT_URL: str = ""
 
-    # Fish Speech via RunPod Serverless (high-quality open-source TTS)
-    RUNPOD_FISH_SPEECH_ENDPOINT_ID: str = ""
-    RUNPOD_FISH_SPEECH_TIMEOUT: int = 120
+    # XTTS v2 inference params (fine-tuned model)
+    XTTS_GPT_COND_LEN: int = 24
+    XTTS_TEMPERATURE: float = 0.65
+    XTTS_REPETITION_PENALTY: float = 5.0
 
-    # TTS Provider selection: "fish_speech", "chatterbox", "xtts", "elevenlabs", "openai", "azure", "google", "edge" (or empty = auto)
+    # CosyVoice3 via RunPod Serverless (Apache 2.0, zero-shot voice cloning)
+    RUNPOD_COSYVOICE3_ENDPOINT_ID: str = ""
+    RUNPOD_COSYVOICE3_TIMEOUT: int = 300
+
+    # TTS Provider selection: "cosyvoice3", "chatterbox", "xtts", "elevenlabs", "openai", "azure", "google", "edge" (or empty = auto)
     TTS_PROVIDER: str = ""
+
+    # Google AI Studio (Gemini Embedding 2 for NovaLex multimodal RAG)
+    GOOGLE_AI_API_KEY: str = ""  # https://aistudio.google.com/apikey
+    GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-exp-03-07"
+    GEMINI_EMBEDDING_DIMENSIONS: int = 3072  # or 768 for cost savings
 
     # Stripe Billing
     STRIPE_SECRET_KEY: str = ""  # sk_test_... or sk_live_...

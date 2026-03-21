@@ -540,35 +540,32 @@ class ChatterboxTTSService:
         self.api_key = settings.RUNPOD_API_KEY
         self.endpoint_id = settings.RUNPOD_CHATTERBOX_ENDPOINT_ID
         self.timeout = getattr(settings, "RUNPOD_CHATTERBOX_TIMEOUT", 120)
-        # Map panelist roles to voice reference file paths
+        # Map panelist roles to voice reference file paths (MP3 from candidates/)
         voices_dir = Path(__file__).parent.parent.parent / "voices"
         self.VOICE_MAP = {
-            "presentateur": voices_dir / "presentateur.wav",
-            "expert": voices_dir / "expert.wav",
-            "journaliste": voices_dir / "journaliste.wav",
-            "contradicteur": voices_dir / "contradicteur.wav",
+            "presentateur": voices_dir / "host.mp3",
+            "host": voices_dir / "host.mp3",
+            "expert": voices_dir / "voice_m1.mp3",
+            "journaliste": voices_dir / "voice_f1.mp3",
+            "contradicteur": voices_dir / "voice_m2.mp3",
             # Legacy Edge TTS voice name mappings
-            "fr-FR-DeniseNeural": voices_dir / "presentateur.wav",
-            "fr-FR-HenriNeural": voices_dir / "expert.wav",
-            "fr-FR-EloiseNeural": voices_dir / "journaliste.wav",
-            "fr-FR-AlainNeural": voices_dir / "contradicteur.wav",
+            "fr-FR-DeniseNeural": voices_dir / "host.mp3",
+            "fr-FR-HenriNeural": voices_dir / "voice_m1.mp3",
+            "fr-FR-EloiseNeural": voices_dir / "voice_f1.mp3",
+            "fr-FR-AlainNeural": voices_dir / "voice_m2.mp3",
         }
-        # Emotion presets per panelist role
+        # Emotion presets per panelist role — tuned for talkshow expressivity
         self.EMOTION_MAP = {
-            "presentateur": {"exaggeration": 0.5, "cfg_weight": 0.5},
-            "expert": {"exaggeration": 0.3, "cfg_weight": 0.6},
-            "journaliste": {"exaggeration": 0.6, "cfg_weight": 0.4},
-            "contradicteur": {"exaggeration": 0.7, "cfg_weight": 0.4},
+            "presentateur": {"exaggeration": 0.3, "cfg_weight": 0.5},   # Posé, professionnel
+            "host": {"exaggeration": 0.3, "cfg_weight": 0.5},
+            "expert": {"exaggeration": 0.4, "cfg_weight": 0.5},         # Engagé
+            "journaliste": {"exaggeration": 0.5, "cfg_weight": 0.4},    # Dynamique
+            "contradicteur": {"exaggeration": 0.7, "cfg_weight": 0.3},  # Passionné
         }
-        # Voice pool slots for dynamic experts
-        self.VOICE_MAP["host"] = voices_dir / "presentateur.wav"
-        self.VOICE_MAP["voice_m1"] = voices_dir / "expert.wav"
-        self.VOICE_MAP["voice_f1"] = voices_dir / "journaliste.wav"
-        self.VOICE_MAP["voice_m2"] = voices_dir / "contradicteur.wav"
-        # Extended pool from LibriVox candidates
-        for slot_id in ("voice_m3", "voice_m4", "voice_m5", "voice_m6", "voice_m7",
-                         "voice_f2", "voice_f3", "voice_f4", "voice_f5", "voice_f6"):
-            path = voices_dir / "pool" / f"{slot_id}.wav"
+        # Voice pool slots for dynamic experts (10 voices from candidates/)
+        for slot_id in ("voice_m1", "voice_m2", "voice_m3", "voice_m5",
+                         "voice_f1", "voice_f2", "voice_f3", "voice_f4"):
+            path = voices_dir / f"{slot_id}.mp3"
             if path.exists():
                 self.VOICE_MAP[slot_id] = path
         # Add persona voice mappings (fallback to presentateur/expert based on gender)
@@ -582,14 +579,16 @@ class ChatterboxTTSService:
             from app.ml.persona import PERSONAS
             for persona in PERSONAS.values():
                 if persona.id not in self.VOICE_MAP:
-                    # Check for persona-specific voice file
-                    persona_voice = voices_dir / f"{persona.id}.wav"
-                    if persona_voice.exists():
-                        self.VOICE_MAP[persona.id] = persona_voice
+                    # Check for persona-specific voice file (mp3 or wav)
+                    for ext in (".mp3", ".wav"):
+                        persona_voice = voices_dir / f"{persona.id}{ext}"
+                        if persona_voice.exists():
+                            self.VOICE_MAP[persona.id] = persona_voice
+                            break
                     else:
                         # Fallback by gender
                         fallback = "presentateur" if persona.voice_gender == "female" else "expert"
-                        self.VOICE_MAP[persona.id] = self.VOICE_MAP.get(fallback, voices_dir / f"{fallback}.wav")
+                        self.VOICE_MAP[persona.id] = self.VOICE_MAP.get(fallback, voices_dir / "host.mp3")
                     # Emotion preset by debate style
                     if persona.id not in self.EMOTION_MAP:
                         style_emotion = {
@@ -614,8 +613,8 @@ class ChatterboxTTSService:
         voice_path = self.VOICE_MAP.get(voice)
         if voice_path and Path(voice_path).exists():
             return b64mod.b64encode(Path(voice_path).read_bytes()).decode("ascii")
-        # Try presentateur as fallback
-        fallback = self.VOICE_MAP.get("presentateur")
+        # Try host as fallback
+        fallback = self.VOICE_MAP.get("host") or self.VOICE_MAP.get("presentateur")
         if fallback and Path(fallback).exists():
             return b64mod.b64encode(Path(fallback).read_bytes()).decode("ascii")
         return None
@@ -637,7 +636,6 @@ class ChatterboxTTSService:
             audio_ref_b64 = self._get_voice_b64(voice)
             emotion = self.EMOTION_MAP.get(voice, self.EMOTION_MAP["presentateur"])
 
-            url = f"https://api.runpod.ai/v2/{self.endpoint_id}/runsync"
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
@@ -655,13 +653,27 @@ class ChatterboxTTSService:
                 payload["input"]["audio_ref_base64"] = audio_ref_b64
 
             async with aiohttp.ClientSession() as session:
-                async with session.post(url, json=payload, headers=headers,
-                                       timeout=aiohttp.ClientTimeout(total=self.timeout)) as resp:
+                # Use async /run endpoint + polling (avoids runsync 90s timeout)
+                run_url = f"https://api.runpod.ai/v2/{self.endpoint_id}/run"
+                async with session.post(run_url, json=payload, headers=headers,
+                                       timeout=aiohttp.ClientTimeout(total=30)) as resp:
                     if resp.status != 200:
                         body = await resp.text()
                         logger.error(f"Chatterbox RunPod HTTP {resp.status}: {body[:300]}")
                         return None
                     result = await resp.json()
+
+                job_id = result.get("id", "")
+                status = result.get("status", "")
+                if status == "COMPLETED":
+                    pass  # Rare but possible
+                elif job_id:
+                    result = await self._poll_job(session, job_id, headers)
+                    if not result:
+                        return None
+                else:
+                    logger.error(f"Chatterbox RunPod: no job ID in response: {str(result)[:200]}")
+                    return None
 
             output = result.get("output", {})
             if isinstance(output, dict) and "error" in output:
@@ -670,7 +682,7 @@ class ChatterboxTTSService:
 
             audio_b64 = output.get("audio_base64", "")
             if not audio_b64:
-                logger.error("Chatterbox RunPod: empty audio response")
+                logger.error(f"Chatterbox RunPod: empty audio response (status={result.get('status', '?')})")
                 return None
 
             data = b64mod.b64decode(audio_b64)
@@ -685,173 +697,6 @@ class ChatterboxTTSService:
             return None
         except Exception as e:
             logger.error(f"Chatterbox RunPod failed: {e}")
-            return None
-
-    async def generate_synthesis_audio(self, synthesis: Dict[str, Any],
-                                       voice_gender: str = "female", language: str = "fr-FR") -> Optional[bytes]:
-        script = _build_synthesis_script(synthesis)
-        if not script:
-            return None
-        voice = "presentateur" if voice_gender == "female" else "expert"
-        return await self.generate_audio(text=script, voice=voice)
-
-    def get_audio_url(self, synthesis_id: str) -> str:
-        return f"/api/syntheses/by-id/{synthesis_id}/audio"
-
-
-# ---------------------------------------------------------------------------
-# Fish Speech via RunPod Serverless (high-quality open-source TTS)
-# ---------------------------------------------------------------------------
-class FishSpeechTTSService:
-    """Fish Speech S1-mini via RunPod Serverless endpoint.
-
-    Features:
-    - 48 native emotion tags (happy, serious, angry, etc.)
-    - Zero-shot voice cloning from reference audio
-    - Apache 2.0 licensed, 0.5B parameters
-
-    Requires:
-      - RUNPOD_API_KEY: RunPod API key
-      - RUNPOD_FISH_SPEECH_ENDPOINT_ID: Serverless endpoint ID
-      - Voice reference files in backend/voices/ (5-15s WAV/MP3 per speaker)
-    """
-
-    # Script emotion -> Fish Speech native tag
-    EMOTION_TAG_MAP = {
-        "neutral": "",
-        "assertive": "serious",
-        "angry": "angry",
-        "frustrated": "annoyed",
-        "amused": "happy",
-        "emphatic": "emphatic",
-        "ironic": "sarcastic",
-        "thoughtful": "contemplative",
-    }
-
-    VOICE_MAP = {}
-
-    def __init__(self):
-        from app.core.config import settings
-        self.api_key = settings.RUNPOD_API_KEY
-        self.endpoint_id = settings.RUNPOD_FISH_SPEECH_ENDPOINT_ID
-        self.timeout = settings.RUNPOD_FISH_SPEECH_TIMEOUT
-        voices_dir = Path(__file__).parent.parent.parent / "voices"
-        # Same voice map structure as XTTS
-        self.VOICE_MAP = {
-            "host": voices_dir / "host.mp3",
-            "presentateur": voices_dir / "host.mp3",
-            "neutral": voices_dir / "host.mp3",
-            "fr-FR-DeniseNeural": voices_dir / "host.mp3",
-            "fr-FR-HenriNeural": voices_dir / "voice_m1.mp3",
-        }
-        for slot_id in ("voice_m1", "voice_m2", "voice_m3", "voice_m4", "voice_m5",
-                         "voice_f1", "voice_f2", "voice_f3", "voice_f4"):
-            path = voices_dir / f"{slot_id}.mp3"
-            if path.exists():
-                self.VOICE_MAP[slot_id] = path
-        CACHE_DIR.mkdir(exist_ok=True)
-        logger.info(f"Fish Speech RunPod TTS initialized (endpoint={self.endpoint_id})")
-
-    def is_available(self) -> bool:
-        return bool(self.api_key and self.endpoint_id)
-
-    async def generate_audio(self, text: str, voice: str = "presentateur",
-                             rate: str = "+0%", pitch: str = "+0Hz",
-                             speed: float = 1.0, emotion: str = "neutral") -> Optional[bytes]:
-        if not text or len(text.strip()) < 10:
-            return None
-        text = _preprocess_text(text)
-        emotion_tag = self.EMOTION_TAG_MAP.get(emotion, "")
-        h = _hash(text, voice, f"fish:{emotion_tag}")
-        cached = _get_cache(h)
-        if cached:
-            return cached
-
-        try:
-            import aiohttp
-            import base64 as b64mod
-
-            # Load voice reference
-            voice_path = self.VOICE_MAP.get(voice)
-            payload_input = {
-                "text": text,
-                "speaker_id": voice,
-                "language": "fr",
-                "speed": max(0.85, min(1.3, speed)),
-                "emotion_tag": emotion_tag,
-            }
-
-            if voice_path and Path(voice_path).exists():
-                payload_input["speaker_wav_b64"] = b64mod.b64encode(
-                    Path(voice_path).read_bytes()
-                ).decode("ascii")
-
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            }
-            payload = {"input": payload_input}
-
-            async with aiohttp.ClientSession() as session:
-                # Use async /run + polling (same pattern as XTTS)
-                run_url = f"https://api.runpod.ai/v2/{self.endpoint_id}/run"
-                async with session.post(run_url, json=payload, headers=headers,
-                                       timeout=aiohttp.ClientTimeout(total=30)) as resp:
-                    if resp.status != 200:
-                        body = await resp.text()
-                        logger.error(f"Fish Speech RunPod HTTP {resp.status}: {body[:300]}")
-                        return None
-                    result = await resp.json()
-
-                job_id = result.get("id", "")
-                status = result.get("status", "")
-                if status == "COMPLETED":
-                    pass
-                elif job_id:
-                    result = await self._poll_job(session, job_id, headers)
-                    if not result:
-                        return None
-                else:
-                    logger.error(f"Fish Speech: no job ID: {str(result)[:200]}")
-                    return None
-
-            output = result.get("output", {})
-            if isinstance(output, dict) and "error" in output:
-                logger.error(f"Fish Speech error: {output['error']}")
-                return None
-
-            audio_b64 = output.get("audio_b64", "")
-            if not audio_b64:
-                logger.error("Fish Speech: empty audio response")
-                return None
-
-            import base64
-            data = base64.b64decode(audio_b64)
-
-            # If handler returned WAV, convert to MP3 for caching
-            out_format = output.get("format", "mp3")
-            if out_format == "wav":
-                try:
-                    from pydub import AudioSegment as PydubSeg
-                    import io
-                    seg = PydubSeg.from_wav(io.BytesIO(data))
-                    mp3_buf = io.BytesIO()
-                    seg.export(mp3_buf, format="mp3", bitrate="192k")
-                    data = mp3_buf.getvalue()
-                except Exception:
-                    pass  # Keep WAV data as-is
-
-            _set_cache(h, data)
-            duration_ms = output.get("duration_ms", 0)
-            logger.info(f"Fish Speech: {len(text)} chars -> {len(data)//1024}KB "
-                        f"({duration_ms}ms, voice={voice}, emotion={emotion_tag or 'none'})")
-            return data
-
-        except ImportError:
-            logger.error("aiohttp not installed — required for Fish Speech RunPod")
-            return None
-        except Exception as e:
-            logger.error(f"Fish Speech RunPod failed: {e}")
             return None
 
     async def _poll_job(self, session, job_id: str, headers: dict,
@@ -872,14 +717,14 @@ class FishSpeechTTSService:
                     result = await resp.json()
                     status = result.get("status", "")
                     if status == "COMPLETED":
-                        logger.info(f"Fish Speech: job {job_id} completed after {elapsed}s")
+                        logger.info(f"Chatterbox: job {job_id} completed after {elapsed}s")
                         return result
                     elif status == "FAILED":
-                        logger.error(f"Fish Speech: job {job_id} failed: {result.get('error', '?')[:200]}")
+                        logger.error(f"Chatterbox: job {job_id} failed: {result.get('error', '?')[:200]}")
                         return None
             except Exception:
                 continue
-        logger.error(f"Fish Speech: job {job_id} timed out after {max_wait}s")
+        logger.error(f"Chatterbox: job {job_id} timed out after {max_wait}s")
         return None
 
     async def generate_synthesis_audio(self, synthesis: Dict[str, Any],
@@ -887,7 +732,7 @@ class FishSpeechTTSService:
         script = _build_synthesis_script(synthesis)
         if not script:
             return None
-        voice = "presentateur" if voice_gender == "female" else "voice_m1"
+        voice = "presentateur" if voice_gender == "female" else "expert"
         return await self.generate_audio(text=script, voice=voice)
 
     def get_audio_url(self, synthesis_id: str) -> str:
@@ -895,7 +740,7 @@ class FishSpeechTTSService:
 
 
 # ---------------------------------------------------------------------------
-# XTTS v2 via RunPod Serverless (legacy — voice cloning)
+# XTTS v2 via RunPod Serverless (voice cloning)
 # ---------------------------------------------------------------------------
 class XttsTTSService:
     """XTTS v2 voice cloning via RunPod Serverless endpoint.
@@ -927,7 +772,7 @@ class XttsTTSService:
             "fr-FR-HenriNeural": voices_dir / "voice_m1.mp3",
         }
         # Voice pool slots for dynamic experts
-        for slot_id in ("voice_m1", "voice_m2", "voice_m3", "voice_m4", "voice_m5",
+        for slot_id in ("voice_m1", "voice_m2", "voice_m3", "voice_m5",
                          "voice_f1", "voice_f2", "voice_f3", "voice_f4"):
             path = voices_dir / f"{slot_id}.mp3"
             if path.exists():
@@ -961,6 +806,12 @@ class XttsTTSService:
         """Resolve voice to URL string or local Path."""
         return self.VOICE_MAP.get(voice)
 
+    # Quality gate constants
+    _QG_MAX_RETRIES = 2
+    _QG_MAX_DURATION_RATIO = 4.0
+    _QG_MIN_TEXT_LEN = 50
+    _QG_WER_THRESHOLD = 0.30  # 30% word error rate max
+
     async def generate_audio(self, text: str, voice: str = "presentateur",
                              rate: str = "+0%", pitch: str = "+0Hz",
                              speed: float = 1.1) -> Optional[bytes]:
@@ -979,9 +830,189 @@ class XttsTTSService:
         if cached:
             return cached
 
+        # --- Quality gate: pre-process text ---
+        gen_text = self._qg_preprocess(text)
+
         # Clamp speed to safe range
         speed = max(0.85, min(1.3, speed))
 
+        # --- Generate with retry on hallucination ---
+        data = None
+        for attempt in range(1, self._QG_MAX_RETRIES + 2):
+            data = await self._call_runpod(gen_text, voice_ref, speaker_id, speed)
+            if data is None:
+                return None
+
+            # --- Quality gate: check duration + STT transcription ---
+            passed, issue = await self._qg_full_check(text, data)
+            if passed:
+                _set_cache(h, data)
+                if attempt > 1:
+                    logger.info(f"XTTS QG: passed on attempt {attempt}")
+                return data
+
+            logger.warning(f"XTTS QG: attempt {attempt}/{self._QG_MAX_RETRIES + 1} "
+                           f"failed — {issue}")
+            if attempt <= self._QG_MAX_RETRIES:
+                # Retry with lower speed and more padding
+                speed = max(0.85, speed - 0.05)
+                gen_text = self._qg_pad_more(gen_text)
+
+        # All retries exhausted — return last attempt anyway (better than nothing)
+        logger.error(f"XTTS QG: all retries exhausted for '{text[:60]}...', "
+                     "returning last attempt")
+        if data:
+            _set_cache(h, data)
+        return data
+
+    def _qg_preprocess(self, text: str) -> str:
+        """Pre-process text: pad short texts, simplify acronyms."""
+        try:
+            from app.services.tts_quality_checker import (
+                reformulate_text, is_text_too_short
+            )
+            # Always simplify acronyms (strategy 1)
+            text = reformulate_text(text, strategy=1)
+            # Pad short texts to avoid hallucinations
+            if is_text_too_short(text):
+                text = reformulate_text(text, strategy=0)
+        except ImportError:
+            # Minimal inline padding if quality checker not available
+            if len(text.strip()) < self._QG_MIN_TEXT_LEN:
+                text = f"{text.strip()} C'est un sujet important."
+        return text
+
+    def _qg_pad_more(self, text: str) -> str:
+        """Add extra padding for retry attempts."""
+        if len(text) < 80:
+            return f"Alors, {text.lower()}" if not text[0].isupper() else text
+        return text
+
+    async def _qg_full_check(self, original_text: str, audio_data: bytes) -> tuple:
+        """Full quality gate: duration check + Whisper STT transcription.
+        Returns (passed, issue_description)."""
+
+        # Step 1: Duration-based hallucination check (fast, free)
+        passed, issue = self._qg_check_duration(original_text, audio_data)
+        if not passed:
+            return False, issue
+
+        # Step 2: Whisper STT transcription check (catches garbled/incomprehensible audio)
+        try:
+            transcription = await self._qg_transcribe(audio_data)
+            if transcription is not None:
+                from app.services.tts_quality_checker import compute_wer
+                wer = compute_wer(original_text, transcription)
+                if wer > self._QG_WER_THRESHOLD:
+                    return False, (f"incomprehensible: WER={wer:.0%} "
+                                   f"(heard: '{transcription[:80]}...')")
+                logger.debug(f"XTTS QG STT: WER={wer:.0%} OK")
+        except Exception as e:
+            # STT check is best-effort — don't block on failure
+            logger.debug(f"XTTS QG: STT check skipped ({e})")
+
+        return True, ""
+
+    _whisper_model = None  # Lazy-loaded faster-whisper model (shared across calls)
+
+    async def _qg_transcribe(self, audio_data: bytes) -> Optional[str]:
+        """Transcribe audio using faster-whisper (local, free, no API).
+        Falls back to OpenAI Whisper API if faster-whisper unavailable."""
+        import asyncio
+
+        # Try local faster-whisper first (free, no API call)
+        try:
+            return await asyncio.to_thread(self._transcribe_local, audio_data)
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.debug(f"Local Whisper failed: {e}")
+
+        # Fallback: OpenAI Whisper API (paid, ~$0.006/min)
+        try:
+            return await self._transcribe_openai_api(audio_data)
+        except Exception as e:
+            logger.debug(f"Whisper API fallback failed: {e}")
+            return None
+
+    def _transcribe_local(self, audio_data: bytes) -> str:
+        """Transcribe using faster-whisper on CPU (free, ~2-3s for 15s audio)."""
+        from faster_whisper import WhisperModel
+        import tempfile
+        import os
+
+        # Lazy-load model (first call downloads ~145MB, then cached)
+        if XttsTTSService._whisper_model is None:
+            XttsTTSService._whisper_model = WhisperModel(
+                "base", device="cpu", compute_type="int8"
+            )
+            logger.info("XTTS QG: faster-whisper 'base' model loaded (CPU, int8)")
+
+        # Write audio to temp file (faster-whisper needs a file path)
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+            f.write(audio_data)
+            tmp_path = f.name
+
+        try:
+            segments, info = XttsTTSService._whisper_model.transcribe(
+                tmp_path, language="fr", beam_size=3,
+                vad_filter=True,  # Skip silence
+            )
+            text = " ".join(seg.text.strip() for seg in segments)
+            return text
+        finally:
+            os.unlink(tmp_path)
+
+    async def _transcribe_openai_api(self, audio_data: bytes) -> Optional[str]:
+        """Fallback: OpenAI Whisper API (~$0.006/min)."""
+        from app.core.config import settings
+        api_key = settings.OPENAI_TTS_API_KEY
+        if not api_key:
+            return None
+
+        import aiohttp
+        import io
+
+        form = aiohttp.FormData()
+        form.add_field('file', io.BytesIO(audio_data),
+                       filename='segment.mp3',
+                       content_type='audio/mpeg')
+        form.add_field('model', 'whisper-1')
+        form.add_field('language', 'fr')
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                'https://api.openai.com/v1/audio/transcriptions',
+                headers={'Authorization': f'Bearer {api_key}'},
+                data=form,
+                timeout=aiohttp.ClientTimeout(total=30)
+            ) as resp:
+                if resp.status != 200:
+                    return None
+                result = await resp.json()
+                return result.get('text', '')
+
+    def _qg_check_duration(self, original_text: str, audio_data: bytes) -> tuple:
+        """Check if audio duration is reasonable. Returns (passed, issue)."""
+        try:
+            from app.services.tts_quality_checker import expected_duration
+            # Estimate duration from MP3/WAV size (rough: ~16KB/s for MP3)
+            est_audio_secs = len(audio_data) / 16000.0
+            exp_secs = expected_duration(original_text)
+
+            if est_audio_secs > exp_secs * self._QG_MAX_DURATION_RATIO:
+                return False, (f"hallucination: ~{est_audio_secs:.1f}s vs "
+                               f"expected ~{exp_secs:.1f}s")
+            if est_audio_secs < exp_secs * 0.2:
+                return False, (f"too short: ~{est_audio_secs:.1f}s vs "
+                               f"expected ~{exp_secs:.1f}s")
+        except ImportError:
+            pass  # No quality checker — skip check
+        return True, ""
+
+    async def _call_runpod(self, text: str, voice_ref, speaker_id: str,
+                           speed: float) -> Optional[bytes]:
+        """Call RunPod endpoint and return audio bytes."""
         try:
             import aiohttp
             import base64 as b64mod
@@ -1013,7 +1044,6 @@ class XttsTTSService:
                 payload["input"]["speaker_wav_url"] = str(voice_ref)
 
             async with aiohttp.ClientSession() as session:
-                # Use async /run endpoint + polling (avoids runsync 90s timeout)
                 run_url = f"https://api.runpod.ai/v2/{self.endpoint_id}/run"
                 async with session.post(run_url, json=payload, headers=headers,
                                        timeout=aiohttp.ClientTimeout(total=30)) as resp:
@@ -1026,7 +1056,7 @@ class XttsTTSService:
                 job_id = result.get("id", "")
                 status = result.get("status", "")
                 if status == "COMPLETED":
-                    pass  # Unlikely but handle it
+                    pass
                 elif job_id:
                     result = await self._poll_job(session, job_id, headers)
                     if not result:
@@ -1035,7 +1065,6 @@ class XttsTTSService:
                     logger.error(f"XTTS RunPod: no job ID in response: {str(result)[:200]}")
                     return None
 
-            # RunPod returns: {"output": {"audio_b64": "...", "duration_ms": ..., ...}}
             output = result.get("output", {})
             if isinstance(output, dict) and "error" in output:
                 logger.error(f"XTTS RunPod error: {output['error']}")
@@ -1048,7 +1077,6 @@ class XttsTTSService:
 
             import base64
             data = base64.b64decode(audio_b64)
-            _set_cache(h, data)
             duration_ms = output.get("duration_ms", 0)
             logger.info(f"XTTS: {len(text)} chars -> {len(data)//1024}KB "
                         f"({duration_ms}ms, voice={speaker_id})")
@@ -1102,6 +1130,186 @@ class XttsTTSService:
 
 
 # ---------------------------------------------------------------------------
+# CosyVoice3 via RunPod Serverless (Apache 2.0, zero-shot voice cloning)
+# ---------------------------------------------------------------------------
+class CosyVoice3TTSService:
+    """CosyVoice3 zero-shot voice cloning via RunPod Serverless.
+
+    Apache 2.0 license, supports French natively with excellent quality.
+    Zero-shot cloning from short reference audio (no fine-tuning needed).
+
+    Requires:
+      - RUNPOD_API_KEY
+      - RUNPOD_COSYVOICE3_ENDPOINT_ID
+    """
+
+    VOICE_MAP = {}  # str -> Path
+
+    def __init__(self):
+        from app.core.config import settings
+        self.api_key = settings.RUNPOD_API_KEY
+        self.endpoint_id = settings.RUNPOD_COSYVOICE3_ENDPOINT_ID
+        self.timeout = settings.RUNPOD_COSYVOICE3_TIMEOUT
+        voices_dir = Path(__file__).parent.parent.parent / "voices"
+        self.VOICE_MAP = {
+            "host": voices_dir / "host.mp3",
+            "presentateur": voices_dir / "host.mp3",
+            "neutral": voices_dir / "host.mp3",
+            "fr-FR-DeniseNeural": voices_dir / "host.mp3",
+            "fr-FR-HenriNeural": voices_dir / "voice_m1.mp3",
+        }
+        for slot_id in ("voice_m1", "voice_m2", "voice_m3", "voice_m5",
+                         "voice_f1", "voice_f2", "voice_f3", "voice_f4"):
+            path = voices_dir / f"{slot_id}.mp3"
+            if path.exists():
+                self.VOICE_MAP[slot_id] = path
+        self._load_persona_voices(settings)
+        CACHE_DIR.mkdir(exist_ok=True)
+        logger.info(f"CosyVoice3 RunPod TTS initialized (endpoint={self.endpoint_id})")
+
+    def _load_persona_voices(self, settings) -> None:
+        try:
+            from app.ml.persona import PERSONAS
+            for persona in PERSONAS.values():
+                if persona.id not in self.VOICE_MAP and persona.voice_ref_file:
+                    self.VOICE_MAP[persona.id] = self.VOICE_MAP.get("host", "")
+        except Exception as e:
+            logger.debug(f"Could not load persona voices: {e}")
+
+    def is_available(self) -> bool:
+        return bool(self.api_key and self.endpoint_id)
+
+    async def generate_audio(self, text: str, voice: str = "presentateur",
+                             rate: str = "+0%", pitch: str = "+0Hz",
+                             speed: float = 1.0) -> Optional[bytes]:
+        if not text or len(text.strip()) < 10:
+            return None
+        text = _strip_audio_tags(text)
+        voice_ref = self.VOICE_MAP.get(voice)
+        if not voice_ref:
+            logger.warning(f"CosyVoice3: No voice configured for '{voice}'")
+            return None
+
+        speaker_id = voice
+        h = _hash(text, speaker_id, "cosyvoice3")
+        cached = _get_cache(h)
+        if cached:
+            return cached
+
+        speed = max(0.5, min(2.0, speed))
+
+        try:
+            import aiohttp
+            import base64 as b64mod
+
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            }
+            payload = {
+                "input": {
+                    "text": text,
+                    "speaker_id": speaker_id,
+                    "language": "fr",
+                    "speed": speed,
+                }
+            }
+
+            # Send voice reference as base64
+            if isinstance(voice_ref, Path) and voice_ref.exists():
+                payload["input"]["speaker_wav_b64"] = b64mod.b64encode(
+                    voice_ref.read_bytes()
+                ).decode("ascii")
+            elif isinstance(voice_ref, str) and voice_ref.startswith("http"):
+                payload["input"]["speaker_wav_url"] = voice_ref
+
+            async with aiohttp.ClientSession() as session:
+                run_url = f"https://api.runpod.ai/v2/{self.endpoint_id}/run"
+                async with session.post(run_url, json=payload, headers=headers,
+                                       timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                    if resp.status != 200:
+                        body = await resp.text()
+                        logger.error(f"CosyVoice3 RunPod HTTP {resp.status}: {body[:300]}")
+                        return None
+                    result = await resp.json()
+
+                job_id = result.get("id", "")
+                status = result.get("status", "")
+                if status == "COMPLETED":
+                    pass
+                elif job_id:
+                    result = await self._poll_job(session, job_id, headers)
+                    if not result:
+                        return None
+                else:
+                    logger.error(f"CosyVoice3: no job ID in response: {str(result)[:200]}")
+                    return None
+
+            output = result.get("output", {})
+            if isinstance(output, dict) and "error" in output:
+                logger.error(f"CosyVoice3 error: {output['error']}")
+                return None
+
+            audio_b64 = output.get("audio_b64", "")
+            if not audio_b64:
+                logger.error(f"CosyVoice3: empty audio response")
+                return None
+
+            import base64
+            data = base64.b64decode(audio_b64)
+            _set_cache(h, data)
+            duration_ms = output.get("duration_ms", 0)
+            logger.info(f"CosyVoice3: {len(text)} chars -> {len(data)//1024}KB "
+                        f"({duration_ms}ms, voice={speaker_id})")
+            return data
+
+        except ImportError:
+            logger.error("aiohttp not installed — required for CosyVoice3")
+            return None
+        except Exception as e:
+            logger.error(f"CosyVoice3 RunPod failed: {e}")
+            return None
+
+    async def _poll_job(self, session, job_id: str, headers: dict,
+                        max_wait: int = 300, interval: int = 3) -> Optional[dict]:
+        import asyncio as _asyncio
+        import aiohttp
+        status_url = f"https://api.runpod.ai/v2/{self.endpoint_id}/status/{job_id}"
+        elapsed = 0
+        while elapsed < max_wait:
+            await _asyncio.sleep(interval)
+            elapsed += interval
+            try:
+                async with session.get(status_url, headers=headers,
+                                       timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                    if resp.status != 200:
+                        continue
+                    result = await resp.json()
+                    status = result.get("status", "")
+                    if status == "COMPLETED":
+                        logger.info(f"CosyVoice3: job {job_id} completed after {elapsed}s")
+                        return result
+                    elif status == "FAILED":
+                        logger.error(f"CosyVoice3: job {job_id} failed: {result.get('error', '?')[:200]}")
+                        return None
+            except Exception:
+                continue
+        logger.error(f"CosyVoice3: job {job_id} timed out after {max_wait}s")
+        return None
+
+    async def generate_synthesis_audio(self, synthesis: Dict[str, Any],
+                                       voice_gender: str = "female", language: str = "fr-FR") -> Optional[bytes]:
+        script = _build_synthesis_script(synthesis)
+        if not script:
+            return None
+        voice = "presentateur" if voice_gender == "female" else "voice_m1"
+        return await self.generate_audio(text=script, voice=voice)
+
+    def get_audio_url(self, synthesis_id: str) -> str:
+        return f"/api/syntheses/by-id/{synthesis_id}/audio"
+
+
+# ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
 def _build_synthesis_script(synthesis: Dict[str, Any]) -> Optional[str]:
@@ -1138,9 +1346,9 @@ def get_tts_service():
     from app.core.config import settings
     provider = settings.TTS_PROVIDER.lower().strip()
 
-    if provider == "fish_speech" and settings.RUNPOD_API_KEY and settings.RUNPOD_FISH_SPEECH_ENDPOINT_ID:
-        _tts_service = FishSpeechTTSService()
-        logger.info("Using Fish Speech via RunPod")
+    if provider == "cosyvoice3" and settings.RUNPOD_API_KEY and settings.RUNPOD_COSYVOICE3_ENDPOINT_ID:
+        _tts_service = CosyVoice3TTSService()
+        logger.info("Using CosyVoice3 via RunPod (Apache 2.0, zero-shot cloning)")
     elif provider == "chatterbox" and settings.RUNPOD_API_KEY and settings.RUNPOD_CHATTERBOX_ENDPOINT_ID:
         _tts_service = ChatterboxTTSService()
         logger.info("Using Chatterbox Multilingual via RunPod")
@@ -1164,9 +1372,9 @@ def get_tts_service():
         logger.info("Using Edge TTS")
     elif not provider:
         # Auto-detect: first configured wins
-        if settings.RUNPOD_API_KEY and getattr(settings, 'RUNPOD_FISH_SPEECH_ENDPOINT_ID', ''):
-            _tts_service = FishSpeechTTSService()
-            logger.info("Auto-selected: Fish Speech via RunPod")
+        if settings.RUNPOD_API_KEY and getattr(settings, 'RUNPOD_COSYVOICE3_ENDPOINT_ID', ''):
+            _tts_service = CosyVoice3TTSService()
+            logger.info("Auto-selected: CosyVoice3 via RunPod")
         elif settings.RUNPOD_API_KEY and getattr(settings, 'RUNPOD_CHATTERBOX_ENDPOINT_ID', ''):
             _tts_service = ChatterboxTTSService()
             logger.info("Auto-selected: Chatterbox Multilingual via RunPod")

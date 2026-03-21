@@ -566,6 +566,28 @@ export default function SynthesisClient({ initialSynthesis }: SynthesisClientPro
             formatDate={formatSynthesisDate}
           />
 
+          {/* AI-generated disclosure badge (EU AI Act Art. 50) */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '10px 14px',
+            backgroundColor: '#F9FAFB',
+            border: '1px solid #E5E5E5',
+            borderRadius: '4px',
+            marginBottom: '16px',
+            fontSize: '12px',
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            color: '#6B7280',
+            lineHeight: 1.4,
+          }}>
+            <span style={{ fontSize: '16px', flexShrink: 0 }} aria-hidden="true">&#9432;</span>
+            <span>
+              Cette synthese a ete generee par intelligence artificielle a partir de {synthesis.numSources || 'plusieurs'} sources.
+              Elle ne remplace pas la lecture des articles originaux.
+            </span>
+          </div>
+
           {/* Follow Story Button */}
           <div style={{ marginBottom: '16px' }}>
             <FollowButton

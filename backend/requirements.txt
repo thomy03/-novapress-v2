@@ -89,6 +89,9 @@ pywebpush>=2.0.0  # VAPID-based Web Push (optional — graceful fallback if not 
 # Stripe Billing
 stripe>=8.0.0  # Subscription management (optional — graceful fallback if not configured)
 
+# Google AI (Gemini Embedding 2 for NovaLex multimodal RAG)
+google-genai>=1.0.0  # NovaLex: text + PDF + image embeddings (optional — only needed for NovaLex)
+
 # Development
 pytest>=8.3.0
 pytest-asyncio>=0.24.0

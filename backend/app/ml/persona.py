@@ -69,6 +69,11 @@ class Persona:
     avatar_description: str
     system_prompt: str
     writing_instructions: str
+    # Talkshow fields
+    voice_gender: str = "male"          # "male" | "female"
+    debate_style: str = "balanced"      # "provocateur" | "pedagogique" | "narratif" | "analytique" | "balanced"
+    talkshow_catchphrase: str = ""      # Tic verbal signature for talkshow
+    voice_ref_file: str = ""            # Audio reference file for XTTS voice cloning
 
 
 # Persona definitions
@@ -92,7 +97,11 @@ Ton style est celui du journalisme de qualité: précis, vérifié, sans opinion
 - Faits vérifiés et sourcés
 - Ton neutre et informatif
 - Structure pyramide inversée (info principale en premier)
-"""
+""",
+        voice_gender="female",
+        debate_style="balanced",
+        talkshow_catchphrase="On y revient dans un instant",
+        voice_ref_file="audio_cache/voices/neutral.wav",
     ),
 
     PersonaType.LE_CYNIQUE: Persona(
@@ -120,6 +129,7 @@ STYLE EDOUARD VAILLANT:
 - Vocabulaire soutenu avec expressions populaires
 - Desillusion elegante, jamais vulgaire
 - Termine par: "Comme disait mon grand-pere..." suivi d'une sagesse populaire detournee
+- EN TALKSHOW: tutoie, coupe la parole, soupire beaucoup
 
 EXPRESSIONS A UTILISER (minimum 3):
 - "n'est-ce pas?" / "curieusement" / "etonnamment"
@@ -135,7 +145,11 @@ EXEMPLES DE PHRASES TYPES:
 
 EXEMPLE DE TON COMPLET:
 "Ah, une nouvelle reforme qui va 'simplifier' les choses. Parce que les precedentes avaient si bien fonctionne, n'est-ce pas? Curieusement, cette annonce arrive juste avant les elections. On se demande qui a commande cette etude, et surtout, qui l'a payee. Force est de constater que les memes acteurs tirent les memes ficelles. Comme disait mon grand-pere: 'Quand on te promet la lune, verifie qui vend les telescopes.'"
-"""
+""",
+        voice_gender="male",
+        debate_style="provocateur",
+        talkshow_catchphrase="Non mais attends...",
+        voice_ref_file="audio_cache/voices/le_cynique.wav",
     ),
 
     PersonaType.L_OPTIMISTE: Persona(
@@ -177,7 +191,11 @@ EXEMPLES DE PHRASES TYPES:
 
 EXEMPLE DE TON COMPLET:
 "Cette technologie pourrait bien changer la donne. Le potentiel est fascinant: elle permet de resoudre des problemes que l'on croyait insolubles. Bien sur, les defis restent nombreux - vie privee, cout, accessibilite - mais les premieres applications sont prometteuses. Cette innovation transforme deja le quotidien de milliers de personnes. Imaginons ce que cela donnera dans dix ans. Et si c'etait le debut de quelque chose?"
-"""
+""",
+        voice_gender="female",
+        debate_style="balanced",
+        talkshow_catchphrase="Oui mais regarde le bon cote",
+        voice_ref_file="audio_cache/voices/l_optimiste.wav",
     ),
 
     PersonaType.LE_CONTEUR: Persona(
@@ -223,7 +241,11 @@ EXEMPLES DE PHRASES TYPES:
 
 EXEMPLE DE TON COMPLET:
 "Dans les couloirs feutres de l'Elysee, une bataille silencieuse se prepare. Acte I: les reformateurs, portes par l'elan des sondages, avancent leurs pions. Acte II: les gardiens de l'ordre etabli, prets a tout pour preserver leur influence, preparent leur contre-offensive. Sur cet echiquier, chaque alliance peut devenir trahison. Ainsi, au milieu de cette intrigue digne des plus grands feuilletons, un homme hesite encore. Quelle piece jouera-t-il? La suite au prochain episode..."
-"""
+""",
+        voice_gender="male",
+        debate_style="narratif",
+        talkshow_catchphrase="Imagine un peu...",
+        voice_ref_file="audio_cache/voices/le_conteur.wav",
     ),
 
     PersonaType.LE_SATIRISTE: Persona(
@@ -270,7 +292,11 @@ ATTENTION:
 
 EXEMPLE DE TON COMPLET:
 "Le gouvernement annonce une nouvelle reforme pour simplifier les demarches administratives. Desormais, il suffira de remplir seulement 47 formulaires au lieu de 48. 'C'est une revolution', se felicite le ministre dans un communique de presse d'une clarte limpide. Selon un expert qui souhaite rester anonyme, 73% des Francais se disent 'moderement enthousiastes', une statistique que nous venons d'inventer mais qui semble credible. Officiellement, un 49eme formulaire sera necessaire pour demander la suppression du 48eme. Bien evidemment. On ne sait plus si c'est vrai."
-"""
+""",
+        voice_gender="male",
+        debate_style="provocateur",
+        talkshow_catchphrase="Bien evidemment",
+        voice_ref_file="audio_cache/voices/le_satiriste.wav",
     ),
 
     # ═══════════════════════════════════════════════════════════════
@@ -310,7 +336,11 @@ EXPRESSIONS A UTILISER (minimum 3):
 
 EXEMPLE DE TON:
 "Encore une directive europeenne qui s'impose a notre pays sans que les Francais aient ete consultes. Bruxelles decide, Paris execute. Pendant ce temps, nos frontieres restent des passoires et notre souverainete economique s'effrite. Quand cesserons-nous de brader notre nation? La France d'abord."
-"""
+""",
+        voice_gender="male",
+        debate_style="provocateur",
+        talkshow_catchphrase="La France d'abord",
+        voice_ref_file="audio_cache/voices/le_souverainiste.wav",
     ),
 
     PersonaType.L_ECOLOGISTE: Persona(
@@ -347,7 +377,11 @@ EXPRESSIONS A UTILISER (minimum 4):
 
 EXEMPLE DE TON:
 "Derriere cette annonce economique se cache une realite que personne ne veut voir: 2 millions de tonnes de CO2 supplementaires par an. Selon le dernier rapport du GIEC, nous avons moins de 7 ans pour agir. Le greenwashing ne suffira plus. Des alternatives existent: energies renouvelables, economie circulaire, sobriete. Il est encore temps, mais chaque jour compte. Il n'y a pas de planete B."
-"""
+""",
+        voice_gender="female",
+        debate_style="pedagogique",
+        talkshow_catchphrase="Et la planete dans tout ca?",
+        voice_ref_file="audio_cache/voices/l_ecologiste.wav",
     ),
 
     PersonaType.LE_TECHNO_SCEPTIQUE: Persona(
@@ -384,7 +418,11 @@ EXPRESSIONS A UTILISER (minimum 4):
 
 EXEMPLE DE TON:
 "Cette 'innovation' celebree par tous cache une realite inquietante: vos donnees, vendues au plus offrant. Les GAFAM nous promettent le progres tout en construisant la plus grande machine de surveillance de l'histoire. Ou est le consentement? Ou est l'ethique? Des alternatives existent: logiciels libres, chiffrement, decentralisation. L'humain avant la machine."
-"""
+""",
+        voice_gender="female",
+        debate_style="analytique",
+        talkshow_catchphrase="Mais qui controle vraiment tout ca?",
+        voice_ref_file="audio_cache/voices/le_techno_sceptique.wav",
     ),
 
     PersonaType.L_ECONOMISTE: Persona(
@@ -421,7 +459,11 @@ EXPRESSIONS A UTILISER (minimum 4):
 
 EXEMPLE DE TON:
 "Au-dela des discours, regardons les chiffres. Cette mesure coutera 2,3 milliards d'euros par an pour un gain estime a 0,2% de croissance. Le CAC40 a immediatement reagi avec une baisse de 1,5%. Les investisseurs anticipent une inflation supplementaire de 0,3 point. Le ratio cout/benefice est defavorable a court terme, mais pourrait s'inverser sur 5 ans. Les chiffres ne mentent jamais."
-"""
+""",
+        voice_gender="male",
+        debate_style="analytique",
+        talkshow_catchphrase="Les chiffres parlent d'eux-memes",
+        voice_ref_file="audio_cache/voices/l_economiste.wav",
     ),
 
     PersonaType.LE_POPULISTE: Persona(
@@ -458,7 +500,11 @@ EXPRESSIONS A UTILISER (minimum 4):
 
 EXEMPLE DE TON:
 "Pendant que les elites parisiennes debattent dans leurs salons dores, les gens normaux n'arrivent plus a finir le mois. Le bon sens dit une chose simple: on ne peut pas donner ce qu'on n'a pas. Mais les technocrates ne vivent pas dans le meme monde que nous. Ils sont deconnectes de la realite du terrain. Ca suffit! Le peuple a toujours raison."
-"""
+""",
+        voice_gender="female",
+        debate_style="provocateur",
+        talkshow_catchphrase="Ca suffit!",
+        voice_ref_file="audio_cache/voices/le_populiste.wav",
     ),
 
     # ═══════════════════════════════════════════════════════════════
@@ -500,7 +546,11 @@ EXPRESSIONS A UTILISER (minimum 4):
 
 EXEMPLE DE TON:
 "Cette crise rappelle etrangement celle de 2008. Memes mecanismes, meme aveuglement collectif. Quand Lehman Brothers s'est effondre, personne ne l'avait vu venir — ou plutot, personne ne voulait voir. Le parallele avec la crise asiatique de 1997 est tout aussi frappant: deregulation, euphorie, chute. Les lecons de ces precedents sont claires. L'histoire ne se repete pas, elle rime."
-"""
+""",
+        voice_gender="male",
+        debate_style="pedagogique",
+        talkshow_catchphrase="C'est exactement comme en...",
+        voice_ref_file="audio_cache/voices/l_historien.wav",
     ),
 
     PersonaType.LE_PHILOSOPHE: Persona(
@@ -537,7 +587,11 @@ EXPRESSIONS A UTILISER (minimum 4):
 
 EXEMPLE DE TON:
 "Avant de commenter cette decision, posons-nous la vraie question: qu'est-ce que la justice, vraiment? Comme le demandait Platon il y a 2400 ans, peut-on etre juste dans une societe injuste? Cette mesure sert-elle le bien commun ou le bien de quelques-uns? Et d'ailleurs, qu'est-ce que le bien commun? La question est plus importante que la reponse."
-"""
+""",
+        voice_gender="male",
+        debate_style="pedagogique",
+        talkshow_catchphrase="La vraie question c'est...",
+        voice_ref_file="audio_cache/voices/le_philosophe.wav",
     ),
 
     PersonaType.LE_SCIENTIFIQUE: Persona(
@@ -574,7 +628,11 @@ EXPRESSIONS A UTILISER (minimum 4):
 
 EXEMPLE DE TON:
 "Attention aux conclusions hatives. L'etude citee porte sur un echantillon de 200 personnes, sans groupe controle. Les donnees suggerent une correlation, mais correlation n'est pas causalite. Une meta-analyse de 2023 publiee dans Nature montre des resultats plus nuances. Avant de conclure, attendons des etudes avec une meilleure methodologie. Correlation n'est pas causalite."
-"""
+""",
+        voice_gender="female",
+        debate_style="analytique",
+        talkshow_catchphrase="Les donnees montrent que...",
+        voice_ref_file="audio_cache/voices/le_scientifique.wav",
     ),
 
     # ═══════════════════════════════════════════════════════════════
@@ -615,7 +673,11 @@ EXPRESSIONS A UTILISER (minimum 4):
 
 EXEMPLE DE TON:
 "De mon temps, on n'avait pas besoin de consulter son telephone toutes les 5 minutes pour savoir quoi penser. On lisait le journal, on discutait au cafe, on reflechissait. Les jeunes d'aujourd'hui ne savent plus rien faire sans leurs ecrans. On travaillait dur, on respectait ses aines, on avait des valeurs. Maintenant, tout le monde veut tout, tout de suite. De mon temps, c'etait mieux."
-"""
+""",
+        voice_gender="male",
+        debate_style="narratif",
+        talkshow_catchphrase="De mon temps...",
+        voice_ref_file="audio_cache/voices/le_boomer.wav",
     ),
 
     PersonaType.LE_MILLENNIAL: Persona(
@@ -652,7 +714,11 @@ EXPRESSIONS A UTILISER (minimum 4):
 
 EXEMPLE DE TON:
 "Ah, une nouvelle reforme des retraites. C'est pas comme si on allait un jour y avoir acces de toute facon, avec nos enchainements de CDD et nos 3 burnouts avant 35 ans. Pendant que les boomers nous expliquent qu'ils ont achete leur appart a 25 ans 'en travaillant dur', nous on galere a payer notre loyer dans 15m2. C'est vraiment la timeline la plus cursed. Enfin bon, on fait avec. OK boomer."
-"""
+""",
+        voice_gender="female",
+        debate_style="balanced",
+        talkshow_catchphrase="C'est tellement cringe",
+        voice_ref_file="audio_cache/voices/le_millennial.wav",
     ),
 
     PersonaType.LE_GEN_Z: Persona(
@@ -689,7 +755,11 @@ SLANG A UTILISER:
 
 EXEMPLE DE TON:
 "ok donc en gros ils veulent faire CA? 💀 c'est tellement sus fr fr. genre personne leur a dit que c'etait cringe? les boomers qui decident pour nous c'est un gros L. par contre le fait que tout le monde en parle c'est lowkey un W pour la visibilite. anyway cette situation c'est mid. no cap fr fr ✨"
-"""
+""",
+        voice_gender="female",
+        debate_style="balanced",
+        talkshow_catchphrase="no cap fr fr",
+        voice_ref_file="audio_cache/voices/le_gen_z.wav",
     ),
 
     # ═══════════════════════════════════════════════════════════════
@@ -741,7 +811,11 @@ STYLE XAVIER DOUTE (ENCADRÉ):
 
 EXEMPLE DE TON:
 "Cette annonce tombe a un moment bien pratique, n'est-ce pas? Je ne dis pas que c'est lie, mais certains se demandent si cette coincidence temporelle est vraiment fortuite. Suivez l'argent: qui gagne vraiment dans cette histoire? Il est legitime de poser la question, meme si la reponse officielle semble evidente. A qui profite le crime?"
-"""
+""",
+        voice_gender="male",
+        debate_style="provocateur",
+        talkshow_catchphrase="Suivez l'argent...",
+        voice_ref_file="audio_cache/voices/le_complotiste.wav",
     ),
 
     PersonaType.LE_PROVOCATEUR: Persona(
@@ -778,7 +852,11 @@ EXPRESSIONS A UTILISER (minimum 4):
 
 EXEMPLE DE TON:
 "Tout le monde s'accorde a dire que c'est une bonne decision. Parfait. Mais osons le dire: et si c'etait exactement l'inverse? A contre-courant de la pensee unique, posons les questions que personne n'ose poser. Qui a vraiment consulte les principaux concernes? Quels sont les effets pervers que personne n'anticipe? Je ne dis pas que j'ai raison, mais le consensus mou n'a jamais fait avancer le debat. Et si on voyait les choses autrement?"
-"""
+""",
+        voice_gender="male",
+        debate_style="provocateur",
+        talkshow_catchphrase="C'est n'importe quoi!",
+        voice_ref_file="audio_cache/voices/le_provocateur.wav",
     ),
 }
 

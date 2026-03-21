@@ -59,6 +59,40 @@ class AdvancedNewsScraper:
     MAX_RETRIES = 3
     RETRY_BACKOFF_BASE = 2.0  # Backoff exponentiel: 2s, 4s, 8s
 
+    # Press sources subject to neighboring rights (Directive EU 2019/790)
+    # For these sources, we only keep title + URL + source_name (no full content)
+    # Alternative sources (Reddit, HN, ArXiv, Wikipedia, Bluesky) keep full content
+    PRESS_SOURCES = {
+        # French press
+        "lemonde.fr", "lefigaro.fr", "liberation.fr", "lesechos.fr",
+        "leparisien.fr", "francetvinfo.fr", "lequipe.fr",
+        # US press
+        "nytimes.com", "washingtonpost.com", "cnn.com", "bloomberg.com",
+        "apnews.com", "reuters.com", "axios.com", "thehill.com",
+        "huffpost.com", "breitbart.com", "usatoday.com", "latimes.com",
+        "chicagotribune.com", "nypost.com", "politico.com",
+        # UK press
+        "theguardian.com", "bbc.com", "bbc.co.uk", "ft.com",
+        "thetimes.co.uk", "telegraph.co.uk", "dailymail.co.uk",
+        "independent.co.uk", "mirror.co.uk", "sky.com",
+        # German press
+        "spiegel.de", "bild.de", "dw.com", "sueddeutsche.de",
+        "faz.net", "zeit.de",
+        # Spanish press
+        "elpais.com", "elmundo.es", "marca.com", "lavanguardia.com",
+        "eluniversal.com.mx", "abc.es",
+        # Italian press
+        "corriere.it", "repubblica.it",
+        # Other press
+        "timesofindia.indiatimes.com", "aljazeera.com",
+        "smh.com.au", "abc.net.au",
+        # Tech press (editorial content)
+        "techcrunch.com", "theverge.com", "wired.com", "frandroid.com",
+        "arstechnica.com", "technologyreview.com", "scientificamerican.com",
+        # Science press
+        "sciencedaily.com",
+    }
+
 
     # Native RSS feeds for sources that block direct scraping
     RSS_FEEDS = {
@@ -1641,6 +1675,29 @@ class AdvancedNewsScraper:
             logger.debug(f"Google News RSS fallback failed for {url[:50]}: {e}")
             return None
 
+    @staticmethod
+    def _enforce_title_only(articles: List[Dict[str, Any]], source_domain: str) -> List[Dict[str, Any]]:
+        """
+        For press sources (Directive EU 2019/790), strip full content.
+        Keep only: title, URL, source_name, published_at, source_domain.
+        This ensures compliance with neighboring rights legislation.
+        """
+        if source_domain not in AdvancedNewsScraper.PRESS_SOURCES:
+            return articles
+
+        for article in articles:
+            title = article.get("raw_title", article.get("title", ""))
+            # Replace raw_text with just the title (for embedding purposes)
+            article["raw_text"] = title
+            article["summary"] = title[:300]
+            article["is_title_only"] = True
+            article["is_partial_content"] = True
+            # Remove any full content that may have been scraped
+            article.pop("full_text", None)
+
+        logger.info(f"📰 Press mode (title+URL only) applied for {source_domain}: {len(articles)} articles")
+        return articles
+
     async def scrape_source(
         self,
         source_domain: str,
@@ -1673,7 +1730,7 @@ class AdvancedNewsScraper:
                 )
                 if rss_articles:
                     logger.success(f"✅ RSS bypass success for {source_domain}: {len(rss_articles)} articles")
-                    return rss_articles
+                    return self._enforce_title_only(rss_articles, source_domain)
                 logger.warning(f"RSS feed empty for {source_domain}, falling back to direct scraping")
             except Exception as rss_err:
                 logger.warning(f"RSS feed failed for {source_domain}: {rss_err}, falling back to direct scraping")
@@ -1741,7 +1798,8 @@ class AdvancedNewsScraper:
 
         # Wrap entire operation with source timeout
         try:
-            return await asyncio.wait_for(_scrape_source_internal(), timeout=source_timeout)
+            articles = await asyncio.wait_for(_scrape_source_internal(), timeout=source_timeout)
+            return self._enforce_title_only(articles, source_domain)
         except SourceBlockedError:
             # Re-raise to let pipeline_manager handle blacklisting
             raise

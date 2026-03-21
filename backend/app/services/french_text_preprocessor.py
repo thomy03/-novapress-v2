@@ -306,19 +306,50 @@ def smart_split_sentences(text: str) -> List[str]:
     return result
 
 
+def fix_plus_pronunciation(text: str) -> str:
+    """Fix French 'plus' pronunciation: silent S vs pronounced S.
+
+    Rules:
+    - S is SILENT (negative/comparative): ne...plus, plus de, plus que, plus rien, plus jamais
+    - S is PRONOUNCED (additive/superlative): en plus, de plus, le plus, au plus, non plus
+    - We replace silent-S cases with 'plu' so TTS doesn't aspirate the S
+    """
+    # 1. Negative "ne...plus" — S is silent → "plu"
+    # Handles: "n'est plus", "ne veut plus", "n'a plus", "ne ... plus"
+    text = re.sub(
+        r"\bn[e'][\w\s]{1,30}\bplus\b",
+        lambda m: m.group(0)[:-4] + "plu",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    # 2. "plus de" / "plus que" / "plus rien" / "plus jamais" / "plus personne"
+    # (comparative/negative — S silent) BUT NOT after "en/de/le/au"
+    text = re.sub(
+        r"(?<!\ben )(?<!\bde )(?<!\ble )(?<!\bau )(?<!\bnon )\bplus\s+(de|que|rien|jamais|personne|aucun|guère)\b",
+        lambda m: "plu " + m.group(1),
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    return text
+
+
 def preprocess_french(text: str) -> str:
     """Full preprocessing pipeline for French TTS.
 
     Order matters:
     1. Expand abbreviations (before numbers, since some contain digits)
     2. Expand numbers (after abbreviations are resolved)
-    3. Normalize punctuation (last, to clean up)
+    3. Fix pronunciation edge cases (plus, etc.)
+    4. Normalize punctuation (last, to clean up)
     """
     if not text or len(text.strip()) < 2:
         return text
 
     text = expand_abbreviations(text)
     text = expand_numbers(text)
+    text = fix_plus_pronunciation(text)
     text = normalize_punctuation(text)
 
     return text
