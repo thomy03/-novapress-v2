@@ -368,7 +368,7 @@ export function StatCard({ label, value, change, icon, className = '' }: StatCar
               fontWeight: 700,
               color: theme.text,
               lineHeight: 1,
-              fontFamily: 'var(--font-mono)',
+              fontFamily: 'var(--font-label)',
             }}
           >
             {value}

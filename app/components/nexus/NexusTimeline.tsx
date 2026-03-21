@@ -56,13 +56,13 @@ export default function NexusTimeline({ markers, y, width, paddingX }: NexusTime
       />
 
       {/* Zone labels */}
-      <text x={startX + 20} y={lineY - 18} fontSize="9" fill="#06B6D4" fontFamily="var(--font-mono)" letterSpacing="0.1em" opacity={0.6}>
+      <text x={startX + 20} y={lineY - 18} fontSize="9" fill="#06B6D4" fontFamily="var(--font-label)" letterSpacing="0.1em" opacity={0.6}>
         FONDATIONS
       </text>
-      <text x={nowX - 30} y={lineY - 18} fontSize="9" fill="#3B82F6" fontFamily="var(--font-mono)" letterSpacing="0.1em" opacity={0.6}>
+      <text x={nowX - 30} y={lineY - 18} fontSize="9" fill="#3B82F6" fontFamily="var(--font-label)" letterSpacing="0.1em" opacity={0.6}>
         ACTUEL
       </text>
-      <text x={endX - 80} y={lineY - 18} fontSize="9" fill="#F59E0B" fontFamily="var(--font-mono)" letterSpacing="0.1em" opacity={0.6}>
+      <text x={endX - 80} y={lineY - 18} fontSize="9" fill="#F59E0B" fontFamily="var(--font-label)" letterSpacing="0.1em" opacity={0.6}>
         PROJECTIONS
       </text>
 
@@ -108,7 +108,7 @@ export default function NexusTimeline({ markers, y, width, paddingX }: NexusTime
                 fontSize="10"
                 fontWeight="700"
                 fill="#3B82F6"
-                fontFamily="var(--font-mono)"
+                fontFamily="var(--font-label)"
               >
                 NOW
               </text>
@@ -123,7 +123,7 @@ export default function NexusTimeline({ markers, y, width, paddingX }: NexusTime
               textAnchor="middle"
               fontSize="8"
               fill="#64748B"
-              fontFamily="var(--font-mono)"
+              fontFamily="var(--font-label)"
             >
               {marker.label}
             </text>

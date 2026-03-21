@@ -562,7 +562,7 @@ export default function NexusCanvas({ synthesisId, onClose }: NexusCanvasProps) 
           <div style={styles.loadingOrb}>
             <div style={styles.loadingOrbInner} />
           </div>
-          <p style={{ color: '#64748B', fontSize: '13px', marginTop: '16px', fontFamily: 'var(--font-mono)' }}>
+          <p style={{ color: '#64748B', fontSize: '13px', marginTop: '16px', fontFamily: 'var(--font-label)' }}>
             INITIALISATION DU NEXUS...
           </p>
         </div>
@@ -665,13 +665,13 @@ export default function NexusCanvas({ synthesisId, onClose }: NexusCanvasProps) 
           />
 
           {/* Zone headers */}
-          <text x={canvasSize.width * 0.15} y={45} textAnchor="middle" fontSize="11" fill="#06B6D4" fontFamily="var(--font-mono)" letterSpacing="0.15em" opacity={0.5}>
+          <text x={canvasSize.width * 0.15} y={45} textAnchor="middle" fontSize="11" fill="#06B6D4" fontFamily="var(--font-label)" letterSpacing="0.15em" opacity={0.5}>
             FONDATIONS HISTORIQUES
           </text>
-          <text x={canvasSize.width * 0.50} y={45} textAnchor="middle" fontSize="11" fill="#3B82F6" fontFamily="var(--font-mono)" letterSpacing="0.15em" opacity={0.5}>
+          <text x={canvasSize.width * 0.50} y={45} textAnchor="middle" fontSize="11" fill="#3B82F6" fontFamily="var(--font-label)" letterSpacing="0.15em" opacity={0.5}>
             CHAINES CAUSALES
           </text>
-          <text x={canvasSize.width * 0.82} y={45} textAnchor="middle" fontSize="11" fill="#F59E0B" fontFamily="var(--font-mono)" letterSpacing="0.15em" opacity={0.5}>
+          <text x={canvasSize.width * 0.82} y={45} textAnchor="middle" fontSize="11" fill="#F59E0B" fontFamily="var(--font-label)" letterSpacing="0.15em" opacity={0.5}>
             SCENARIOS PREDICTIFS
           </text>
 
@@ -774,7 +774,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     letterSpacing: '0.15em',
     color: '#3B82F6',
-    fontFamily: 'var(--font-mono)',
+    fontFamily: 'var(--font-label)',
     padding: '4px 10px',
     border: '1px solid rgba(59, 130, 246, 0.3)',
     borderRadius: '4px',
@@ -782,7 +782,7 @@ const styles: Record<string, React.CSSProperties> = {
   headerStats: {
     fontSize: '11px',
     color: '#64748B',
-    fontFamily: 'var(--font-mono)',
+    fontFamily: 'var(--font-label)',
   },
   headerRight: {
     display: 'flex',
@@ -833,7 +833,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '6px',
     fontSize: '10px',
     color: '#94A3B8',
-    fontFamily: 'var(--font-mono)',
+    fontFamily: 'var(--font-label)',
   },
   legendDot: {
     display: 'inline-block',

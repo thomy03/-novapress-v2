@@ -1,63 +1,44 @@
 'use client';
 
 /**
- * HeroSynthesis - Large hero card for the main synthesis on homepage
- * Features: Editorial SVG illustration, Category badge, Georgia title, MiniNovaLine sparkline, chapo, metadata, CTA
+ * HeroSynthesis - "Intelligence Terminal" premium hero card
+ * Two-column layout: 60% content + 40% image, sharp editorial style
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useTheme } from '@/app/contexts/ThemeContext';
-import { MiniNovaLine } from '@/app/components/novaline/MiniNovaLine';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+// Category colors (editorial palette)
+const CATEGORY_COLORS: Record<string, string> = {
+  MONDE: '#2563EB',
+  POLITIQUE: '#DC2626',
+  ECONOMIE: '#059669',
+  TECH: '#7C3AED',
+  CULTURE: '#D97706',
+  SPORT: '#0891B2',
+  SCIENCES: '#4F46E5',
+};
 
-// Minimal SVG sanitizer
-const DANGEROUS_ELEMENTS = new Set([
-  'script', 'foreignobject', 'iframe', 'embed', 'object',
-  'applet', 'form', 'input', 'textarea', 'button',
-  'link', 'meta', 'base',
-]);
-const DANGEROUS_CSS_RE = /url\s*\(|expression\s*\(|@import|behavior\s*:|javascript:/gi;
-
-function sanitizeSvg(raw: string): string {
-  try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(raw, 'image/svg+xml');
-    if (doc.querySelector('parsererror')) return '';
-
-    function sanitizeNode(node: Element) {
-      for (const child of Array.from(node.children)) {
-        if (DANGEROUS_ELEMENTS.has(child.tagName.toLowerCase())) { child.remove(); continue; }
-        for (const attr of Array.from(child.attributes)) {
-          if (attr.name.toLowerCase().startsWith('on')) child.removeAttribute(attr.name);
-          if ((attr.name === 'href' || attr.name === 'xlink:href') && /javascript\s*:/i.test(attr.value))
-            child.removeAttribute(attr.name);
-        }
-        if (child.tagName.toLowerCase() === 'style' && child.textContent)
-          child.textContent = child.textContent.replace(DANGEROUS_CSS_RE, '/* removed */');
-        sanitizeNode(child);
-      }
-    }
-
-    const svgEl = doc.querySelector('svg');
-    if (!svgEl) return '';
-    sanitizeNode(svgEl);
-    return new XMLSerializer().serializeToString(svgEl);
-  } catch { return ''; }
+function getTransparencyColor(score: number): string {
+  if (score >= 70) return '#059669';
+  if (score >= 40) return '#D97706';
+  return '#DC2626';
 }
 
-// Category colors (newspaper style - same as TrendingTopics)
-const CATEGORY_COLORS: Record<string, string> = {
-  MONDE: '#DC2626',
-  POLITIQUE: '#DC2626',
-  ECONOMIE: '#F59E0B',
-  TECH: '#2563EB',
-  CULTURE: '#8B5CF6',
-  SPORT: '#10B981',
-  SCIENCES: '#06B6D4',
-};
+function formatTimeAgo(dateString: string): string {
+  const now = Date.now();
+  const then = new Date(dateString).getTime();
+  const diffMs = now - then;
+  const minutes = Math.floor(diffMs / 60000);
+
+  if (minutes < 1) return "A L'INSTANT";
+  if (minutes < 60) return `${minutes}m AGO`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h AGO`;
+  const days = Math.floor(hours / 24);
+  return `${days}d AGO`;
+}
 
 export interface SynthesisBrief {
   id: string;
@@ -68,6 +49,8 @@ export interface SynthesisBrief {
   readingTime: number;
   createdAt: string;
   complianceScore?: number;
+  transparencyScore?: number;
+  transparencyLabel?: string;
   imageUrl?: string;
 }
 
@@ -75,166 +58,268 @@ interface HeroSynthesisProps {
   synthesis: SynthesisBrief;
 }
 
+const LABEL_FONT =
+  "'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+
 export function HeroSynthesis({ synthesis }: HeroSynthesisProps) {
-  const { theme } = useTheme();
-  const router = useRouter();
-  const [editorialSvg, setEditorialSvg] = useState<string>('');
-
-  useEffect(() => {
-    if (!synthesis.id) return;
-    fetch(`${API_URL}/api/syntheses/by-id/${synthesis.id}/editorial-svg`)
-      .then(res => res.ok ? res.text() : '')
-      .then(svg => { if (svg) setEditorialSvg(sanitizeSvg(svg)); })
-      .catch(() => {});
-  }, [synthesis.id]);
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('fr-FR', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
+  const { theme, darkMode } = useTheme();
+  const [hovered, setHovered] = useState(false);
 
   const categoryColor = CATEGORY_COLORS[synthesis.category || ''] || '#6B7280';
+  const transparencyScore = synthesis.transparencyScore ?? synthesis.complianceScore ?? 0;
+  const transparencyColor = getTransparencyColor(transparencyScore);
 
   return (
-    <article
-      onClick={() => router.push(`/synthesis/${synthesis.id}`)}
-      style={{
-        backgroundColor: theme.card,
-        border: `1px solid ${theme.border}`,
-        borderRadius: '4px',
-        padding: 'clamp(16px, 4vw, 32px)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '16px',
-        cursor: 'pointer',
-      }}
+    <Link
+      href={`/synthesis/${synthesis.id}`}
+      style={{ display: 'block', textDecoration: 'none', marginBottom: '48px' }}
     >
-      {/* Hero illustration: editorial SVG first, fallback to fal.ai image */}
-      {editorialSvg ? (
-        <div style={{
+      <article
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        style={{
+          display: 'flex',
+          flexDirection: 'row',
           width: '100%',
-          maxHeight: '320px',
+          minHeight: '420px',
+          border: `1px solid ${theme.border}`,
+          borderRadius: 0,
           overflow: 'hidden',
-          borderRadius: '2px',
-        }}>
+          backgroundColor: theme.bgSecondary,
+          cursor: 'pointer',
+          transition: 'box-shadow 400ms ease, transform 400ms ease',
+          boxShadow: hovered
+            ? darkMode
+              ? '0 8px 32px rgba(0,0,0,0.5)'
+              : '0 8px 32px rgba(0,0,0,0.08)'
+            : 'none',
+          transform: hovered ? 'translateY(-2px)' : 'translateY(0)',
+        }}
+      >
+        {/* LEFT COLUMN - Content (60%) */}
+        <div
+          style={{
+            flex: '0 0 60%',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            padding: '48px 52px',
+          }}
+        >
+          {/* Category Badge */}
+          <div style={{ marginBottom: '16px' }}>
+            <span
+              style={{
+                display: 'inline-block',
+                padding: '4px 12px',
+                fontSize: '10px',
+                fontFamily: LABEL_FONT,
+                fontWeight: 700,
+                letterSpacing: '0.1em',
+                textTransform: 'uppercase',
+                color: '#FFFFFF',
+                backgroundColor: categoryColor,
+                lineHeight: 1.6,
+              }}
+            >
+              {synthesis.category || 'ACTUALITE'}
+            </span>
+          </div>
+
+          {/* Source Count */}
+          <p
+            style={{
+              margin: '0 0 14px 0',
+              fontSize: '10px',
+              fontFamily: LABEL_FONT,
+              fontWeight: 500,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              color: theme.textTertiary,
+            }}
+          >
+            SYNTHESE DE {synthesis.numSources} SOURCE
+            {synthesis.numSources > 1 ? 'S' : ''}
+          </p>
+
+          {/* Title */}
+          <h1
+            style={{
+              margin: '0 0 18px 0',
+              fontSize: 'clamp(32px, 3.5vw, 56px)',
+              fontFamily: 'Georgia, "Times New Roman", serif',
+              fontWeight: 700,
+              lineHeight: 1.05,
+              letterSpacing: '-0.02em',
+              color: theme.text,
+              display: '-webkit-box',
+              WebkitLineClamp: 3,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+            }}
+          >
+            {synthesis.title}
+          </h1>
+
+          {/* Summary */}
+          {synthesis.summary && (
+            <p
+              style={{
+                margin: '0 0 32px 0',
+                fontSize: '16px',
+                fontFamily: 'Georgia, "Times New Roman", serif',
+                lineHeight: 1.6,
+                color: theme.textSecondary,
+                display: '-webkit-box',
+                WebkitLineClamp: 3,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+                maxWidth: '580px',
+              }}
+            >
+              {synthesis.summary}
+            </p>
+          )}
+
+          {/* Bottom Metrics Row */}
           <div
-            dangerouslySetInnerHTML={{ __html: editorialSvg }}
-            style={{ width: '100%' }}
-          />
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '28px',
+              marginTop: 'auto',
+              paddingTop: '12px',
+            }}
+          >
+            {/* Transparency Score */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '36px',
+                  height: '36px',
+                  border: `2px solid ${transparencyColor}`,
+                  fontSize: '14px',
+                  fontFamily: LABEL_FONT,
+                  fontWeight: 700,
+                  color: transparencyColor,
+                  lineHeight: 1,
+                }}
+              >
+                {transparencyScore}
+              </span>
+              <span
+                style={{
+                  fontSize: '10px',
+                  fontFamily: LABEL_FONT,
+                  fontWeight: 600,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  color: theme.textTertiary,
+                }}
+              >
+                TRANSPARENCY
+              </span>
+            </div>
+
+            {/* Separator */}
+            <span
+              style={{
+                width: '1px',
+                height: '20px',
+                backgroundColor: theme.border,
+              }}
+            />
+
+            {/* Reading Time */}
+            {synthesis.readingTime > 0 && (
+              <>
+                <span
+                  style={{
+                    fontSize: '10px',
+                    fontFamily: LABEL_FONT,
+                    fontWeight: 600,
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    color: theme.textTertiary,
+                  }}
+                >
+                  {synthesis.readingTime} MINS
+                </span>
+
+                <span
+                  style={{
+                    width: '1px',
+                    height: '20px',
+                    backgroundColor: theme.border,
+                  }}
+                />
+              </>
+            )}
+
+            {/* Last Updated */}
+            <span
+              style={{
+                fontSize: '10px',
+                fontFamily: LABEL_FONT,
+                fontWeight: 600,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                color: theme.textTertiary,
+              }}
+            >
+              {formatTimeAgo(synthesis.createdAt)}
+            </span>
+          </div>
         </div>
-      ) : synthesis.imageUrl ? (
-        <div style={{
-          width: '100%',
-          maxHeight: '260px',
-          aspectRatio: '3 / 2',
-          overflow: 'hidden',
-          borderRadius: '2px',
-          backgroundColor: '#F9FAFB',
-        }}>
+
+        {/* RIGHT COLUMN - Image (40%) */}
+        <div
+          style={{
+            flex: '0 0 40%',
+            position: 'relative',
+            overflow: 'hidden',
+          }}
+        >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={synthesis.imageUrl}
-            alt={synthesis.title}
-            loading="eager"
+            src={
+              synthesis.imageUrl ||
+              `https://picsum.photos/800/600?random=${synthesis.id}`
+            }
+            alt={synthesis.title || 'Synthesis image'}
             style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
               width: '100%',
               height: '100%',
               objectFit: 'cover',
-              display: 'block',
+              transition: 'transform 700ms cubic-bezier(0.4, 0, 0.2, 1)',
+              transform: hovered ? 'scale(1.05)' : 'scale(1)',
             }}
+            loading="eager"
           />
+
+          {/* Dark mode subtle overlay */}
+          {darkMode && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                backgroundColor: 'rgba(0,0,0,0.15)',
+                pointerEvents: 'none',
+              }}
+            />
+          )}
         </div>
-      ) : null}
-
-      {/* Category badge */}
-      {synthesis.category && (
-        <span
-          style={{
-            alignSelf: 'flex-start',
-            fontSize: '11px',
-            fontWeight: 700,
-            textTransform: 'uppercase',
-            letterSpacing: '1px',
-            padding: '6px 12px',
-            borderRadius: '2px',
-            backgroundColor: `${categoryColor}15`,
-            color: categoryColor,
-          }}
-        >
-          {synthesis.category}
-        </span>
-      )}
-
-      {/* Title - Georgia font, large */}
-      <h1
-        style={{
-          fontFamily: 'Georgia, "Times New Roman", serif',
-          fontSize: 'clamp(22px, 5vw, 32px)',
-          fontWeight: 700,
-          lineHeight: 1.25,
-          color: theme.text,
-          margin: 0,
-        }}
-      >
-        {synthesis.title}
-      </h1>
-
-      {/* MiniNovaLine sparkline */}
-      <MiniNovaLine
-        synthesisId={synthesis.id}
-        category={synthesis.category || 'DEFAULT'}
-        height={45}
-        showLabel={true}
-      />
-
-      {/* Chapo - summary preview */}
-      <p
-        style={{
-          fontSize: '17px',
-          lineHeight: 1.7,
-          color: theme.textSecondary,
-          margin: 0,
-          display: '-webkit-box',
-          WebkitLineClamp: 4,
-          WebkitBoxOrient: 'vertical',
-          overflow: 'hidden',
-        }}
-      >
-        {synthesis.summary}
-      </p>
-
-      {/* Metadata row */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px',
-          paddingTop: '16px',
-          borderTop: `1px solid ${theme.border}`,
-          fontSize: '13px',
-          color: theme.textSecondary,
-        }}
-      >
-        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <span style={{ color: '#2563EB' }}>&#128196;</span>
-          {synthesis.numSources} sources
-        </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <span style={{ color: '#10B981' }}>&#9201;</span>
-          {synthesis.readingTime} min de lecture
-        </span>
-        <span style={{ marginLeft: 'auto', fontStyle: 'italic' }}>
-          {formatDate(synthesis.createdAt)}
-        </span>
-      </div>
-
-    </article>
+      </article>
+    </Link>
   );
 }
 

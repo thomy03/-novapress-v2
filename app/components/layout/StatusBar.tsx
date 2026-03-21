@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * StatusBar - Terminal-style status bar showing live system stats
- * Displays synthesis count, source count, and last update time
+ * StatusBar - Terminal-style status bar: "PARIS | HH:MM | DAY | LIVE●"
+ * Intelligence Terminal design
  */
 
 import React, { useState, useEffect } from 'react';
@@ -10,10 +10,11 @@ import { useTheme } from '@/app/contexts/ThemeContext';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
+const DAYS_FR = ['DIMANCHE', 'LUNDI', 'MARDI', 'MERCREDI', 'JEUDI', 'VENDREDI', 'SAMEDI'];
+
 interface StatusStats {
   synthesisCount: number;
   sourceCount: number;
-  lastUpdate: string;
   isActive: boolean;
 }
 
@@ -21,23 +22,27 @@ export function StatusBar() {
   const { theme, darkMode } = useTheme();
   const [stats, setStats] = useState<StatusStats>({
     synthesisCount: 0,
-    sourceCount: 0,
-    lastUpdate: '--:--',
+    sourceCount: 53,
     isActive: false,
   });
-  const [loading, setLoading] = useState(true);
+  const [time, setTime] = useState<Date | null>(null);
+
+  useEffect(() => {
+    setTime(new Date());
+    const timer = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        // Try to get stats from trending API (no auth required)
         const [liveCountRes, statusRes] = await Promise.allSettled([
           fetch(`${API_URL}/api/trending/live-count?hours=24`),
           fetch(`${API_URL}/api/admin/status`),
         ]);
 
         let synthesisCount = 0;
-        let sourceCount = 0;
+        let sourceCount = 53;
         let isActive = false;
 
         if (liveCountRes.status === 'fulfilled' && liveCountRes.value.ok) {
@@ -51,99 +56,87 @@ export function StatusBar() {
           sourceCount = data.sources_count || 53;
         }
 
-        const now = new Date();
-        const timeStr = now.toLocaleTimeString('fr-FR', {
-          hour: '2-digit',
-          minute: '2-digit',
-        });
-
-        setStats({
-          synthesisCount,
-          sourceCount: sourceCount || 53, // Fallback to known source count
-          lastUpdate: timeStr,
-          isActive,
-        });
-      } catch (err) {
-        console.error('Failed to fetch status stats:', err);
-      } finally {
-        setLoading(false);
+        setStats({ synthesisCount, sourceCount, isActive });
+      } catch {
+        // Keep defaults
       }
     };
 
     fetchStats();
-
-    // Refresh every 30 seconds
     const interval = setInterval(fetchStats, 30000);
     return () => clearInterval(interval);
   }, []);
 
-  // Terminal-style colors
-  const terminalBg = darkMode ? '#111827' : '#1F2937';
-  const terminalText = darkMode ? '#9CA3AF' : '#D1D5DB';
-  const activeGreen = '#10B981';
+  const labelStyle: React.CSSProperties = {
+    fontFamily: 'var(--font-label)',
+    fontSize: '9px',
+    textTransform: 'uppercase',
+    letterSpacing: '0.15em',
+  };
+
+  const timeStr = time
+    ? time.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+    : '--:--';
+  const dayStr = time ? DAYS_FR[time.getDay()] : '---';
 
   return (
     <div
       className="status-bar-desktop"
       style={{
-        backgroundColor: terminalBg,
-        borderBottom: `1px solid ${darkMode ? '#1F2937' : '#374151'}`,
-        padding: '8px 24px',
+        backgroundColor: darkMode ? '#0E0E0E' : '#0A0A0A',
+        borderBottom: '1px solid rgba(255,255,255,0.05)',
+        padding: '6px 24px',
         display: 'flex',
-        justifyContent: 'center',
+        justifyContent: 'space-between',
         alignItems: 'center',
-        gap: '24px',
-        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-        fontSize: '12px',
-        color: terminalText,
+        position: 'relative',
+        zIndex: 60,
       }}
     >
-      {/* System status indicator */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <span
-          style={{
-            width: '8px',
-            height: '8px',
-            borderRadius: '50%',
-            backgroundColor: stats.isActive ? activeGreen : '#6B7280',
-            boxShadow: stats.isActive ? `0 0 8px ${activeGreen}` : 'none',
-            animation: stats.isActive ? 'statusPulse 2s ease-in-out infinite' : 'none',
-          }}
-        />
-        <span style={{ textTransform: 'uppercase', letterSpacing: '1px' }}>
-          {loading ? 'LOADING...' : stats.isActive ? 'PIPELINE ACTIVE' : 'SYSTEM READY'}
+      {/* Left: Location + Time + Day + LIVE */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '16px',
+        ...labelStyle,
+        color: 'rgba(229, 226, 225, 0.5)',
+      }}>
+        <span>PARIS | {timeStr} | {dayStr}</span>
+        <span style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          color: '#DC2626',
+          fontWeight: 700,
+        }}>
+          LIVE
+          <span
+            className="terminal-pulse"
+            style={{
+              width: '6px',
+              height: '6px',
+              borderRadius: '50%',
+              backgroundColor: '#DC2626',
+            }}
+          />
         </span>
       </div>
 
-      {/* Separator */}
-      <span style={{ color: '#4B5563' }}>|</span>
-
-      {/* Synthesis count */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-        <span style={{ color: '#FBBF24' }}>&#9889;</span>
+      {/* Right: Status + Sources */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '24px',
+        ...labelStyle,
+        color: 'rgba(229, 226, 225, 0.5)',
+      }}>
         <span>
-          <strong style={{ color: '#E5E5E5' }}>{stats.synthesisCount}</strong> synthèses/24h
+          STATUS:{' '}
+          <span style={{ color: stats.isActive ? '#10B981' : '#4CD7F6' }}>
+            {stats.isActive ? 'ACTIVE' : 'OPTIMAL'}
+          </span>
         </span>
-      </div>
-
-      {/* Separator */}
-      <span style={{ color: '#4B5563' }}>|</span>
-
-      {/* Source count */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-        <span style={{ color: '#60A5FA' }}>&#128065;</span>
-        <span>
-          <strong style={{ color: '#E5E5E5' }}>{stats.sourceCount}</strong> sources
-        </span>
-      </div>
-
-      {/* Separator */}
-      <span style={{ color: '#4B5563' }}>|</span>
-
-      {/* Time */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-        <span style={{ color: '#A78BFA' }}>&#128337;</span>
-        <span>{stats.lastUpdate}</span>
+        <span>{stats.sourceCount} SOURCES ACTIVE</span>
       </div>
     </div>
   );

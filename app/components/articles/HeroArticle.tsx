@@ -200,7 +200,7 @@ export const HeroArticle = memo(function HeroArticle({
               {article.author.name}
             </span>
           )}
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '13px' }}>
+          <span style={{ fontFamily: 'var(--font-label)', fontSize: '13px' }}>
             {formatDate(article.publishedAt || article.createdAt)}
           </span>
           {article.readingTime && (

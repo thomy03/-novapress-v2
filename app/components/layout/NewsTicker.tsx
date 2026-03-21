@@ -1,53 +1,31 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { useTheme } from '../../contexts/ThemeContext';
 import { synthesesService } from '../../lib/api/services/syntheses';
 import { Synthesis } from '../../types/api';
 
-// Fallback demo data when API is unavailable
-const FALLBACK_NEWS = [
-  "Technologie : Les dernières actualités tech",
-  "Économie : Actualités économiques en temps réel",
-  "International : Actualités internationales",
-  "Sport : Actualités sportives",
-  "Culture : Actualités culturelles"
-];
-
-// Category emoji mapping
-const CATEGORY_EMOJI: Record<string, string> = {
-  'MONDE': '🌍',
-  'TECH': '💻',
-  'ECONOMIE': '📈',
-  'POLITIQUE': '🏛️',
-  'CULTURE': '🎭',
-  'SPORT': '⚽',
-  'SCIENCES': '🔬'
-};
-
 export function NewsTicker() {
-  const { darkMode } = useTheme();
-  const [breakingNews, setBreakingNews] = useState<string[]>(FALLBACK_NEWS);
+  const [breakingNews, setBreakingNews] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchBreakingNews = useCallback(async () => {
     try {
       const response = await synthesesService.getBreakingSyntheses(8);
-
       if (response.data && response.data.length > 0) {
         const newsItems = response.data.map((synthesis: Synthesis) => {
-          const emoji = CATEGORY_EMOJI[synthesis.category] || '🔴';
-          // Truncate title if too long
-          const title = synthesis.title.length > 100
-            ? synthesis.title.substring(0, 100) + '...'
+          const title = synthesis.title.length > 120
+            ? synthesis.title.substring(0, 120) + '...'
             : synthesis.title;
-          return `${emoji} ${synthesis.category} : ${title}`;
+          return `BREAKING: ${title}`;
         });
         setBreakingNews(newsItems);
       }
-    } catch (error) {
-      console.warn('Failed to fetch breaking news, using fallback:', error);
-      // Keep fallback data
+    } catch {
+      setBreakingNews([
+        'BREAKING: NovaPress AI Intelligence Network Active',
+        'BREAKING: 53 Sources Monitored in Real-Time',
+        'BREAKING: AI Synthesis Engine Operational',
+      ]);
     } finally {
       setIsLoading(false);
     }
@@ -55,84 +33,68 @@ export function NewsTicker() {
 
   useEffect(() => {
     fetchBreakingNews();
-
-    // Refresh every 2 minutes
     const interval = setInterval(fetchBreakingNews, 2 * 60 * 1000);
-
     return () => clearInterval(interval);
   }, [fetchBreakingNews]);
 
-  // Duplicate news items for seamless scrolling
   const duplicatedNews = [...breakingNews, ...breakingNews];
+  const scrollDuration = Math.max(30, breakingNews.length * 8);
 
   return (
     <>
       <div
         role="complementary"
-        aria-label="Dernières actualités"
+        aria-label="Breaking news"
         aria-live="polite"
         style={{
           backgroundColor: '#DC2626',
-          color: 'white',
           overflow: 'hidden',
-          position: 'relative',
-          height: '45px',
-          display: 'flex',
-          alignItems: 'center'
-        }}>
-        <span style={{
-          backgroundColor: darkMode ? '#0f172a' : '#334155',
-          padding: '0 16px',
-          fontWeight: 'bold',
-          zIndex: 1,
-          position: 'absolute',
-          left: 0,
-          height: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          borderRight: '2px solid rgba(255,255,255,0.2)',
-          fontSize: '11px',
-          letterSpacing: '0.5px',
           whiteSpace: 'nowrap',
-        }}>
-          🔴 ACTU
-        </span>
-
+          padding: '5px 0',
+          position: 'relative',
+          zIndex: 55,
+        }}
+      >
         {isLoading ? (
           <div style={{
-            paddingLeft: '80px',
-            fontSize: '14px',
-            opacity: 0.8
+            fontFamily: 'var(--font-label)',
+            fontSize: '10px',
+            fontWeight: 700,
+            color: '#FFFFFF',
+            textTransform: 'uppercase',
+            letterSpacing: '0.15em',
+            paddingLeft: '24px',
           }}>
-            Chargement…
+            SCANNING SOURCES...
           </div>
         ) : (
           <div style={{
             display: 'flex',
-            animation: `scroll ${Math.max(30, breakingNews.length * 8)}s linear infinite`,
-            paddingLeft: '80px',
-            alignItems: 'center',
-            height: '100%'
+            animation: `tickerScroll ${scrollDuration}s linear infinite`,
           }}>
-            {duplicatedNews.map((text, index) => (
-              <span
-                key={index}
-                style={{
-                  paddingRight: '80px',
-                  whiteSpace: 'nowrap',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  cursor: 'default'
-                }}
-              >
-                {text}
-              </span>
-            ))}
+            <div style={{ display: 'flex', flexShrink: 0, alignItems: 'center' }}>
+              {duplicatedNews.map((text, index) => (
+                <span
+                  key={index}
+                  style={{
+                    fontFamily: 'var(--font-label)',
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    color: '#FFFFFF',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.15em',
+                    paddingLeft: '32px',
+                    paddingRight: '32px',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {text}
+                </span>
+              ))}
+            </div>
           </div>
         )}
       </div>
-
-      <style dangerouslySetInnerHTML={{__html: "@keyframes scroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }"}} />
     </>
   );
 }

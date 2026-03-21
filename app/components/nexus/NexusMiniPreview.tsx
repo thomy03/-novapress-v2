@@ -180,7 +180,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '8px 14px',
     fontSize: '10px',
     color: '#64748B',
-    fontFamily: 'var(--font-mono)',
+    fontFamily: 'var(--font-label)',
     borderTop: '1px solid rgba(59, 130, 246, 0.1)',
   },
   statDivider: {
@@ -212,7 +212,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '10px',
     color: '#475569',
     textAlign: 'center' as const,
-    fontFamily: 'var(--font-mono)',
+    fontFamily: 'var(--font-label)',
   },
   emptyState: {
     display: 'flex',

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Fraunces, JetBrains_Mono } from "next/font/google";
+import { Inter, Newsreader, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./components/Providers";
 import Script from "next/script";
@@ -11,16 +11,16 @@ const inter = Inter({
   variable: "--font-inter",
 });
 
-const fraunces = Fraunces({
+const newsreader = Newsreader({
   subsets: ["latin"],
   display: "swap",
-  variable: "--font-fraunces",
+  variable: "--font-newsreader",
 });
 
-const jetbrainsMono = JetBrains_Mono({
+const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
   display: "swap",
-  variable: "--font-mono",
+  variable: "--font-grotesk",
 });
 
 export const viewport: Viewport = {
@@ -74,13 +74,14 @@ export default function RootLayout({
   return (
     <html
       lang="fr"
-      className={`${inter.variable} ${fraunces.variable} ${jetbrainsMono.variable}`}
+      className={`${inter.variable} ${newsreader.variable} ${spaceGrotesk.variable}`}
       suppressHydrationWarning
     >
       <head>
         <meta name="color-scheme" content="dark light" />
         <link rel="apple-touch-icon" href="/icons/icon-192.png" />
         <meta name="mobile-web-app-capable" content="yes" />
+        <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
       </head>
       <body className="antialiased">
         <a href="#main-content" className="skip-to-content">

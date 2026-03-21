@@ -136,7 +136,7 @@ export default function NexusPredictionBranch({ branches, onHover }: NexusPredic
                 fontSize="18"
                 fontWeight="700"
                 fill={colors.path}
-                fontFamily="var(--font-mono)"
+                fontFamily="var(--font-label)"
                 style={{ filter: `drop-shadow(0 0 4px ${colors.glow})` }}
               >
                 {Math.round(branch.prediction.probability * 100)}%
