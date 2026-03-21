@@ -650,15 +650,150 @@ function TopicDashboardPage() {
               }}>
                 {hasCausalData ? (
                   <>
-                    <NexusForceGraph
-                      topic={dashboard.topic}
-                      nodes={causalNodes}
-                      edges={causalEdges}
-                      centralEntity={dashboard.topic}
-                      height={400}
-                      onNodeSelect={handleGraphNodeSelect}
-                      onEdgeSelect={handleGraphEdgeSelect}
-                    />
+                    {/* Intelligence Terminal SVG Causal Graph */}
+                    <div style={{
+                      position: 'relative',
+                      width: '100%',
+                      height: '400px',
+                      background: `radial-gradient(#1A1A1A 1px, transparent 1px)`,
+                      backgroundSize: '24px 24px',
+                      backgroundColor: '#0A0A0A',
+                    }}>
+                      {/* Header labels */}
+                      <div style={{ position: 'absolute', top: '12px', left: '16px', zIndex: 5 }}>
+                        <div style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '0.15em', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' as const, fontFamily: 'var(--font-label)' }}>NEXUS CAUSAL</div>
+                        <div style={{ fontSize: '16px', fontWeight: 700, color: '#FFFFFF', fontFamily: 'var(--font-serif)', fontStyle: 'italic' }}>{dashboard.topic}</div>
+                      </div>
+                      <div style={{ position: 'absolute', top: '12px', right: '16px', zIndex: 5, textAlign: 'right' }}>
+                        <span style={{ fontSize: '9px', fontWeight: 500, letterSpacing: '0.1em', color: 'rgba(255,255,255,0.3)', fontFamily: 'var(--font-label)' }}>
+                          {dashboard.aggregated_causal_graph.total_nodes} noeuds&nbsp;&nbsp;{dashboard.aggregated_causal_graph.total_edges} relations
+                        </span>
+                      </div>
+
+                      {/* SVG Graph */}
+                      <svg width="100%" height="400" viewBox="0 0 800 400" style={{ display: 'block' }}>
+                        {/* Edges */}
+                        {dashboard.aggregated_causal_graph.edges.slice(0, 20).map((edge, idx) => {
+                          const srcNode = causalNodes.find(n => n.id === edge.source);
+                          const tgtNode = causalNodes.find(n => n.id === edge.target);
+                          if (!srcNode || !tgtNode) return null;
+                          const srcIdx = causalNodes.indexOf(srcNode);
+                          const tgtIdx = causalNodes.indexOf(tgtNode);
+                          const total = Math.min(causalNodes.length, 14);
+                          const cols = Math.ceil(Math.sqrt(total));
+                          const sx = 80 + (srcIdx % cols) * (640 / cols);
+                          const sy = 60 + Math.floor(srcIdx / cols) * (280 / Math.ceil(total / cols));
+                          const tx = 80 + (tgtIdx % cols) * (640 / cols);
+                          const ty = 60 + Math.floor(tgtIdx / cols) * (280 / Math.ceil(total / cols));
+                          const relType = edge.relation_type || edge.type || 'causes';
+                          const edgeColor = relType === 'causes' ? '#DC2626'
+                            : relType === 'triggers' ? '#F59E0B'
+                            : relType === 'enables' ? '#10B981' : '#6B7280';
+                          const dashArray = relType === 'triggers' ? '6,4' : relType === 'enables' ? '2,4' : 'none';
+                          return (
+                            <line key={`e-${idx}`} x1={sx} y1={sy} x2={tx} y2={ty}
+                              stroke={edgeColor} strokeWidth={1.2} opacity={0.5}
+                              strokeDasharray={dashArray}
+                              style={{ cursor: 'pointer' }}
+                              onClick={() => handleGraphEdgeSelect?.({
+                                id: edge.id || `e-${idx}`,
+                                causeLabel: srcNode.label, effectLabel: tgtNode.label,
+                                relationType: relType, confidence: edge.confidence || 0.7,
+                                mentionCount: edge.mention_count || 1,
+                                sourceSyntheses: edge.source_syntheses || [],
+                              })}
+                            />
+                          );
+                        })}
+                        {/* Nodes as squares */}
+                        {causalNodes.slice(0, 14).map((node, i) => {
+                          const total = Math.min(causalNodes.length, 14);
+                          const cols = Math.ceil(Math.sqrt(total));
+                          const x = 80 + (i % cols) * (640 / cols);
+                          const y = 60 + Math.floor(i / cols) * (280 / Math.ceil(total / cols));
+                          const color = node.node_type === 'event' ? '#DC2626'
+                            : node.node_type === 'entity' ? '#2563EB'
+                            : node.node_type === 'decision' ? '#F59E0B' : '#10B981';
+                          const size = i === 0 ? 20 : 14;
+                          return (
+                            <g key={node.id} style={{ cursor: 'pointer' }}
+                              onClick={() => {
+                                const connections = [
+                                  ...causalEdges.filter(e => e.effect_text === node.label).map(e => ({ label: e.cause_text, direction: 'cause' as const, relationType: e.relation_type })),
+                                  ...causalEdges.filter(e => e.cause_text === node.label).map(e => ({ label: e.effect_text, direction: 'effect' as const, relationType: e.relation_type })),
+                                ];
+                                handleGraphNodeSelect?.({
+                                  id: node.id, label: node.label, type: node.node_type || 'event',
+                                  mentionCount: node.mention_count || 1,
+                                  connections,
+                                });
+                              }}>
+                              <rect x={x - size} y={y - size} width={size * 2} height={size * 2}
+                                fill={color} opacity={0.9} />
+                              <rect x={x - size - 2} y={y - size - 2} width={size * 2 + 4} height={size * 2 + 4}
+                                fill="none" stroke={color} strokeWidth={0.5} opacity={0.3} />
+                              <text x={x} y={y + size + 14} fill="rgba(255,255,255,0.6)"
+                                fontSize="8" fontWeight="700" textAnchor="middle"
+                                fontFamily="var(--font-label)" letterSpacing="0.5">
+                                {node.label.length > 18 ? node.label.substring(0, 18) + '...' : node.label}
+                              </text>
+                            </g>
+                          );
+                        })}
+                      </svg>
+
+                      {/* Legend */}
+                      <div style={{ position: 'absolute', bottom: '12px', left: '16px', display: 'flex', gap: '16px', zIndex: 5 }}>
+                        {[
+                          { color: '#DC2626', label: `Evenement (${causalNodes.filter(n => n.node_type === 'event').length})` },
+                          { color: '#2563EB', label: `Entite (${causalNodes.filter(n => n.node_type === 'entity').length})` },
+                          { color: '#F59E0B', label: `Decision (${causalNodes.filter(n => n.node_type === 'decision').length})` },
+                        ].map(item => (
+                          <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <div style={{ width: '8px', height: '8px', backgroundColor: item.color }} />
+                            <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.5)', fontFamily: 'var(--font-label)', letterSpacing: '0.05em' }}>{item.label}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Edge type legend */}
+                      <div style={{ position: 'absolute', bottom: '12px', right: '16px', display: 'flex', gap: '16px', zIndex: 5 }}>
+                        {[
+                          { color: '#DC2626', dash: 'none', label: 'causes' },
+                          { color: '#F59E0B', dash: '6,4', label: 'triggers' },
+                          { color: '#10B981', dash: '2,4', label: 'enables' },
+                        ].map(item => (
+                          <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <svg width="20" height="2"><line x1="0" y1="1" x2="20" y2="1" stroke={item.color} strokeWidth="1.5" strokeDasharray={item.dash} /></svg>
+                            <span style={{ fontSize: '9px', color: 'rgba(255,255,255,0.5)', fontFamily: 'var(--font-label)' }}>{item.label}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* LIVE indicator */}
+                      <div style={{ position: 'absolute', bottom: '40px', right: '16px', display: 'flex', alignItems: 'center', gap: '6px', zIndex: 5 }}>
+                        <span className="terminal-pulse" style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#DC2626' }} />
+                        <span style={{ fontSize: '8px', fontWeight: 700, letterSpacing: '0.15em', color: 'rgba(255,255,255,0.3)', fontFamily: 'var(--font-label)', textTransform: 'uppercase' as const }}>LIVE RECONSTRUCTION ACTIVE</span>
+                      </div>
+
+                      {/* Link to full Nexus page */}
+                      {dashboard.syntheses?.[0]?.id && (
+                        <Link
+                          href={`/synthesis/${dashboard.syntheses[0].id}/nexus`}
+                          style={{
+                            position: 'absolute', top: '12px', right: '16px', marginTop: '20px',
+                            display: 'inline-flex', alignItems: 'center', gap: '6px',
+                            backgroundColor: '#2563EB', color: '#FFFFFF', padding: '6px 12px',
+                            fontSize: '9px', fontWeight: 700, letterSpacing: '0.15em',
+                            fontFamily: 'var(--font-label)', textDecoration: 'none', textTransform: 'uppercase' as const,
+                            zIndex: 10,
+                          }}
+                        >
+                          <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>open_in_full</span>
+                          OPEN FULL NEXUS
+                        </Link>
+                      )}
+                    </div>
 
                     {/* Node/Edge detail overlay */}
                     {(selectedNode || selectedEdge) && (
