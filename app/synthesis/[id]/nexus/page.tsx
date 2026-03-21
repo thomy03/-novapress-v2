@@ -39,6 +39,8 @@ const TYPE_COLORS: Record<string, string> = {
   outcome: '#10B981',
   keyword: '#10B981',
   focus: '#2563EB',
+  prediction: '#8B5CF6',
+  scenario: '#8B5CF6',
 };
 
 const TYPE_ICONS: Record<string, string> = {
@@ -48,6 +50,8 @@ const TYPE_ICONS: Record<string, string> = {
   outcome: '\u2713',  // ✓
   keyword: '\u2713',
   focus: '\uD83D\uDC64',
+  prediction: '\uD83D\uDD2E', // 🔮
+  scenario: '\u2753',  // ❓
 };
 
 const EDGE_COLORS: Record<string, string> = {
@@ -107,15 +111,16 @@ function CausalSquareNode({ data }: NodeProps) {
   const { label, nodeType, isCentral } = nodeData;
   const color = TYPE_COLORS[nodeType] || '#6B7280';
   const icon = TYPE_ICONS[nodeType] || '\u26A1';
-  const size = isCentral ? 80 : 64;
+  const isPrediction = nodeType === 'prediction' || nodeType === 'scenario';
+  const size = isCentral ? 80 : isPrediction ? 72 : 64;
 
   return (
     <div
       style={{
         width: size,
         height: size,
-        background: '#141414',
-        border: `2px solid ${color}`,
+        background: isPrediction ? `${color}15` : '#141414',
+        border: `2px ${isPrediction ? 'dashed' : 'solid'} ${color}`,
         borderRadius: 0,
         display: 'flex',
         flexDirection: 'column',
@@ -124,6 +129,7 @@ function CausalSquareNode({ data }: NodeProps) {
         cursor: 'pointer',
         position: 'relative',
         transition: 'box-shadow 0.2s ease',
+        transform: isPrediction ? 'rotate(45deg)' : 'none',
       }}
       onMouseEnter={(e) => {
         (e.currentTarget as HTMLDivElement).style.boxShadow = `0 0 20px ${color}80, 0 0 40px ${color}30`;
@@ -132,25 +138,29 @@ function CausalSquareNode({ data }: NodeProps) {
         (e.currentTarget as HTMLDivElement).style.boxShadow = 'none';
       }}
     >
-      <Handle type="target" position={Position.Top} style={{ background: color, border: 'none', width: 6, height: 6 }} />
-      <Handle type="target" position={Position.Left} style={{ background: color, border: 'none', width: 6, height: 6 }} id="left-target" />
-      <Handle type="source" position={Position.Bottom} style={{ background: color, border: 'none', width: 6, height: 6 }} />
-      <Handle type="source" position={Position.Right} style={{ background: color, border: 'none', width: 6, height: 6 }} id="right-source" />
+      {/* Handles: left=target, right=source for horizontal flow */}
+      <Handle type="target" position={Position.Left} style={{ background: color, border: 'none', width: 6, height: 6 }} />
+      <Handle type="source" position={Position.Right} style={{ background: color, border: 'none', width: 6, height: 6 }} />
 
-      <span style={{ fontSize: isCentral ? 24 : 20, lineHeight: 1 }}>{icon}</span>
+      <span style={{
+        fontSize: isCentral ? 24 : 20,
+        lineHeight: 1,
+        transform: isPrediction ? 'rotate(-45deg)' : 'none',
+      }}>{icon}</span>
 
       {/* Label below the node */}
       <div style={{
         position: 'absolute',
-        top: size + 6,
+        top: size + 8,
         left: '50%',
-        transform: 'translateX(-50%)',
+        transform: `translateX(-50%) ${isPrediction ? 'rotate(-45deg)' : ''}`,
         whiteSpace: 'nowrap',
         fontSize: 10,
+        fontWeight: 600,
         fontFamily: "'Space Grotesk', sans-serif",
-        color: '#FFFFFF',
+        color: isPrediction ? color : '#FFFFFF',
         textAlign: 'center',
-        maxWidth: 140,
+        maxWidth: 160,
         overflow: 'visible',
       }}>
         {label}
@@ -189,46 +199,47 @@ function computePositions(
   rawNodes: RawNode[],
   rawEdges: RawEdge[],
   centralId: string,
-  canvasWidth: number,
-  canvasHeight: number
 ): Map<string, { x: number; y: number }> {
   const positions = new Map<string, { x: number; y: number }>();
-  const centerX = canvasWidth / 2;
-  const centerY = canvasHeight / 2;
 
-  // Build adjacency from edges
-  const adj = new Map<string, Set<string>>();
-  for (const n of rawNodes) adj.set(n.id, new Set());
+  // Build directed adjacency (source → targets) for proper left→right flow
+  const children = new Map<string, string[]>();
+  const parents = new Map<string, string[]>();
+  for (const n of rawNodes) {
+    children.set(n.id, []);
+    parents.set(n.id, []);
+  }
   for (const e of rawEdges) {
-    adj.get(e.source)?.add(e.target);
-    adj.get(e.target)?.add(e.source);
+    children.get(e.source)?.push(e.target);
+    parents.get(e.target)?.push(e.source);
   }
 
-  // BFS from central
+  // Find root nodes (no incoming edges) or use central
+  let roots = rawNodes.filter(n => (parents.get(n.id) || []).length === 0).map(n => n.id);
+  if (roots.length === 0) roots = [centralId || rawNodes[0]?.id].filter(Boolean);
+
+  // BFS from roots to assign levels (left-to-right depth)
   const levels = new Map<string, number>();
   const queue: string[] = [];
-  const startId = rawNodes.find(n => n.id === centralId)?.id || rawNodes[0]?.id;
-  if (!startId) return positions;
-
-  levels.set(startId, 0);
-  queue.push(startId);
-
+  for (const root of roots) {
+    if (!levels.has(root)) {
+      levels.set(root, 0);
+      queue.push(root);
+    }
+  }
   while (queue.length > 0) {
     const current = queue.shift()!;
     const currentLevel = levels.get(current)!;
-    for (const neighbor of adj.get(current) || []) {
-      if (!levels.has(neighbor)) {
-        levels.set(neighbor, currentLevel + 1);
-        queue.push(neighbor);
+    for (const child of children.get(current) || []) {
+      if (!levels.has(child) || levels.get(child)! < currentLevel + 1) {
+        levels.set(child, currentLevel + 1);
+        queue.push(child);
       }
     }
   }
-
-  // Assign positions for nodes not reached by BFS
+  // Unvisited nodes get placed at level 1
   for (const n of rawNodes) {
-    if (!levels.has(n.id)) {
-      levels.set(n.id, 2);
-    }
+    if (!levels.has(n.id)) levels.set(n.id, 1);
   }
 
   // Group by level
@@ -238,19 +249,22 @@ function computePositions(
     byLevel.get(level)!.push(id);
   }
 
-  for (const [level, ids] of byLevel) {
-    if (level === 0) {
-      positions.set(ids[0], { x: centerX - 32, y: centerY - 32 });
-    } else {
-      const radius = level * 250;
-      ids.forEach((id, index) => {
-        const angle = (index / ids.length) * 2 * Math.PI - Math.PI / 2;
-        positions.set(id, {
-          x: centerX + radius * Math.cos(angle) - 32,
-          y: centerY + radius * Math.sin(angle) - 32,
-        });
+  // Layout: X = level * horizontal spacing, Y = evenly distributed vertically
+  const HORIZONTAL_SPACING = 280;
+  const VERTICAL_SPACING = 140;
+
+  const sortedLevels = Array.from(byLevel.keys()).sort((a, b) => a - b);
+  for (const level of sortedLevels) {
+    const ids = byLevel.get(level)!;
+    const totalHeight = (ids.length - 1) * VERTICAL_SPACING;
+    const startY = -totalHeight / 2;
+
+    ids.forEach((id, index) => {
+      positions.set(id, {
+        x: level * HORIZONTAL_SPACING,
+        y: startY + index * VERTICAL_SPACING,
       });
-    }
+    });
   }
 
   return positions;
@@ -450,11 +464,42 @@ function NexusGraphInner() {
   useEffect(() => {
     if (rawNodes.length === 0) return;
 
-    const canvasW = 1200;
-    const canvasH = 800;
-    const positions = computePositions(rawNodes, rawEdges, centralEntity, canvasW, canvasH);
+    // Generate prediction/scenario nodes from leaf nodes (outcomes with no outgoing edges)
+    const outgoing = new Set(rawEdges.map(e => e.source));
+    const leafNodes = rawNodes.filter(n => !outgoing.has(n.id));
+    const predictionNodes: RawNode[] = [];
+    const predictionEdges: RawEdge[] = [];
 
-    const nodes: Node[] = rawNodes.map((n) => {
+    leafNodes.slice(0, 3).forEach((leaf, i) => {
+      const predId = `pred-${i}`;
+      const scenarios = [
+        { suffix: 'Scenario A', conf: 0.75 },
+        { suffix: 'Scenario B', conf: 0.45 },
+      ];
+      scenarios.forEach((s, j) => {
+        const sId = `${predId}-${j}`;
+        predictionNodes.push({
+          id: sId,
+          label: `${s.suffix}: ${leaf.label}`,
+          type: 'prediction',
+        });
+        predictionEdges.push({
+          source: leaf.id,
+          target: sId,
+          relation_type: 'enables' as RelationType,
+          confidence: s.conf,
+          cause_text: leaf.label,
+          effect_text: `${s.suffix}: ${leaf.label}`,
+        });
+      });
+    });
+
+    const allNodes = [...rawNodes, ...predictionNodes];
+    const allEdges = [...rawEdges, ...predictionEdges];
+
+    const positions = computePositions(allNodes, allEdges, centralEntity);
+
+    const nodes: Node[] = allNodes.map((n) => {
       const pos = positions.get(n.id) || { x: 0, y: 0 };
       return {
         id: n.id,
@@ -468,7 +513,7 @@ function NexusGraphInner() {
       };
     });
 
-    const edges: Edge[] = rawEdges.map((e, i) => {
+    const edges: Edge[] = allEdges.map((e, i) => {
       const edgeId = `edge-${i}`;
       const color = EDGE_COLORS[e.relation_type] || '#6B7280';
       const dash = EDGE_DASH[e.relation_type];
