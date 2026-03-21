@@ -670,76 +670,131 @@ function TopicDashboardPage() {
                         </span>
                       </div>
 
-                      {/* SVG Graph */}
+                      {/* SVG Graph with radial layout */}
                       <svg width="100%" height="400" viewBox="0 0 800 400" style={{ display: 'block' }}>
-                        {/* Edges */}
-                        {dashboard.aggregated_causal_graph.edges.slice(0, 20).map((edge, idx) => {
-                          const srcNode = causalNodes.find(n => n.id === edge.source);
-                          const tgtNode = causalNodes.find(n => n.id === edge.target);
-                          if (!srcNode || !tgtNode) return null;
-                          const srcIdx = causalNodes.indexOf(srcNode);
-                          const tgtIdx = causalNodes.indexOf(tgtNode);
-                          const total = Math.min(causalNodes.length, 14);
-                          const cols = Math.ceil(Math.sqrt(total));
-                          const sx = 80 + (srcIdx % cols) * (640 / cols);
-                          const sy = 60 + Math.floor(srcIdx / cols) * (280 / Math.ceil(total / cols));
-                          const tx = 80 + (tgtIdx % cols) * (640 / cols);
-                          const ty = 60 + Math.floor(tgtIdx / cols) * (280 / Math.ceil(total / cols));
-                          const relType = edge.relation_type || edge.type || 'causes';
-                          const edgeColor = relType === 'causes' ? '#DC2626'
-                            : relType === 'triggers' ? '#F59E0B'
-                            : relType === 'enables' ? '#10B981' : '#6B7280';
-                          const dashArray = relType === 'triggers' ? '6,4' : relType === 'enables' ? '2,4' : 'none';
+                        <defs>
+                          <marker id="tg-arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+                            <polygon points="0 0, 8 3, 0 6" fill="rgba(255,255,255,0.4)" />
+                          </marker>
+                        </defs>
+                        {(() => {
+                          // Compute radial positions for nodes
+                          const nodes = causalNodes.slice(0, 16);
+                          const rawEdges = dashboard.aggregated_causal_graph.edges;
+                          const cx = 400, cy = 200;
+                          const positions: Record<string, {x: number; y: number}> = {};
+
+                          // BFS from first node to determine levels
+                          const levels: Record<string, number> = {};
+                          const queue = [nodes[0]?.id];
+                          if (queue[0]) levels[queue[0]] = 0;
+                          const adjacency: Record<string, string[]> = {};
+                          rawEdges.forEach(e => {
+                            const s = e.source || '', t = e.target || '';
+                            if (!adjacency[s]) adjacency[s] = [];
+                            if (!adjacency[t]) adjacency[t] = [];
+                            adjacency[s].push(t);
+                            adjacency[t].push(s);
+                          });
+                          while (queue.length > 0) {
+                            const current = queue.shift()!;
+                            for (const neighbor of (adjacency[current] || [])) {
+                              if (levels[neighbor] === undefined) {
+                                levels[neighbor] = (levels[current] || 0) + 1;
+                                queue.push(neighbor);
+                              }
+                            }
+                          }
+                          // Assign positions - center node + radial rings
+                          const levelGroups: Record<number, typeof nodes> = {};
+                          nodes.forEach(n => {
+                            const lvl = levels[n.id] ?? 99;
+                            if (!levelGroups[lvl]) levelGroups[lvl] = [];
+                            levelGroups[lvl].push(n);
+                          });
+                          Object.entries(levelGroups).forEach(([lvlStr, group]) => {
+                            const lvl = parseInt(lvlStr);
+                            if (lvl === 0) {
+                              positions[group[0].id] = { x: cx, y: cy };
+                            } else {
+                              const radius = Math.min(lvl * 140, 340);
+                              group.forEach((n, i) => {
+                                const angle = (i / group.length) * 2 * Math.PI - Math.PI / 2;
+                                positions[n.id] = {
+                                  x: cx + radius * Math.cos(angle),
+                                  y: cy + radius * Math.sin(angle),
+                                };
+                              });
+                            }
+                          });
+                          // Fallback: any unpositioned nodes
+                          nodes.forEach((n, i) => {
+                            if (!positions[n.id]) {
+                              const angle = (i / nodes.length) * 2 * Math.PI;
+                              positions[n.id] = { x: cx + 200 * Math.cos(angle), y: cy + 150 * Math.sin(angle) };
+                            }
+                          });
+
+                          const typeColor = (t: string) => t === 'event' ? '#DC2626' : t === 'entity' ? '#2563EB' : t === 'decision' ? '#F59E0B' : '#10B981';
+
                           return (
-                            <line key={`e-${idx}`} x1={sx} y1={sy} x2={tx} y2={ty}
-                              stroke={edgeColor} strokeWidth={1.2} opacity={0.5}
-                              strokeDasharray={dashArray}
-                              style={{ cursor: 'pointer' }}
-                              onClick={() => handleGraphEdgeSelect?.({
-                                id: edge.id || `e-${idx}`,
-                                causeLabel: srcNode.label, effectLabel: tgtNode.label,
-                                relationType: relType, confidence: edge.confidence || 0.7,
-                                mentionCount: edge.mention_count || 1,
-                                sourceSyntheses: edge.source_syntheses || [],
+                            <>
+                              {/* Edges with curves */}
+                              {rawEdges.slice(0, 30).map((edge, idx) => {
+                                const sp = positions[edge.source || ''];
+                                const tp = positions[edge.target || ''];
+                                if (!sp || !tp) return null;
+                                const relType = edge.relation_type || edge.type || 'causes';
+                                const color = relType === 'causes' ? '#DC2626' : relType === 'triggers' ? '#F59E0B' : relType === 'enables' ? '#10B981' : '#6B7280';
+                                const dash = relType === 'triggers' ? '6,4' : relType === 'enables' ? '2,4' : 'none';
+                                // Curved path
+                                const mx = (sp.x + tp.x) / 2 + (sp.y - tp.y) * 0.15;
+                                const my = (sp.y + tp.y) / 2 + (tp.x - sp.x) * 0.15;
+                                return (
+                                  <path key={`e${idx}`}
+                                    d={`M ${sp.x} ${sp.y} Q ${mx} ${my} ${tp.x} ${tp.y}`}
+                                    stroke={color} strokeWidth={1.5} fill="none" opacity={0.6}
+                                    strokeDasharray={dash} markerEnd="url(#tg-arrow)"
+                                    style={{ cursor: 'pointer' }}
+                                    onClick={() => handleGraphEdgeSelect?.({
+                                      id: edge.id || `e-${idx}`,
+                                      causeLabel: edge.cause_text || nodeLabelsById[edge.source || ''] || '',
+                                      effectLabel: edge.effect_text || nodeLabelsById[edge.target || ''] || '',
+                                      relationType: relType,
+                                      confidence: edge.confidence || 0.7,
+                                      mentionCount: edge.mention_count || 1,
+                                      sourceSyntheses: edge.source_syntheses || [],
+                                    })}
+                                  />
+                                );
                               })}
-                            />
+                              {/* Nodes */}
+                              {nodes.map((node, i) => {
+                                const p = positions[node.id];
+                                if (!p) return null;
+                                const color = typeColor(node.node_type || 'event');
+                                const size = i === 0 ? 22 : 16;
+                                const icon = node.node_type === 'event' ? '⚡' : node.node_type === 'entity' ? '👤' : node.node_type === 'decision' ? '⚖️' : '✓';
+                                return (
+                                  <g key={node.id} style={{ cursor: 'pointer' }}
+                                    onClick={() => {
+                                      const connections = [
+                                        ...causalEdges.filter(e => e.effect_text === node.label).map(e => ({ label: e.cause_text, direction: 'cause' as const, relationType: e.relation_type })),
+                                        ...causalEdges.filter(e => e.cause_text === node.label).map(e => ({ label: e.effect_text, direction: 'effect' as const, relationType: e.relation_type })),
+                                      ];
+                                      handleGraphNodeSelect?.({ id: node.id, label: node.label, type: node.node_type || 'event', mentionCount: node.mention_count || 1, connections });
+                                    }}>
+                                    <rect x={p.x - size} y={p.y - size} width={size * 2} height={size * 2} fill={color} opacity={0.9} />
+                                    <text x={p.x} y={p.y + 5} fill="white" fontSize="12" textAnchor="middle" dominantBaseline="middle">{icon}</text>
+                                    <text x={p.x} y={p.y + size + 12} fill="rgba(255,255,255,0.7)" fontSize="9" fontWeight="600" textAnchor="middle" fontFamily="var(--font-label)">
+                                      {node.label.length > 22 ? node.label.substring(0, 22) + '...' : node.label}
+                                    </text>
+                                  </g>
+                                );
+                              })}
+                            </>
                           );
-                        })}
-                        {/* Nodes as squares */}
-                        {causalNodes.slice(0, 14).map((node, i) => {
-                          const total = Math.min(causalNodes.length, 14);
-                          const cols = Math.ceil(Math.sqrt(total));
-                          const x = 80 + (i % cols) * (640 / cols);
-                          const y = 60 + Math.floor(i / cols) * (280 / Math.ceil(total / cols));
-                          const color = node.node_type === 'event' ? '#DC2626'
-                            : node.node_type === 'entity' ? '#2563EB'
-                            : node.node_type === 'decision' ? '#F59E0B' : '#10B981';
-                          const size = i === 0 ? 20 : 14;
-                          return (
-                            <g key={node.id} style={{ cursor: 'pointer' }}
-                              onClick={() => {
-                                const connections = [
-                                  ...causalEdges.filter(e => e.effect_text === node.label).map(e => ({ label: e.cause_text, direction: 'cause' as const, relationType: e.relation_type })),
-                                  ...causalEdges.filter(e => e.cause_text === node.label).map(e => ({ label: e.effect_text, direction: 'effect' as const, relationType: e.relation_type })),
-                                ];
-                                handleGraphNodeSelect?.({
-                                  id: node.id, label: node.label, type: node.node_type || 'event',
-                                  mentionCount: node.mention_count || 1,
-                                  connections,
-                                });
-                              }}>
-                              <rect x={x - size} y={y - size} width={size * 2} height={size * 2}
-                                fill={color} opacity={0.9} />
-                              <rect x={x - size - 2} y={y - size - 2} width={size * 2 + 4} height={size * 2 + 4}
-                                fill="none" stroke={color} strokeWidth={0.5} opacity={0.3} />
-                              <text x={x} y={y + size + 14} fill="rgba(255,255,255,0.6)"
-                                fontSize="8" fontWeight="700" textAnchor="middle"
-                                fontFamily="var(--font-label)" letterSpacing="0.5">
-                                {node.label.length > 18 ? node.label.substring(0, 18) + '...' : node.label}
-                              </text>
-                            </g>
-                          );
-                        })}
+                        })()}
                       </svg>
 
                       {/* Legend */}
