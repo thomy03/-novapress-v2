@@ -9,6 +9,7 @@ import type {
   CausalNode,
   CausalEdge,
   RelationType,
+  Prediction,
 } from '@/app/types/causal';
 
 // ============================================================================
@@ -25,6 +26,9 @@ interface TerminalNode {
   y: number;
   confidence: number;
   description?: string;
+  icon: string;
+  isPrediction?: boolean;
+  probability?: number;
 }
 
 interface TerminalEdge {
@@ -35,92 +39,86 @@ interface TerminalEdge {
   confidence: number;
   causeText: string;
   effectText: string;
+  isPrediction?: boolean;
 }
 
 interface CausalStep {
   id: string;
+  number: string;
   label: string;
-  stepType: 'origin' | 'critical' | 'decision' | 'outcome';
+  stepType: TerminalNodeType;
   description: string;
   confidence: number;
+}
+
+interface PredictionCard {
+  id: string;
+  probability: number;
+  text: string;
+  icon: string;
+  timeframe: string;
 }
 
 interface NarrativeEvent {
   id: string;
   label: string;
-  timestamp: string;
+  timeLabel: string;
+  type: 'past' | 'now' | 'future';
   color: string;
 }
+
+type ViewMode = 'GRAPH' | 'TIMELINE' | 'MATRIX';
 
 // ============================================================================
 // CONSTANTS
 // ============================================================================
 
-const NODE_TYPE_CONFIG: Record<TerminalNodeType, {
-  size: number;
-  color: string;
-  icon: string;
-  label: string;
-}> = {
-  focus: { size: 64, color: '#2563EB', icon: 'hub', label: 'Focus' },
-  event: { size: 48, color: '#DC2626', icon: 'priority_high', label: 'Event' },
-  entity: { size: 40, color: '#2563EB', icon: 'person', label: 'Entity' },
-  decision: { size: 56, color: '#F59E0B', icon: 'balance', label: 'Decision' },
-  outcome: { size: 32, color: '#10B981', icon: 'check_circle', label: 'Outcome' },
+const TYPE_COLORS: Record<TerminalNodeType, string> = {
+  focus: '#2563EB',
+  event: '#DC2626',
+  entity: '#2563EB',
+  decision: '#F59E0B',
+  outcome: '#10B981',
 };
 
-const STEP_TYPE_CONFIG: Record<string, { color: string; label: string }> = {
-  origin: { color: '#2563EB', label: 'Origin Nexus' },
-  critical: { color: '#DC2626', label: 'Critical Event' },
-  decision: { color: '#F59E0B', label: 'Human Decision' },
-  outcome: { color: '#10B981', label: 'Final Outcome' },
+const TYPE_ICONS: Record<TerminalNodeType, string> = {
+  focus: 'hub',
+  event: 'bolt',
+  entity: 'person',
+  decision: 'balance',
+  outcome: 'check_circle',
 };
 
-const EDGE_STYLE: Record<RelationType, { dashArray: string }> = {
-  causes: { dashArray: 'none' },
-  triggers: { dashArray: '8,4' },
-  enables: { dashArray: '2,4' },
-  prevents: { dashArray: '12,4,2,4' },
-  relates_to: { dashArray: '4,4' },
-};
+const PURPLE = '#8B5CF6';
 
 // ============================================================================
 // DEMO DATA
 // ============================================================================
 
 const DEMO_NODES: TerminalNode[] = [
-  { id: 'n1', label: 'Policy Announcement', type: 'focus', x: 500, y: 300, confidence: 0.99, description: 'Central policy event triggering chain reaction' },
-  { id: 'n2', label: 'Market Reaction', type: 'event', x: 300, y: 150, confidence: 0.87, description: 'Immediate market response to policy shift' },
-  { id: 'n3', label: 'Key Decision Maker', type: 'entity', x: 700, y: 150, confidence: 0.92, description: 'Primary actor in the decision chain' },
-  { id: 'n4', label: 'Regulatory Response', type: 'decision', x: 300, y: 450, confidence: 0.78, description: 'Regulatory framework adaptation' },
-  { id: 'n5', label: 'Economic Impact', type: 'outcome', x: 700, y: 450, confidence: 0.65, description: 'Long-term economic consequences' },
-  { id: 'n6', label: 'Public Opinion Shift', type: 'event', x: 150, y: 300, confidence: 0.71, description: 'Shift in public sentiment' },
-  { id: 'n7', label: 'Legislative Action', type: 'decision', x: 850, y: 300, confidence: 0.83, description: 'Congressional response' },
+  { id: 'n1', label: 'POLICY SHIFT', type: 'event', x: 0.15, y: 0.25, confidence: 0.94, description: 'Central authority announces sweeping regulatory changes', icon: 'gavel' },
+  { id: 'n2', label: 'MARKET CRASH', type: 'event', x: 0.10, y: 0.55, confidence: 0.89, description: 'Immediate 4.2% market downturn across sectors', icon: 'trending_down' },
+  { id: 'n3', label: 'KEY ACTOR', type: 'entity', x: 0.30, y: 0.15, confidence: 0.92, description: 'Primary decision-maker in the causal chain', icon: 'person' },
+  { id: 'n4', label: 'REGULATION', type: 'decision', x: 0.35, y: 0.50, confidence: 0.78, description: 'Emergency regulatory framework activated', icon: 'balance' },
+  { id: 'n5', label: 'PUBLIC SHIFT', type: 'event', x: 0.22, y: 0.75, confidence: 0.71, description: 'Public opinion pivots on the matter', icon: 'groups' },
+  { id: 'n6', label: 'LEGISLATION', type: 'decision', x: 0.42, y: 0.30, confidence: 0.83, description: 'Congressional fast-track response bill', icon: 'description' },
+];
+
+const DEMO_PREDICTIONS: TerminalNode[] = [
+  { id: 'p1', label: 'TRADE SHIFT', type: 'outcome', x: 0.70, y: 0.20, confidence: 0.78, description: 'Probable restructuring of trade agreements', icon: 'analytics', isPrediction: true, probability: 78 },
+  { id: 'p2', label: 'MARKET RECOVERY', type: 'outcome', x: 0.80, y: 0.50, confidence: 0.62, description: 'Gradual market normalization expected', icon: 'trending_up', isPrediction: true, probability: 62 },
+  { id: 'p3', label: 'SOCIAL UNREST', type: 'event', x: 0.72, y: 0.78, confidence: 0.45, description: 'Possible public demonstrations', icon: 'grain', isPrediction: true, probability: 45 },
 ];
 
 const DEMO_EDGES: TerminalEdge[] = [
-  { id: 'e1', sourceId: 'n1', targetId: 'n2', relationType: 'causes', confidence: 0.92, causeText: 'Policy Announcement', effectText: 'Market Reaction' },
-  { id: 'e2', sourceId: 'n3', targetId: 'n1', relationType: 'triggers', confidence: 0.88, causeText: 'Key Decision Maker', effectText: 'Policy Announcement' },
-  { id: 'e3', sourceId: 'n1', targetId: 'n4', relationType: 'causes', confidence: 0.81, causeText: 'Policy Announcement', effectText: 'Regulatory Response' },
-  { id: 'e4', sourceId: 'n4', targetId: 'n5', relationType: 'enables', confidence: 0.73, causeText: 'Regulatory Response', effectText: 'Economic Impact' },
-  { id: 'e5', sourceId: 'n2', targetId: 'n6', relationType: 'triggers', confidence: 0.67, causeText: 'Market Reaction', effectText: 'Public Opinion Shift' },
-  { id: 'e6', sourceId: 'n1', targetId: 'n7', relationType: 'causes', confidence: 0.85, causeText: 'Policy Announcement', effectText: 'Legislative Action' },
-  { id: 'e7', sourceId: 'n7', targetId: 'n5', relationType: 'enables', confidence: 0.62, causeText: 'Legislative Action', effectText: 'Economic Impact' },
-];
-
-const DEMO_STEPS: CausalStep[] = [
-  { id: 's1', label: 'Origin Nexus', stepType: 'origin', description: 'Initial policy framework proposed by central authority', confidence: 0.99 },
-  { id: 's2', label: 'Critical Event', stepType: 'critical', description: 'Immediate market downturn following announcement', confidence: 0.87 },
-  { id: 's3', label: 'Human Decision', stepType: 'decision', description: 'Regulatory body initiates emergency framework review', confidence: 0.78 },
-  { id: 's4', label: 'Final Outcome', stepType: 'outcome', description: 'Long-term economic restructuring begins across sectors', confidence: 0.65 },
-];
-
-const DEMO_NARRATIVE: NarrativeEvent[] = [
-  { id: 'ne1', label: 'Initialization', timestamp: 'T-00:00:00', color: '#2563EB' },
-  { id: 'ne2', label: 'Anomaly Detected', timestamp: 'T+02:45:12', color: '#DC2626' },
-  { id: 'ne3', label: 'Decision Point', timestamp: 'T+06:12:33', color: '#F59E0B' },
-  { id: 'ne4', label: 'Cascade Effect', timestamp: 'T+14:30:00', color: '#DC2626' },
-  { id: 'ne5', label: 'Resolution', timestamp: 'T+23:59:59', color: '#10B981' },
+  { id: 'e1', sourceId: 'n1', targetId: 'n2', relationType: 'causes', confidence: 0.92, causeText: 'Policy Shift', effectText: 'Market Crash' },
+  { id: 'e2', sourceId: 'n3', targetId: 'n1', relationType: 'triggers', confidence: 0.88, causeText: 'Key Actor', effectText: 'Policy Shift' },
+  { id: 'e3', sourceId: 'n1', targetId: 'n4', relationType: 'causes', confidence: 0.81, causeText: 'Policy Shift', effectText: 'Regulation' },
+  { id: 'e4', sourceId: 'n2', targetId: 'n5', relationType: 'triggers', confidence: 0.67, causeText: 'Market Crash', effectText: 'Public Shift' },
+  { id: 'e5', sourceId: 'n4', targetId: 'n6', relationType: 'enables', confidence: 0.73, causeText: 'Regulation', effectText: 'Legislation' },
+  { id: 'e6', sourceId: 'n6', targetId: 'p1', relationType: 'causes', confidence: 0.78, causeText: 'Legislation', effectText: 'Trade Shift', isPrediction: true },
+  { id: 'e7', sourceId: 'n4', targetId: 'p2', relationType: 'enables', confidence: 0.62, causeText: 'Regulation', effectText: 'Market Recovery', isPrediction: true },
+  { id: 'e8', sourceId: 'n5', targetId: 'p3', relationType: 'triggers', confidence: 0.45, causeText: 'Public Shift', effectText: 'Social Unrest', isPrediction: true },
 ];
 
 // ============================================================================
@@ -137,1037 +135,931 @@ function mapNodeType(apiType: string): TerminalNodeType {
   }
 }
 
-function buildStepsFromEdges(edges: TerminalEdge[], nodes: TerminalNode[]): CausalStep[] {
-  if (edges.length === 0) return DEMO_STEPS;
-  const steps: CausalStep[] = [];
-  const nodeMap = new Map(nodes.map(n => [n.id, n]));
+function getNodeIcon(type: TerminalNodeType, label: string): string {
+  const labelLower = label.toLowerCase();
+  if (labelLower.includes('market') || labelLower.includes('economic') || labelLower.includes('trade')) return 'trending_up';
+  if (labelLower.includes('policy') || labelLower.includes('law') || labelLower.includes('regulat')) return 'gavel';
+  if (labelLower.includes('war') || labelLower.includes('conflict') || labelLower.includes('military')) return 'shield';
+  if (labelLower.includes('tech') || labelLower.includes('ai') || labelLower.includes('cyber')) return 'memory';
+  if (labelLower.includes('climate') || labelLower.includes('environment')) return 'eco';
+  if (labelLower.includes('election') || labelLower.includes('vote')) return 'how_to_vote';
+  if (labelLower.includes('health') || labelLower.includes('pandemic')) return 'health_and_safety';
+  return TYPE_ICONS[type];
+}
 
-  // Find root nodes (appear as source but not target)
-  const targetIds = new Set(edges.map(e => e.targetId));
-  const sourceIds = new Set(edges.map(e => e.sourceId));
+function computePathIntegrity(edges: TerminalEdge[]): number {
+  if (edges.length === 0) return 0;
+  const pastEdges = edges.filter(e => !e.isPrediction);
+  if (pastEdges.length === 0) return 0;
+  const avg = pastEdges.reduce((s, e) => s + e.confidence, 0) / pastEdges.length;
+  return Math.round(avg * 100);
+}
+
+function buildStepsFromData(nodes: TerminalNode[], edges: TerminalEdge[]): CausalStep[] {
+  const pastNodes = nodes.filter(n => !n.isPrediction);
+  if (pastNodes.length === 0) return [];
+
+  const nodeMap = new Map(pastNodes.map(n => [n.id, n]));
+  const targetIds = new Set(edges.filter(e => !e.isPrediction).map(e => e.targetId));
+  const sourceIds = new Set(edges.filter(e => !e.isPrediction).map(e => e.sourceId));
   const roots = [...sourceIds].filter(id => !targetIds.has(id));
 
-  // BFS to build ordered steps
   const visited = new Set<string>();
-  const queue = roots.length > 0 ? [...roots] : [nodes[0]?.id].filter(Boolean);
+  const queue = roots.length > 0 ? [...roots] : [pastNodes[0]?.id].filter(Boolean);
+  const steps: CausalStep[] = [];
+  let stepNum = 1;
 
   while (queue.length > 0 && steps.length < 8) {
     const nodeId = queue.shift()!;
     if (visited.has(nodeId)) continue;
     visited.add(nodeId);
-
     const node = nodeMap.get(nodeId);
     if (!node) continue;
 
-    let stepType: CausalStep['stepType'] = 'critical';
-    if (steps.length === 0) stepType = 'origin';
-    else if (node.type === 'decision') stepType = 'decision';
-    else if (node.type === 'outcome') stepType = 'outcome';
-
     steps.push({
       id: node.id,
-      label: STEP_TYPE_CONFIG[stepType].label,
-      stepType,
+      number: String(stepNum).padStart(2, '0'),
+      label: node.label,
+      stepType: node.type,
       description: node.description || node.label,
       confidence: node.confidence,
     });
+    stepNum++;
 
-    // Add children
-    edges.filter(e => e.sourceId === nodeId).forEach(e => {
+    edges.filter(e => e.sourceId === nodeId && !e.isPrediction).forEach(e => {
       if (!visited.has(e.targetId)) queue.push(e.targetId);
     });
   }
 
-  return steps.length > 0 ? steps : DEMO_STEPS;
+  return steps;
 }
 
-function buildNarrativeFromNodes(nodes: TerminalNode[], edges: TerminalEdge[]): NarrativeEvent[] {
-  if (nodes.length === 0) return DEMO_NARRATIVE;
-  const typeColors: Record<TerminalNodeType, string> = {
-    focus: '#2563EB',
-    event: '#DC2626',
-    entity: '#2563EB',
-    decision: '#F59E0B',
-    outcome: '#10B981',
-  };
+function buildPredictions(nodes: TerminalNode[], apiPredictions?: Prediction[]): PredictionCard[] {
+  if (apiPredictions && apiPredictions.length > 0) {
+    return apiPredictions.slice(0, 4).map((p, i) => ({
+      id: `pred-${i}`,
+      probability: Math.round(p.probability * 100),
+      text: p.prediction,
+      icon: p.probability >= 0.7 ? 'auto_awesome' : 'shutter_speed',
+      timeframe: p.timeframe === 'court_terme' ? 'T+24H' : p.timeframe === 'moyen_terme' ? 'T+7D' : 'T+30D',
+    }));
+  }
 
-  return nodes.slice(0, 7).map((n, i) => ({
+  const predNodes = nodes.filter(n => n.isPrediction);
+  return predNodes.map(n => ({
     id: n.id,
-    label: n.label,
-    timestamp: `T+${String(i * 3).padStart(2, '0')}:${String(i * 15).padStart(2, '0')}:00`,
-    color: typeColors[n.type] || '#2563EB',
+    probability: n.probability || Math.round(n.confidence * 100),
+    text: n.description || n.label,
+    icon: (n.probability || n.confidence * 100) >= 70 ? 'auto_awesome' : 'shutter_speed',
+    timeframe: (n.probability || n.confidence * 100) >= 70 ? 'T+24H' : 'T+7D',
   }));
 }
 
-function layoutNodes(apiNodes: CausalNode[], centralEntity: string): TerminalNode[] {
-  if (apiNodes.length === 0) return DEMO_NODES;
+function buildNarrativeEvents(nodes: TerminalNode[]): NarrativeEvent[] {
+  const pastNodes = nodes.filter(n => !n.isPrediction).slice(0, 4);
+  const futureNodes = nodes.filter(n => n.isPrediction).slice(0, 3);
 
-  const cx = 500;
-  const cy = 300;
-  const radius = 220;
+  const events: NarrativeEvent[] = [];
+  const timeLabels = ['T-24H', 'T-12H', 'T-6H', 'T-2H'];
 
-  return apiNodes.map((node, i) => {
-    const isCentral = node.label.toLowerCase() === centralEntity.toLowerCase() || i === 0;
-    let type: TerminalNodeType = mapNodeType(node.node_type);
-    let x: number, y: number;
-
-    if (isCentral && i === 0) {
-      type = 'focus';
-      x = cx;
-      y = cy;
-    } else {
-      const angle = ((i - 1) / Math.max(apiNodes.length - 1, 1)) * Math.PI * 2 - Math.PI / 2;
-      const r = radius + (i % 2 === 0 ? 40 : -20);
-      x = cx + Math.cos(angle) * r;
-      y = cy + Math.sin(angle) * r;
-    }
-
-    return {
-      id: node.id,
-      label: node.label,
-      type,
-      x,
-      y,
-      confidence: node.fact_density,
-      description: node.label,
-    };
+  pastNodes.forEach((n, i) => {
+    events.push({
+      id: n.id,
+      label: n.label,
+      timeLabel: timeLabels[i] || `T-${(pastNodes.length - i) * 3}H`,
+      type: 'past',
+      color: TYPE_COLORS[n.type],
+    });
   });
+
+  events.push({ id: 'now', label: 'NOW', timeLabel: 'T+0', type: 'now', color: '#FFFFFF' });
+
+  const futureLabels = ['T+24H', 'T+3D', 'T+7D'];
+  futureNodes.forEach((n, i) => {
+    events.push({
+      id: n.id,
+      label: n.label,
+      timeLabel: futureLabels[i] || `T+${(i + 1) * 7}D`,
+      type: 'future',
+      color: PURPLE,
+    });
+  });
+
+  return events;
 }
-
-function layoutEdges(apiEdges: CausalEdge[], nodes: TerminalNode[]): TerminalEdge[] {
-  if (apiEdges.length === 0) return DEMO_EDGES;
-  const nodeIds = new Set(nodes.map(n => n.id));
-
-  return apiEdges.map((edge, i) => {
-    // Find source and target nodes by matching cause_text/effect_text to node labels
-    const sourceNode = nodes.find(n => n.label === edge.cause_text) || nodes[0];
-    const targetNode = nodes.find(n => n.label === edge.effect_text) || nodes[Math.min(i + 1, nodes.length - 1)];
-
-    return {
-      id: `edge-${i}`,
-      sourceId: sourceNode?.id || nodes[0]?.id || 'n1',
-      targetId: targetNode?.id || nodes[1]?.id || 'n2',
-      relationType: edge.relation_type,
-      confidence: edge.confidence,
-      causeText: edge.cause_text,
-      effectText: edge.effect_text,
-    };
-  }).filter(e => nodeIds.has(e.sourceId) && nodeIds.has(e.targetId));
-}
-
-// ============================================================================
-// PULSE ANIMATION CSS
-// ============================================================================
-
-const PULSE_KEYFRAMES = `
-@keyframes terminalPulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4); }
-  50% { box-shadow: 0 0 0 8px rgba(37, 99, 235, 0); }
-}
-@keyframes particleMove {
-  0% { offset-distance: 0%; opacity: 0; }
-  10% { opacity: 1; }
-  90% { opacity: 1; }
-  100% { offset-distance: 100%; opacity: 0; }
-}
-`;
 
 // ============================================================================
 // MAIN COMPONENT
 // ============================================================================
 
-export default function NexusPage() {
+export default function NexusCausalPage() {
   const params = useParams();
   const router = useRouter();
   const { theme } = useTheme();
-  const synthesisId = params?.id as string;
+  const synthesisId = params.id as string;
+  const canvasRef = useRef<HTMLDivElement>(null);
 
   // State
-  const [nodes, setNodes] = useState<TerminalNode[]>(DEMO_NODES);
-  const [edges, setEdges] = useState<TerminalEdge[]>(DEMO_EDGES);
-  const [steps, setSteps] = useState<CausalStep[]>(DEMO_STEPS);
-  const [narrative, setNarrative] = useState<NarrativeEvent[]>(DEMO_NARRATIVE);
-  const [title, setTitle] = useState<string>('Intelligence Terminal');
-  const [pathIntegrity, setPathIntegrity] = useState<number>(87);
-  const [leftPanelOpen, setLeftPanelOpen] = useState(true);
-  const [bottomPanelOpen, setBottomPanelOpen] = useState(true);
+  const [viewMode, setViewMode] = useState<ViewMode>('GRAPH');
   const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [isPanning, setIsPanning] = useState(false);
-  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
-  const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const canvasRef = useRef<HTMLDivElement>(null);
+  const [title, setTitle] = useState('');
+  const [nodes, setNodes] = useState<TerminalNode[]>([...DEMO_NODES, ...DEMO_PREDICTIONS]);
+  const [edges, setEdges] = useState<TerminalEdge[]>(DEMO_EDGES);
+  const [predictions, setPredictions] = useState<PredictionCard[]>([]);
+  const [selectedNode, setSelectedNode] = useState<string | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [hoveredNode, setHoveredNode] = useState<string | null>(null);
+  const [clock, setClock] = useState('');
+  const [bottomTab, setBottomTab] = useState<'NARRATIVE' | 'MATRIX'>('NARRATIVE');
 
   // Fetch data
   useEffect(() => {
-    if (!synthesisId) return;
-    let cancelled = false;
-
     async function fetchData() {
-      setLoading(true);
       try {
-        const data: CausalGraphResponse = await causalService.getCausalGraph(synthesisId);
-        if (cancelled) return;
+        const data = await causalService.getCausalGraph(synthesisId);
+        setTitle(data.title || '');
 
-        if (data && data.nodes && data.nodes.length > 0) {
-          const terminalNodes = layoutNodes(data.nodes, data.central_entity || '');
-          const terminalEdges = layoutEdges(data.edges, terminalNodes);
-          setNodes(terminalNodes);
-          setEdges(terminalEdges);
-          setSteps(buildStepsFromEdges(terminalEdges, terminalNodes));
-          setNarrative(buildNarrativeFromNodes(terminalNodes, terminalEdges));
-          setTitle(data.title || 'Intelligence Terminal');
+        if (data.nodes && data.nodes.length > 0) {
+          const totalNodes = data.nodes.length;
+          const pastMapped: TerminalNode[] = data.nodes.map((n, i) => {
+            const type = mapNodeType(n.node_type);
+            const angle = (i / totalNodes) * Math.PI * 0.8 + Math.PI * 0.1;
+            const radius = 0.15 + Math.random() * 0.15;
+            return {
+              id: n.id,
+              label: n.label.toUpperCase(),
+              type,
+              x: 0.05 + radius * Math.cos(angle) + Math.random() * 0.08,
+              y: 0.15 + (i / totalNodes) * 0.65 + (Math.random() - 0.5) * 0.1,
+              confidence: n.fact_density || 0.7 + Math.random() * 0.25,
+              description: n.label,
+              icon: getNodeIcon(type, n.label),
+            };
+          });
 
-          // Compute path integrity from average confidence
-          const avgConf = data.edges.length > 0
-            ? data.edges.reduce((s, e) => s + e.confidence, 0) / data.edges.length
-            : 0.87;
-          setPathIntegrity(Math.round(avgConf * 100));
+          // Generate prediction nodes from the last nodes in chain
+          const predictionNodes: TerminalNode[] = [];
+          const predictionEdges: TerminalEdge[] = [];
+          const lastNodes = pastMapped.slice(-Math.min(3, pastMapped.length));
+
+          if (data.predictions && data.predictions.length > 0) {
+            data.predictions.slice(0, 3).forEach((p, i) => {
+              const predNode: TerminalNode = {
+                id: `pred-${i}`,
+                label: p.prediction.substring(0, 30).toUpperCase(),
+                type: 'outcome',
+                x: 0.65 + (i % 2) * 0.15,
+                y: 0.2 + i * 0.28,
+                confidence: p.probability,
+                description: p.prediction,
+                icon: p.probability >= 0.7 ? 'analytics' : 'grain',
+                isPrediction: true,
+                probability: Math.round(p.probability * 100),
+              };
+              predictionNodes.push(predNode);
+
+              const sourceNode = lastNodes[i % lastNodes.length];
+              if (sourceNode) {
+                predictionEdges.push({
+                  id: `pe-${i}`,
+                  sourceId: sourceNode.id,
+                  targetId: predNode.id,
+                  relationType: 'enables',
+                  confidence: p.probability,
+                  causeText: sourceNode.label,
+                  effectText: predNode.label,
+                  isPrediction: true,
+                });
+              }
+            });
+          } else {
+            lastNodes.forEach((n, i) => {
+              const predNode: TerminalNode = {
+                id: `pred-auto-${i}`,
+                label: `PROJECTED ${['OUTCOME', 'SHIFT', 'RESPONSE'][i] || 'IMPACT'}`,
+                type: 'outcome',
+                x: 0.68 + (i % 2) * 0.12,
+                y: 0.2 + i * 0.3,
+                confidence: Math.max(0.3, n.confidence - 0.2),
+                description: `Probable outcome from ${n.label}`,
+                icon: ['analytics', 'trending_up', 'grain'][i] || 'analytics',
+                isPrediction: true,
+                probability: Math.round(Math.max(30, (n.confidence - 0.2) * 100)),
+              };
+              predictionNodes.push(predNode);
+              predictionEdges.push({
+                id: `pe-auto-${i}`,
+                sourceId: n.id,
+                targetId: predNode.id,
+                relationType: 'enables',
+                confidence: predNode.confidence,
+                causeText: n.label,
+                effectText: predNode.label,
+                isPrediction: true,
+              });
+            });
+          }
+
+          const mappedEdges: TerminalEdge[] = data.edges.map((e, i) => {
+            const sourceNode = pastMapped.find(n => n.label.toLowerCase().includes(e.cause_text.toLowerCase().substring(0, 10)));
+            const targetNode = pastMapped.find(n => n.label.toLowerCase().includes(e.effect_text.toLowerCase().substring(0, 10)));
+            return {
+              id: `edge-${i}`,
+              sourceId: sourceNode?.id || pastMapped[Math.min(i, pastMapped.length - 1)]?.id || 'n1',
+              targetId: targetNode?.id || pastMapped[Math.min(i + 1, pastMapped.length - 1)]?.id || 'n2',
+              relationType: e.relation_type,
+              confidence: e.confidence,
+              causeText: e.cause_text,
+              effectText: e.effect_text,
+            };
+          });
+
+          setNodes([...pastMapped, ...predictionNodes]);
+          setEdges([...mappedEdges, ...predictionEdges]);
+          setPredictions(buildPredictions([...pastMapped, ...predictionNodes], data.predictions));
+        } else {
+          setNodes([...DEMO_NODES, ...DEMO_PREDICTIONS]);
+          setEdges(DEMO_EDGES);
+          setPredictions(buildPredictions([...DEMO_NODES, ...DEMO_PREDICTIONS]));
         }
       } catch {
-        // Keep demo data on error
+        setNodes([...DEMO_NODES, ...DEMO_PREDICTIONS]);
+        setEdges(DEMO_EDGES);
+        setPredictions(buildPredictions([...DEMO_NODES, ...DEMO_PREDICTIONS]));
       } finally {
-        if (!cancelled) setLoading(false);
+        setLoading(false);
       }
     }
-
     fetchData();
-    return () => { cancelled = true; };
   }, [synthesisId]);
 
-  // Pan handlers
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button === 0 && e.target === canvasRef.current) {
-      setIsPanning(true);
-      setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-    }
-  }, [pan]);
-
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (isPanning) {
-      setPan({ x: e.clientX - panStart.x, y: e.clientY - panStart.y });
-    }
-  }, [isPanning, panStart]);
-
-  const handleMouseUp = useCallback(() => {
-    setIsPanning(false);
+  // Clock
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      setClock(
+        `${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')}:${String(now.getUTCSeconds()).padStart(2, '0')} ZULU`
+      );
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
   }, []);
 
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
-    setZoom(z => Math.max(0.3, Math.min(3, z - e.deltaY * 0.001)));
+  // Derived data
+  const pathIntegrity = useMemo(() => computePathIntegrity(edges), [edges]);
+  const causalSteps = useMemo(() => buildStepsFromData(nodes, edges), [nodes, edges]);
+  const narrativeEvents = useMemo(() => buildNarrativeEvents(nodes), [nodes]);
+  const predictionCards = useMemo(() => {
+    if (predictions.length > 0) return predictions;
+    return buildPredictions(nodes);
+  }, [predictions, nodes]);
+
+  // Handlers
+  const handleZoom = useCallback((dir: 'in' | 'out') => {
+    setZoom(z => Math.max(0.5, Math.min(2, dir === 'in' ? z + 0.15 : z - 0.15)));
   }, []);
 
-  // Node map for edge lookups
-  const nodeMap = useMemo(() => new Map(nodes.map(n => [n.id, n])), [nodes]);
+  const toggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen();
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  }, []);
 
-  // Minimap viewport
-  const minimapScale = 0.15;
-  const viewportW = 160;
-  const viewportH = 160;
+  // SVG line helper
+  const getNodeCenter = useCallback((nodeId: string, canvasW: number, canvasH: number) => {
+    const node = nodes.find(n => n.id === nodeId);
+    if (!node) return { x: 0, y: 0 };
+    return { x: node.x * canvasW, y: node.y * canvasH };
+  }, [nodes]);
 
-  if (!synthesisId) {
+  // ============================================================================
+  // RENDER
+  // ============================================================================
+
+  if (loading) {
     return (
-      <div style={{
-        height: '100vh',
-        backgroundColor: '#0A0A0A',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        color: '#64748B',
-        fontFamily: 'system-ui, sans-serif',
-      }}>
-        Synthesis ID missing
+      <div style={{ position: 'fixed', inset: 0, background: '#0A0A0A', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+        <div style={{ textAlign: 'center' }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 32, color: PURPLE, animation: 'spin 2s linear infinite' }}>hub</span>
+          <div style={{ fontFamily: 'var(--font-label)', fontSize: 10, letterSpacing: '0.2em', color: 'rgba(255,255,255,0.4)', marginTop: 16, fontWeight: 700 }}>
+            INITIALIZING NEXUS GRAPH
+          </div>
+        </div>
+        <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
 
-  return (
-    <div style={{
-      height: '100vh',
-      width: '100vw',
-      overflow: 'hidden',
-      display: 'flex',
-      flexDirection: 'column',
-      backgroundColor: '#0A0A0A',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
-      color: '#E2E8F0',
-      position: 'relative',
-    }}>
-      {/* Inject keyframes */}
-      <style dangerouslySetInnerHTML={{ __html: PULSE_KEYFRAMES }} />
+  const canvasWidth = 900;
+  const canvasHeight = 600;
+  const nowLineX = 0.55;
 
-      {/* Material Symbols */}
-      {/* eslint-disable-next-line @next/next/no-page-custom-font */}
-      <link
-        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap"
-        rel="stylesheet"
-      />
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: '#0A0A0A', display: 'flex', flexDirection: 'column', fontFamily: 'var(--font-label)', zIndex: 9999, overflow: 'hidden' }}>
+
+      <style>{`
+        .nexus-dot-grid {
+          background-image: radial-gradient(#1A1A1A 1px, transparent 1px);
+          background-size: 24px 24px;
+        }
+        .nexus-rhombus {
+          clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+        }
+        .nexus-scrollbar::-webkit-scrollbar { width: 3px; }
+        .nexus-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .nexus-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 0; }
+        @keyframes nexusPulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(139,92,246,0.3); }
+          50% { box-shadow: 0 0 12px 4px rgba(139,92,246,0.15); }
+        }
+        @keyframes nowGlow {
+          0%, 100% { box-shadow: 0 0 8px rgba(255,255,255,0.3); }
+          50% { box-shadow: 0 0 20px rgba(255,255,255,0.15); }
+        }
+        @keyframes flowDash {
+          to { stroke-dashoffset: -20; }
+        }
+      `}</style>
 
       {/* ================================================================ */}
-      {/* FIXED HEADER BAR */}
+      {/* ZONE 1 - TOP BAR                                                 */}
       {/* ================================================================ */}
       <div style={{
-        height: 40,
-        minHeight: 40,
-        backgroundColor: '#111111',
-        borderBottom: '1px solid #1E1E1E',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '0 16px',
-        zIndex: 100,
+        height: 40, minHeight: 40, background: '#131313', borderBottom: '1px solid rgba(255,255,255,0.1)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px', gap: 16,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        {/* Left */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
           <button
-            onClick={() => router.push(`/synthesis/${synthesisId}`)}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#64748B',
-              cursor: 'pointer',
-              padding: '4px 8px',
-              fontSize: 11,
-              fontFamily: 'inherit',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              borderRadius: 0,
-            }}
+            onClick={() => router.back()}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
           >
-            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>arrow_back</span>
-            Back
+            <span className="material-symbols-outlined" style={{ fontSize: 16, color: 'rgba(255,255,255,0.4)' }}>arrow_back</span>
           </button>
-          <div style={{ width: 1, height: 16, backgroundColor: '#1E1E1E' }} />
-          <span style={{
-            fontSize: 11,
-            fontWeight: 600,
-            letterSpacing: '0.08em',
-            textTransform: 'uppercase',
-            color: '#2563EB',
-          }}>
-            Nexus Terminal
+          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.2em', color: 'rgba(255,255,255,0.5)', whiteSpace: 'nowrap' }}>
+            NEXUS CAUSAL GRAPH
           </span>
-          <span style={{ fontSize: 10, color: '#64748B', maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {title}
+          <span style={{ fontSize: 14, fontFamily: 'var(--font-serif)', fontStyle: 'italic', color: 'rgba(255,255,255,0.9)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {title || 'Causal Intelligence Analysis'}
           </span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {loading && (
-            <span style={{ fontSize: 9, color: '#F59E0B', letterSpacing: '0.05em' }}>LOADING...</span>
-          )}
-          <span style={{ fontSize: 9, color: '#64748B' }}>
-            {nodes.length} nodes / {edges.length} edges
-          </span>
+
+        {/* Center - View mode tabs */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+          {(['GRAPH', 'TIMELINE', 'MATRIX'] as ViewMode[]).map(mode => (
+            <button
+              key={mode}
+              onClick={() => setViewMode(mode)}
+              style={{
+                background: viewMode === mode ? 'rgba(255,255,255,0.05)' : 'transparent',
+                border: 'none', borderBottom: viewMode === mode ? `2px solid ${PURPLE}` : '2px solid transparent',
+                color: viewMode === mode ? '#FFFFFF' : 'rgba(255,255,255,0.4)',
+                fontSize: 11, fontWeight: 700, letterSpacing: '0.15em', fontFamily: 'var(--font-label)',
+                padding: '10px 16px', cursor: 'pointer', transition: 'all 0.15s',
+              }}
+            >
+              {mode}
+            </button>
+          ))}
+        </div>
+
+        {/* Right */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: 1, justifyContent: 'flex-end' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.15em', color: 'rgba(255,255,255,0.4)' }}>PATH INTEGRITY:</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: pathIntegrity >= 70 ? '#10B981' : pathIntegrity >= 40 ? '#F59E0B' : '#DC2626', fontFamily: 'var(--font-label)' }}>
+              {pathIntegrity}%
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: 2 }}>
+            <button onClick={() => handleZoom('in')} style={{ width: 28, height: 28, background: '#131313', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 0 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>add</span>
+            </button>
+            <button onClick={() => handleZoom('out')} style={{ width: 28, height: 28, background: '#131313', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 0 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>remove</span>
+            </button>
+          </div>
+          <button onClick={toggleFullscreen} style={{ width: 28, height: 28, background: '#131313', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 0 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>{isFullscreen ? 'fullscreen_exit' : 'fullscreen'}</span>
+          </button>
         </div>
       </div>
 
       {/* ================================================================ */}
-      {/* MAIN CONTENT: LEFT PANEL + CANVAS */}
+      {/* MIDDLE SECTION: LEFT PANEL + CANVAS                              */}
       {/* ================================================================ */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
 
         {/* ============================================================== */}
-        {/* LEFT PANEL - CAUSAL CHAIN */}
+        {/* ZONE 2 - LEFT PANEL                                             */}
         {/* ============================================================== */}
-        {leftPanelOpen && (
-          <div style={{
-            width: 300,
-            minWidth: 300,
-            backgroundColor: 'rgba(17, 17, 17, 0.95)',
-            backdropFilter: 'blur(12px)',
-            borderRight: '1px solid #1E1E1E',
-            display: 'flex',
-            flexDirection: 'column',
-            position: 'relative',
-            zIndex: 50,
-          }}>
-            {/* Panel Header */}
-            <div style={{
-              padding: '16px 16px 12px',
-              borderBottom: '1px solid #1E1E1E',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{
-                  fontFamily: 'Georgia, serif',
-                  fontStyle: 'italic',
-                  fontSize: 20,
-                  color: '#E2E8F0',
-                }}>
-                  Causal Chain
-                </span>
-                <button
-                  onClick={() => setLeftPanelOpen(false)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#64748B',
-                    cursor: 'pointer',
-                    padding: 2,
-                    borderRadius: 0,
-                  }}
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>close</span>
-                </button>
+        <div className="nexus-scrollbar" style={{
+          width: 320, minWidth: 320, background: '#131313', borderRight: '1px solid rgba(255,255,255,0.06)',
+          display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        }}>
+          <div className="nexus-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 8px 16px' }}>
+
+            {/* Section A - CAUSAL CHAIN */}
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'rgba(255,255,255,0.4)' }}>account_tree</span>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.2em', color: 'rgba(255,255,255,0.4)' }}>CAUSAL CHAIN</span>
               </div>
-              <div style={{
-                marginTop: 8,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-              }}>
-                <span style={{ fontSize: 9, color: '#64748B', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                  Path Integrity:
-                </span>
-                <span style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: pathIntegrity >= 80 ? '#10B981' : pathIntegrity >= 50 ? '#F59E0B' : '#DC2626',
-                }}>
-                  {pathIntegrity}%
-                </span>
-              </div>
-            </div>
 
-            {/* Steps List */}
-            <div style={{
-              flex: 1,
-              overflowY: 'auto',
-              padding: '12px 16px',
-            }}>
-              {steps.map((step, i) => {
-                const cfg = STEP_TYPE_CONFIG[step.stepType];
-                return (
-                  <div key={step.id} style={{
-                    position: 'relative',
-                    paddingLeft: 20,
-                    paddingBottom: 16,
-                    borderLeft: `2px solid ${cfg.color}`,
-                    marginLeft: 6,
-                  }}>
-                    {/* Square dot */}
-                    <div style={{
-                      position: 'absolute',
-                      left: -4.5,
-                      top: 2,
-                      width: 7,
-                      height: 7,
-                      backgroundColor: cfg.color,
-                      borderRadius: 0,
-                    }} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                {causalSteps.map((step, i) => {
+                  const color = TYPE_COLORS[step.stepType] || '#2563EB';
+                  const isLast = i === causalSteps.length - 1;
+                  return (
+                    <div key={step.id} style={{ display: 'flex', gap: 10, position: 'relative' }}>
+                      {/* Vertical connector line */}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 16 }}>
+                        <div style={{ width: 8, height: 8, background: color, borderRadius: 0, flexShrink: 0, marginTop: 3 }} />
+                        {!isLast && (
+                          <div style={{ width: 1, flex: 1, background: 'rgba(255,255,255,0.08)', minHeight: 32 }} />
+                        )}
+                      </div>
 
-                    {/* Step header */}
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      marginBottom: 4,
-                    }}>
-                      <span style={{
-                        fontSize: 10,
-                        fontWeight: 700,
-                        color: cfg.color,
-                        letterSpacing: '0.04em',
-                        textTransform: 'uppercase',
-                      }}>
-                        {cfg.label}
-                      </span>
-                      <span style={{
-                        fontSize: 9,
-                        color: '#64748B',
-                        fontFamily: 'monospace',
-                      }}>
-                        {Math.round(step.confidence * 100)}%
-                      </span>
-                    </div>
-
-                    {/* Description */}
-                    <p style={{
-                      fontSize: 11,
-                      color: '#94A3B8',
-                      lineHeight: 1.5,
-                      margin: '0 0 6px 0',
-                    }}>
-                      {step.description}
-                    </p>
-
-                    {/* Confidence bar */}
-                    <div style={{
-                      height: 2,
-                      backgroundColor: '#1E1E1E',
-                      borderRadius: 0,
-                      overflow: 'hidden',
-                    }}>
-                      <div style={{
-                        height: '100%',
-                        width: `${step.confidence * 100}%`,
-                        backgroundColor: cfg.color,
-                        borderRadius: 0,
-                        transition: 'width 0.6s ease',
-                      }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Toggle left panel button (when closed) */}
-        {!leftPanelOpen && (
-          <button
-            onClick={() => setLeftPanelOpen(true)}
-            style={{
-              position: 'absolute',
-              left: 0,
-              top: 12,
-              zIndex: 50,
-              backgroundColor: 'rgba(17, 17, 17, 0.9)',
-              border: '1px solid #1E1E1E',
-              borderLeft: 'none',
-              color: '#64748B',
-              cursor: 'pointer',
-              padding: '8px 6px',
-              borderRadius: 0,
-            }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>chevron_right</span>
-          </button>
-        )}
-
-        {/* ============================================================== */}
-        {/* MAIN CANVAS */}
-        {/* ============================================================== */}
-        <div
-          ref={canvasRef}
-          style={{
-            flex: 1,
-            position: 'relative',
-            overflow: 'hidden',
-            cursor: isPanning ? 'grabbing' : 'grab',
-            backgroundImage: 'radial-gradient(circle, #1a1a1a 1px, transparent 1px)',
-            backgroundSize: '24px 24px',
-            backgroundColor: '#0A0A0A',
-          }}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-          onWheel={handleWheel}
-        >
-          {/* SVG Layer - Edges */}
-          <svg
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              pointerEvents: 'none',
-              zIndex: 1,
-            }}
-          >
-            <defs>
-              <marker
-                id="arrowCauses"
-                markerWidth="8"
-                markerHeight="6"
-                refX="8"
-                refY="3"
-                orient="auto"
-              >
-                <polygon points="0 0, 8 3, 0 6" fill="#64748B" />
-              </marker>
-              <marker
-                id="arrowTriggers"
-                markerWidth="8"
-                markerHeight="6"
-                refX="8"
-                refY="3"
-                orient="auto"
-              >
-                <polygon points="0 0, 8 3, 0 6" fill="#DC2626" />
-              </marker>
-              <marker
-                id="arrowEnables"
-                markerWidth="8"
-                markerHeight="6"
-                refX="8"
-                refY="3"
-                orient="auto"
-              >
-                <polygon points="0 0, 8 3, 0 6" fill="#10B981" />
-              </marker>
-            </defs>
-
-            <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
-              {edges.map(edge => {
-                const source = nodeMap.get(edge.sourceId);
-                const target = nodeMap.get(edge.targetId);
-                if (!source || !target) return null;
-
-                const style = EDGE_STYLE[edge.relationType] || EDGE_STYLE.causes;
-                const markerEnd = edge.relationType === 'triggers'
-                  ? 'url(#arrowTriggers)'
-                  : edge.relationType === 'enables'
-                    ? 'url(#arrowEnables)'
-                    : 'url(#arrowCauses)';
-
-                const edgeColor = edge.relationType === 'triggers' ? '#DC2626'
-                  : edge.relationType === 'enables' ? '#10B981'
-                  : edge.relationType === 'prevents' ? '#F59E0B'
-                  : '#64748B';
-
-                // Curved path
-                const dx = target.x - source.x;
-                const dy = target.y - source.y;
-                const cx1 = source.x + dx * 0.3;
-                const cy1 = source.y + dy * 0.1;
-                const cx2 = source.x + dx * 0.7;
-                const cy2 = target.y - dy * 0.1;
-
-                return (
-                  <g key={edge.id}>
-                    <path
-                      d={`M ${source.x} ${source.y} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${target.x} ${target.y}`}
-                      fill="none"
-                      stroke={edgeColor}
-                      strokeWidth={1.5}
-                      strokeDasharray={style.dashArray}
-                      strokeOpacity={0.6}
-                      markerEnd={markerEnd}
-                    />
-                    {/* Particle dots along path */}
-                    {[0.25, 0.5, 0.75].map((t, pi) => {
-                      const px = (1-t)*(1-t)*(1-t)*source.x + 3*(1-t)*(1-t)*t*cx1 + 3*(1-t)*t*t*cx2 + t*t*t*target.x;
-                      const py = (1-t)*(1-t)*(1-t)*source.y + 3*(1-t)*(1-t)*t*cy1 + 3*(1-t)*t*t*cy2 + t*t*t*target.y;
-                      return (
-                        <circle
-                          key={pi}
-                          cx={px}
-                          cy={py}
-                          r={1.5}
-                          fill={edgeColor}
-                          opacity={0.4}
-                        />
-                      );
-                    })}
-                  </g>
-                );
-              })}
-            </g>
-          </svg>
-
-          {/* Nodes Layer */}
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              zIndex: 2,
-              pointerEvents: 'none',
-            }}
-          >
-            <div style={{
-              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-              transformOrigin: '0 0',
-              position: 'relative',
-              width: '100%',
-              height: '100%',
-            }}>
-              {nodes.map(node => {
-                const cfg = NODE_TYPE_CONFIG[node.type];
-                const isHovered = hoveredNode === node.id;
-                const isFocus = node.type === 'focus';
-
-                return (
-                  <div
-                    key={node.id}
-                    style={{
-                      position: 'absolute',
-                      left: node.x - cfg.size / 2,
-                      top: node.y - cfg.size / 2,
-                      width: cfg.size,
-                      height: cfg.size,
-                      backgroundColor: cfg.color,
-                      borderRadius: 0,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      cursor: 'pointer',
-                      pointerEvents: 'auto',
-                      transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                      transform: isHovered ? 'scale(1.15)' : 'scale(1)',
-                      animation: isFocus ? 'terminalPulse 2s ease-in-out infinite' : 'none',
-                      border: isFocus ? '2px solid rgba(37, 99, 235, 0.6)' : '1px solid rgba(255,255,255,0.1)',
-                      zIndex: isHovered ? 10 : 1,
-                    }}
-                    onMouseEnter={() => setHoveredNode(node.id)}
-                    onMouseLeave={() => setHoveredNode(null)}
-                  >
-                    <span
-                      className="material-symbols-outlined"
-                      style={{
-                        fontSize: cfg.size * 0.45,
-                        color: '#FFFFFF',
-                      }}
-                    >
-                      {cfg.icon}
-                    </span>
-
-                    {/* Node label */}
-                    <div style={{
-                      position: 'absolute',
-                      top: cfg.size + 6,
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      whiteSpace: 'nowrap',
-                      fontSize: 9,
-                      fontWeight: 600,
-                      letterSpacing: '0.06em',
-                      textTransform: 'uppercase',
-                      color: cfg.color,
-                      backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                      padding: '2px 6px',
-                      borderRadius: 0,
-                      maxWidth: 120,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}>
-                      {node.label}
-                    </div>
-
-                    {/* Tooltip on hover */}
-                    {isHovered && node.description && (
-                      <div style={{
-                        position: 'absolute',
-                        bottom: cfg.size + 8,
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        backgroundColor: 'rgba(17, 17, 17, 0.95)',
-                        border: '1px solid #1E1E1E',
-                        padding: '8px 12px',
-                        borderRadius: 0,
-                        maxWidth: 200,
-                        zIndex: 20,
-                      }}>
-                        <div style={{ fontSize: 10, color: '#E2E8F0', marginBottom: 4 }}>{node.description}</div>
-                        <div style={{ fontSize: 9, color: '#64748B' }}>
-                          Confidence: {Math.round(node.confidence * 100)}%
+                      {/* Step content */}
+                      <div style={{ flex: 1, paddingBottom: isLast ? 0 : 12 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.3)', fontFamily: 'var(--font-label)' }}>{step.number}</span>
+                          <span className="material-symbols-outlined" style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>arrow_forward</span>
+                        </div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#FFFFFF', lineHeight: 1.3, marginBottom: 4 }}>
+                          {step.description}
+                        </div>
+                        {/* Confidence bar */}
+                        <div style={{ height: 2, background: 'rgba(255,255,255,0.06)', width: '100%', borderRadius: 0 }}>
+                          <div style={{ height: '100%', width: `${Math.round(step.confidence * 100)}%`, background: color, borderRadius: 0 }} />
                         </div>
                       </div>
-                    )}
-                  </div>
-                );
-              })}
+                    </div>
+                  );
+                })}
+                {causalSteps.length === 0 && (
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', fontStyle: 'italic' }}>No causal chain data available</div>
+                )}
+              </div>
+            </div>
+
+            {/* Section B - PREDICTIONS */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.2em', color: PURPLE }}>PROBABLE FUTURES</span>
+                <span style={{
+                  fontSize: 8, fontWeight: 700, letterSpacing: '0.15em', color: PURPLE,
+                  border: `1px solid ${PURPLE}40`, padding: '2px 6px', borderRadius: 0,
+                }}>AI PROJECTED</span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {predictionCards.map(pred => {
+                  const probColor = pred.probability >= 70 ? '#10B981' : pred.probability >= 45 ? '#F59E0B' : '#DC2626';
+                  const probLabel = pred.probability >= 70 ? 'HIGH PROBABILITY' : pred.probability >= 45 ? 'MODERATE' : 'LOW CONFIDENCE';
+                  return (
+                    <div key={pred.id} style={{
+                      background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)',
+                      padding: '10px 12px', borderRadius: 0,
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: probColor, fontFamily: 'var(--font-label)' }}>
+                          {pred.probability}%
+                        </span>
+                        <span style={{ fontSize: 8, fontWeight: 700, letterSpacing: '0.1em', color: probColor, opacity: 0.8 }}>
+                          {probLabel}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 14, color: `${PURPLE}99`, marginTop: 1, flexShrink: 0 }}>
+                          {pred.icon}
+                        </span>
+                        <span style={{ fontSize: 13, fontFamily: 'var(--font-serif)', fontStyle: 'italic', color: 'rgba(255,255,255,0.8)', lineHeight: 1.4 }}>
+                          {pred.text}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+                {predictionCards.length === 0 && (
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', fontStyle: 'italic' }}>No predictions generated</div>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* ============================================================ */}
-          {/* LEGEND - TOP RIGHT */}
-          {/* ============================================================ */}
-          <div style={{
-            position: 'absolute',
-            top: 12,
-            right: 12,
-            backgroundColor: 'rgba(17, 17, 17, 0.9)',
-            border: '1px solid #1E1E1E',
-            padding: '10px 14px',
-            zIndex: 20,
-            borderRadius: 0,
-          }}>
-            <div style={{
-              fontSize: 9,
-              fontWeight: 700,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              color: '#64748B',
-              marginBottom: 8,
-            }}>
-              Node Types
-            </div>
-            {(['event', 'entity', 'decision', 'outcome'] as TerminalNodeType[]).map(type => {
-              const cfg = NODE_TYPE_CONFIG[type];
-              return (
-                <div key={type} style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  marginBottom: 4,
-                }}>
-                  <div style={{
-                    width: 10,
-                    height: 10,
-                    backgroundColor: cfg.color,
-                    borderRadius: 0,
-                  }} />
-                  <span style={{ fontSize: 9, color: '#94A3B8' }}>{cfg.label}</span>
-                </div>
-              );
-            })}
-            <div style={{
-              marginTop: 8,
-              paddingTop: 8,
-              borderTop: '1px solid #1E1E1E',
-              fontSize: 9,
-              fontWeight: 700,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              color: '#64748B',
-              marginBottom: 6,
-            }}>
-              Edge Types
-            </div>
-            {(['causes', 'triggers', 'enables'] as RelationType[]).map(type => {
-              const color = type === 'triggers' ? '#DC2626' : type === 'enables' ? '#10B981' : '#64748B';
-              const style = EDGE_STYLE[type];
-              return (
-                <div key={type} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-                  <svg width="20" height="6">
-                    <line x1="0" y1="3" x2="20" y2="3" stroke={color} strokeWidth="1.5" strokeDasharray={style.dashArray} />
-                  </svg>
-                  <span style={{ fontSize: 9, color: '#94A3B8', textTransform: 'capitalize' }}>{type}</span>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* ============================================================ */}
-          {/* ZOOM CONTROLS - BOTTOM RIGHT */}
-          {/* ============================================================ */}
-          <div style={{
-            position: 'absolute',
-            bottom: bottomPanelOpen ? 212 : 12,
-            right: 12,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 2,
-            zIndex: 20,
-            transition: 'bottom 0.3s ease',
-          }}>
-            {[
-              { icon: 'add', action: () => setZoom(z => Math.min(3, z + 0.2)) },
-              { icon: 'remove', action: () => setZoom(z => Math.max(0.3, z - 0.2)) },
-              { icon: 'fullscreen', action: () => { setZoom(1); setPan({ x: 0, y: 0 }); } },
-            ].map(({ icon, action }) => (
-              <button
-                key={icon}
-                onClick={action}
-                style={{
-                  width: 28,
-                  height: 28,
-                  backgroundColor: 'rgba(17, 17, 17, 0.9)',
-                  border: '1px solid #1E1E1E',
-                  color: '#94A3B8',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderRadius: 0,
-                  padding: 0,
-                }}
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>{icon}</span>
-              </button>
-            ))}
-          </div>
-
-          {/* ============================================================ */}
-          {/* MINIMAP - BOTTOM LEFT */}
-          {/* ============================================================ */}
-          <div style={{
-            position: 'absolute',
-            bottom: bottomPanelOpen ? 212 : 12,
-            left: leftPanelOpen ? 12 : 40,
-            width: viewportW,
-            height: viewportH,
-            backgroundColor: 'rgba(10, 10, 10, 0.9)',
-            border: '1px solid #1E1E1E',
-            zIndex: 20,
-            overflow: 'hidden',
-            borderRadius: 0,
-            transition: 'bottom 0.3s ease, left 0.3s ease',
-          }}>
-            {/* Mini nodes */}
-            <svg width={viewportW} height={viewportH}>
-              {nodes.map(node => {
-                const cfg = NODE_TYPE_CONFIG[node.type];
-                const mx = node.x * minimapScale + 10;
-                const my = node.y * minimapScale + 10;
-                return (
-                  <rect
-                    key={node.id}
-                    x={mx - 2}
-                    y={my - 2}
-                    width={4}
-                    height={4}
-                    fill={cfg.color}
-                    opacity={0.8}
-                  />
-                );
-              })}
-              {edges.map(edge => {
-                const s = nodeMap.get(edge.sourceId);
-                const t = nodeMap.get(edge.targetId);
-                if (!s || !t) return null;
-                return (
-                  <line
-                    key={edge.id}
-                    x1={s.x * minimapScale + 10}
-                    y1={s.y * minimapScale + 10}
-                    x2={t.x * minimapScale + 10}
-                    y2={t.y * minimapScale + 10}
-                    stroke="#333"
-                    strokeWidth={0.5}
-                  />
-                );
-              })}
-              {/* Viewport rectangle */}
-              <rect
-                x={(-pan.x / zoom) * minimapScale + 10}
-                y={(-pan.y / zoom) * minimapScale + 10}
-                width={(viewportW / zoom) * minimapScale}
-                height={(viewportH / zoom) * minimapScale}
-                fill="rgba(37, 99, 235, 0.05)"
-                stroke="#2563EB"
-                strokeWidth={1}
-              />
-            </svg>
-            {/* Label */}
-            <div style={{
-              position: 'absolute',
-              bottom: 4,
-              right: 6,
-              fontSize: 7,
-              color: '#333',
-              letterSpacing: '0.05em',
-              fontFamily: 'monospace',
-            }}>
-              MiniMap_Ref
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ================================================================ */}
-      {/* NARRATIVE FLOW PANEL - BOTTOM */}
-      {/* ================================================================ */}
-      <div style={{
-        height: bottomPanelOpen ? 200 : 32,
-        minHeight: bottomPanelOpen ? 200 : 32,
-        backgroundColor: '#111111',
-        borderTop: '1px solid #1E1E1E',
-        transition: 'height 0.3s ease, min-height 0.3s ease',
-        overflow: 'hidden',
-        zIndex: 40,
-      }}>
-        {/* Header bar */}
-        <div
-          onClick={() => setBottomPanelOpen(!bottomPanelOpen)}
-          style={{
-            height: 32,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '0 16px',
-            cursor: 'pointer',
-            borderBottom: bottomPanelOpen ? '1px solid #1E1E1E' : 'none',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{
-              fontSize: 10,
-              fontWeight: 700,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              color: '#E2E8F0',
-            }}>
-              Narrative Flow
-            </span>
-            <span style={{
-              fontSize: 9,
-              color: '#64748B',
-              fontStyle: 'italic',
-            }}>
-              Sequence Analysis Active
-            </span>
-          </div>
-          <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#64748B' }}>
-            {bottomPanelOpen ? 'expand_more' : 'expand_less'}
-          </span>
-        </div>
-
-        {/* Timeline content */}
-        {bottomPanelOpen && (
-          <div style={{
-            padding: '24px 32px',
-            overflowX: 'auto',
-            overflowY: 'hidden',
-            height: 'calc(100% - 32px)',
-            display: 'flex',
-            alignItems: 'center',
-          }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              position: 'relative',
-              minWidth: narrative.length * 180,
-            }}>
-              {/* Connecting line */}
-              <div style={{
-                position: 'absolute',
-                top: '50%',
-                left: 20,
-                right: 20,
-                height: 1,
-                backgroundColor: '#1E1E1E',
-                transform: 'translateY(-50%)',
-              }} />
-
-              {narrative.map((event, i) => (
-                <div
-                  key={event.id}
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    position: 'relative',
-                    width: 180,
-                    flexShrink: 0,
-                  }}
-                >
-                  {/* Dot */}
-                  <div style={{
-                    width: 10,
-                    height: 10,
-                    backgroundColor: event.color,
-                    borderRadius: 0,
-                    border: '2px solid #0A0A0A',
-                    position: 'relative',
-                    zIndex: 2,
-                    marginBottom: 12,
-                  }} />
-
-                  {/* Label */}
-                  <div style={{
-                    fontSize: 9,
-                    color: '#94A3B8',
-                    textAlign: 'center',
-                    fontFamily: 'monospace',
-                    lineHeight: 1.5,
-                    maxWidth: 150,
-                    wordBreak: 'break-word',
-                  }}>
-                    {event.label}
-                  </div>
+          {/* Section C - LEGEND (at bottom) */}
+          <div style={{ padding: '12px 16px', borderTop: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 12px', marginBottom: 8 }}>
+              {([
+                { label: 'EVENT', color: '#DC2626' },
+                { label: 'ENTITY', color: '#2563EB' },
+                { label: 'DECISION', color: '#F59E0B' },
+                { label: 'OUTCOME', color: '#10B981' },
+              ]).map(item => (
+                <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ width: 6, height: 6, background: item.color, borderRadius: 0, flexShrink: 0 }} />
+                  <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', color: 'rgba(255,255,255,0.5)' }}>{item.label}</span>
                 </div>
               ))}
             </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ width: 6, height: 6, border: `1px dashed ${PURPLE}`, borderRadius: 0, transform: 'rotate(45deg)', flexShrink: 0 }} />
+              <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: '0.1em', color: 'rgba(255,255,255,0.4)' }}>PREDICTION PATH</span>
+            </div>
           </div>
-        )}
+        </div>
+
+        {/* ============================================================== */}
+        {/* ZONE 3 - MAIN CANVAS                                            */}
+        {/* ============================================================== */}
+        <div
+          ref={canvasRef}
+          className="nexus-dot-grid"
+          style={{
+            flex: 1, position: 'relative', overflow: 'hidden',
+            background: '#0A0A0A',
+          }}
+        >
+          {/* Canvas inner (zoomable) */}
+          <div style={{
+            position: 'absolute', inset: 0,
+            transform: `scale(${zoom})`, transformOrigin: 'center center',
+            transition: 'transform 0.2s ease',
+          }}>
+
+            {/* SVG Connections */}
+            <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+              <defs>
+                <marker id="arrow-solid" viewBox="0 0 10 6" refX="9" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 3 L 0 6 z" fill="rgba(255,255,255,0.3)" />
+                </marker>
+                <marker id="arrow-purple" viewBox="0 0 10 6" refX="9" refY="3" markerWidth="8" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 3 L 0 6 z" fill={`${PURPLE}80`} />
+                </marker>
+              </defs>
+              {edges.map(edge => {
+                const source = nodes.find(n => n.id === edge.sourceId);
+                const target = nodes.find(n => n.id === edge.targetId);
+                if (!source || !target) return null;
+
+                const x1 = `${source.x * 100}%`;
+                const y1 = `${source.y * 100}%`;
+                const x2 = `${target.x * 100}%`;
+                const y2 = `${target.y * 100}%`;
+
+                const isP = edge.isPrediction;
+                const edgeColor = isP ? PURPLE : TYPE_COLORS[source.type] || 'rgba(255,255,255,0.2)';
+
+                return (
+                  <line
+                    key={edge.id}
+                    x1={x1} y1={y1} x2={x2} y2={y2}
+                    stroke={edgeColor}
+                    strokeWidth={isP ? 1 : 1.5}
+                    strokeOpacity={isP ? 0.4 : 0.25}
+                    strokeDasharray={isP ? '6,4' : 'none'}
+                    markerEnd={isP ? 'url(#arrow-purple)' : 'url(#arrow-solid)'}
+                    style={isP ? { animation: 'flowDash 1.5s linear infinite' } : undefined}
+                  />
+                );
+              })}
+            </svg>
+
+            {/* "NOW" Divider */}
+            <div style={{
+              position: 'absolute', left: `${nowLineX * 100}%`, top: 0, bottom: 0, width: 0,
+              borderLeft: '1.5px dashed rgba(255,255,255,0.15)', zIndex: 10, pointerEvents: 'none',
+            }}>
+              <div style={{
+                position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+                background: '#FFFFFF', padding: '3px 10px', borderRadius: 0,
+                animation: 'nowGlow 3s ease-in-out infinite',
+              }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: '#000000', letterSpacing: '0.1em', fontFamily: 'var(--font-label)', whiteSpace: 'nowrap' }}>
+                  NOW — T+0
+                </span>
+              </div>
+            </div>
+
+            {/* PAST NODES — squares */}
+            {nodes.filter(n => !n.isPrediction).map(node => {
+              const color = TYPE_COLORS[node.type];
+              const size = node.type === 'focus' ? 56 : 48;
+              const isSelected = selectedNode === node.id;
+              const isHovered = hoveredNode === node.id;
+
+              return (
+                <div
+                  key={node.id}
+                  onClick={() => setSelectedNode(isSelected ? null : node.id)}
+                  onMouseEnter={() => setHoveredNode(node.id)}
+                  onMouseLeave={() => setHoveredNode(null)}
+                  style={{
+                    position: 'absolute',
+                    left: `${node.x * 100}%`, top: `${node.y * 100}%`,
+                    transform: 'translate(-50%, -50%)',
+                    cursor: 'pointer', zIndex: 20,
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                  }}
+                >
+                  <div style={{
+                    width: size, height: size,
+                    background: isSelected ? color : `${color}CC`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    borderRadius: 0,
+                    border: isSelected ? '2px solid #FFFFFF' : `1px solid ${color}`,
+                    boxShadow: isHovered ? `0 0 16px ${color}40` : 'none',
+                    transition: 'all 0.15s',
+                  }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 22, color: '#FFFFFF' }}>
+                      {node.icon}
+                    </span>
+                  </div>
+                  <span style={{
+                    fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.6)', letterSpacing: '0.15em',
+                    textAlign: 'center', maxWidth: 80, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  }}>
+                    {node.label}
+                  </span>
+
+                  {/* Tooltip on hover */}
+                  {isHovered && node.description && (
+                    <div style={{
+                      position: 'absolute', top: size + 24, left: '50%', transform: 'translateX(-50%)',
+                      background: '#1A1A1A', border: '1px solid rgba(255,255,255,0.1)',
+                      padding: '8px 10px', minWidth: 160, maxWidth: 220, zIndex: 100, borderRadius: 0,
+                    }}>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)', lineHeight: 1.4, fontFamily: 'var(--font-serif)' }}>
+                        {node.description}
+                      </div>
+                      <div style={{ marginTop: 4, fontSize: 9, color: 'rgba(255,255,255,0.4)', fontWeight: 700 }}>
+                        CONFIDENCE: {Math.round(node.confidence * 100)}%
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* PREDICTION NODES — diamonds */}
+            {nodes.filter(n => n.isPrediction).map(node => {
+              const size = 52;
+              const isSelected = selectedNode === node.id;
+              const isHovered = hoveredNode === node.id;
+
+              return (
+                <div
+                  key={node.id}
+                  onClick={() => setSelectedNode(isSelected ? null : node.id)}
+                  onMouseEnter={() => setHoveredNode(node.id)}
+                  onMouseLeave={() => setHoveredNode(null)}
+                  style={{
+                    position: 'absolute',
+                    left: `${node.x * 100}%`, top: `${node.y * 100}%`,
+                    transform: 'translate(-50%, -50%)',
+                    cursor: 'pointer', zIndex: 20,
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                  }}
+                >
+                  <div className="nexus-rhombus" style={{
+                    width: size, height: size,
+                    background: `${PURPLE}33`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    border: `1.5px dashed ${PURPLE}80`,
+                    boxShadow: isHovered ? `0 0 10px rgba(139,92,246,0.2)` : 'none',
+                    animation: isSelected ? 'nexusPulse 2s ease-in-out infinite' : 'none',
+                    transition: 'box-shadow 0.15s',
+                  }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 20, color: PURPLE }}>
+                      {node.icon}
+                    </span>
+                  </div>
+                  {/* Probability badge */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: `${PURPLE}CC`, fontFamily: 'var(--font-label)' }}>
+                      {node.probability || Math.round(node.confidence * 100)}%
+                    </span>
+                  </div>
+                  <span style={{
+                    fontSize: 9, fontWeight: 700, color: `${PURPLE}CC`, letterSpacing: '0.15em',
+                    textAlign: 'center', maxWidth: 80, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  }}>
+                    {node.label}
+                  </span>
+
+                  {/* Tooltip on hover */}
+                  {isHovered && node.description && (
+                    <div style={{
+                      position: 'absolute', top: size + 30, left: '50%', transform: 'translateX(-50%)',
+                      background: '#1A1A1A', border: `1px solid ${PURPLE}30`,
+                      padding: '8px 10px', minWidth: 160, maxWidth: 220, zIndex: 100, borderRadius: 0,
+                    }}>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)', lineHeight: 1.4, fontFamily: 'var(--font-serif)' }}>
+                        {node.description}
+                      </div>
+                      <div style={{ marginTop: 4, fontSize: 9, color: `${PURPLE}99`, fontWeight: 700 }}>
+                        PROBABILITY: {node.probability || Math.round(node.confidence * 100)}%
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Overlay: Zoom controls (top-right) */}
+          <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', flexDirection: 'column', gap: 2, zIndex: 50 }}>
+            <button onClick={() => handleZoom('in')} style={{ width: 32, height: 32, background: '#131313', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 0, fontSize: 16, fontFamily: 'var(--font-label)' }}>+</button>
+            <button onClick={() => handleZoom('out')} style={{ width: 32, height: 32, background: '#131313', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 0, fontSize: 16, fontFamily: 'var(--font-label)' }}>-</button>
+          </div>
+
+          {/* Overlay: Minimap (bottom-left) */}
+          <div style={{
+            position: 'absolute', bottom: 12, left: 12, width: 160, height: 120,
+            background: '#0D0D0D', border: '1px solid rgba(255,255,255,0.08)', zIndex: 50,
+            overflow: 'hidden', borderRadius: 0,
+          }}>
+            {/* Mini dots */}
+            {nodes.map(n => (
+              <div key={`mini-${n.id}`} style={{
+                position: 'absolute',
+                left: `${n.x * 100}%`, top: `${n.y * 100}%`,
+                width: n.isPrediction ? 3 : 4, height: n.isPrediction ? 3 : 4,
+                background: n.isPrediction ? PURPLE : TYPE_COLORS[n.type],
+                borderRadius: n.isPrediction ? 0 : 0,
+                transform: n.isPrediction ? 'rotate(45deg) translate(-50%, -50%)' : 'translate(-50%, -50%)',
+                opacity: 0.8,
+              }} />
+            ))}
+            {/* NOW line */}
+            <div style={{ position: 'absolute', left: `${nowLineX * 100}%`, top: 0, bottom: 0, width: 0, borderLeft: '1px dashed rgba(255,255,255,0.2)' }} />
+            {/* Viewport rectangle */}
+            <div style={{
+              position: 'absolute',
+              left: `${Math.max(0, 50 - 50 / zoom)}%`,
+              top: `${Math.max(0, 50 - 50 / zoom)}%`,
+              width: `${Math.min(100, 100 / zoom)}%`,
+              height: `${Math.min(100, 100 / zoom)}%`,
+              border: '1px solid #2563EB',
+              opacity: 0.6,
+            }} />
+          </div>
+
+          {/* Overlay: Export buttons (bottom-right) */}
+          <div style={{ position: 'absolute', bottom: 12, right: 12, display: 'flex', gap: 6, zIndex: 50 }}>
+            <button style={{
+              background: '#131313', border: '1px solid rgba(255,255,255,0.1)',
+              color: 'rgba(255,255,255,0.5)', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em',
+              padding: '6px 12px', cursor: 'pointer', borderRadius: 0, fontFamily: 'var(--font-label)',
+              display: 'flex', alignItems: 'center', gap: 4,
+            }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 12 }}>download</span>
+              EXPORT SVG
+            </button>
+            <button style={{
+              background: '#131313', border: '1px solid rgba(255,255,255,0.1)',
+              color: 'rgba(255,255,255,0.5)', fontSize: 9, fontWeight: 700, letterSpacing: '0.1em',
+              padding: '6px 12px', cursor: 'pointer', borderRadius: 0, fontFamily: 'var(--font-label)',
+              display: 'flex', alignItems: 'center', gap: 4,
+            }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 12 }}>share</span>
+              SHARE ANALYSIS
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ================================================================ */}
+      {/* ZONE 4 - BOTTOM PANEL                                            */}
+      {/* ================================================================ */}
+      <div style={{
+        height: 180, minHeight: 180, background: '#131313', borderTop: '1px solid rgba(255,255,255,0.1)',
+        display: 'flex', flexDirection: 'column',
+      }}>
+        {/* Tab bar */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          borderBottom: '1px solid rgba(255,255,255,0.06)', padding: '0 16px',
+        }}>
+          <div style={{ display: 'flex', gap: 0 }}>
+            {([
+              { id: 'NARRATIVE' as const, label: 'NARRATIVE FLOW' },
+              { id: 'MATRIX' as const, label: 'SCENARIO MATRIX' },
+            ]).map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setBottomTab(tab.id)}
+                style={{
+                  background: 'transparent', border: 'none',
+                  borderBottom: bottomTab === tab.id ? `2px solid ${PURPLE}` : '2px solid transparent',
+                  color: bottomTab === tab.id ? '#FFFFFF' : 'rgba(255,255,255,0.4)',
+                  fontSize: 10, fontWeight: 700, letterSpacing: '0.15em',
+                  padding: '10px 14px', cursor: 'pointer', fontFamily: 'var(--font-label)',
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <div style={{ width: 6, height: 6, background: '#10B981', borderRadius: '50%' }} />
+              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', color: 'rgba(255,255,255,0.5)' }}>LIVE SYSTEM</span>
+            </div>
+            <span style={{ fontSize: 10, fontWeight: 700, color: 'rgba(255,255,255,0.4)', fontFamily: 'var(--font-label)', letterSpacing: '0.05em' }}>
+              T-CLOCK: {clock}
+            </span>
+          </div>
+        </div>
+
+        {/* Timeline content */}
+        <div style={{ flex: 1, position: 'relative', padding: '0 24px', display: 'flex', alignItems: 'center' }}>
+          {bottomTab === 'NARRATIVE' ? (
+            <div style={{ width: '100%', position: 'relative' }}>
+              {/* Horizontal line */}
+              <div style={{ position: 'absolute', left: 0, right: 0, top: '50%', height: 1, background: 'rgba(255,255,255,0.1)', transform: 'translateY(-50%)' }} />
+
+              {/* Event dots */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 2 }}>
+                {narrativeEvents.map(evt => {
+                  const isNow = evt.type === 'now';
+                  const isFuture = evt.type === 'future';
+
+                  return (
+                    <div key={evt.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, minWidth: 60 }}>
+                      {/* Dot */}
+                      {isNow ? (
+                        <div style={{
+                          width: 12, height: 12, background: '#FFFFFF', transform: 'rotate(45deg)',
+                          boxShadow: '0 0 12px rgba(255,255,255,0.4)',
+                        }} />
+                      ) : isFuture ? (
+                        <div style={{
+                          width: 10, height: 10, background: 'transparent',
+                          border: `1.5px dashed ${PURPLE}`, transform: 'rotate(45deg)',
+                        }} />
+                      ) : (
+                        <div style={{ width: 8, height: 8, background: evt.color, borderRadius: 0 }} />
+                      )}
+
+                      {/* Time label */}
+                      <span style={{
+                        fontSize: 9, fontWeight: 700, letterSpacing: '0.1em',
+                        color: isNow ? '#FFFFFF' : isFuture ? `${PURPLE}CC` : 'rgba(255,255,255,0.4)',
+                        fontFamily: 'var(--font-label)',
+                      }}>
+                        {isNow ? 'T+0 [NOW]' : evt.timeLabel}
+                      </span>
+
+                      {/* Event label */}
+                      <span style={{
+                        fontSize: 8, fontWeight: 600, letterSpacing: '0.1em',
+                        color: isNow ? 'rgba(255,255,255,0.7)' : isFuture ? `${PURPLE}99` : 'rgba(255,255,255,0.35)',
+                        textAlign: 'center', maxWidth: 70, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {evt.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', letterSpacing: '0.15em', fontWeight: 700 }}>
+                SCENARIO MATRIX — COMING SOON
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Bottom info bar */}
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          padding: '8px 24px', borderTop: '1px solid rgba(255,255,255,0.04)',
+        }}>
+          <div style={{ display: 'flex', gap: 16 }}>
+            <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', fontWeight: 700, letterSpacing: '0.1em' }}>
+              DATA ORIGIN: {nodes.filter(n => !n.isPrediction).length} NODES
+            </span>
+            <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', fontWeight: 700, letterSpacing: '0.1em' }}>
+              CONFIDENCE: {pathIntegrity}%
+            </span>
+            <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', fontWeight: 700, letterSpacing: '0.1em' }}>
+              PREDICTIONS: {nodes.filter(n => n.isPrediction).length}
+            </span>
+          </div>
+          <span style={{ fontSize: 12, fontFamily: 'var(--font-serif)', fontStyle: 'italic', color: 'rgba(255,255,255,0.35)', maxWidth: 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {title ? `Causal analysis of: ${title}` : 'Intelligence causal graph — synthesized from multi-source data'}
+          </span>
+        </div>
       </div>
     </div>
   );
