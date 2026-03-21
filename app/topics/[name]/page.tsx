@@ -5,7 +5,7 @@ import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useTheme } from '@/app/contexts/ThemeContext';
-import { getNodeIcon, getNodeSize } from '@/app/lib/causal-icons';
+import { getNodeIcon, getNodeSize, condensLabel } from '@/app/lib/causal-icons';
 import { Header } from '@/app/components/layout/Header';
 
 // Lazy-load the interactive force graph
@@ -794,7 +794,7 @@ function TopicDashboardPage() {
                                       </svg>
                                     </g>
                                     <text x={p.x} y={p.y + size + 12} fill="rgba(255,255,255,0.7)" fontSize={Math.max(8, Math.min(size * 0.5, 11))} fontWeight="600" textAnchor="middle" fontFamily="var(--font-label)">
-                                      {node.label.length > 28 ? node.label.substring(0, 28) + '...' : node.label}
+                                      {condensLabel(node.label, 24)}
                                     </text>
                                   </g>
                                 );

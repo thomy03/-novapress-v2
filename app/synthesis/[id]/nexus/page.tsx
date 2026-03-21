@@ -21,7 +21,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { causalService } from '@/app/lib/api/services/causal';
-import { getNodeIcon, getNodeSize } from '@/app/lib/causal-icons';
+import { getNodeIcon, getNodeSize, condensLabel } from '@/app/lib/causal-icons';
 import type {
   CausalGraphResponse,
   CausalNode as ApiCausalNode,
@@ -176,7 +176,7 @@ function CausalSquareNode({ data }: NodeProps) {
         textOverflow: 'ellipsis',
         maxWidth: 160,
       }}>
-        {label.length > 30 ? label.substring(0, 28) + '...' : label}
+        {condensLabel(label, 26)}
       </div>
       {/* Probability badge for predictions */}
       {isPrediction && probability !== undefined && (

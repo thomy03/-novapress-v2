@@ -180,3 +180,44 @@ export function getIconSvgProps(icon: IconDef, size: number, color: string) {
     path: icon.path,
   };
 }
+
+/**
+ * Condense a long causal label into a short, readable title.
+ * Removes filler words, extracts the key subject, keeps max ~25 chars.
+ * Examples:
+ *   "Riposte iranienne sur Diego Garcia" → "Riposte sur Diego Garcia"
+ *   "Préoccupation sécuritaire mondiale accrue" → "Inquietude securitaire"
+ *   "Déclaration Trump sur retrait possible" → "Trump: retrait possible"
+ *   "Le scénario du statu quo tendu et des négociations indirectes" → "Statu quo & negociations"
+ */
+export function condensLabel(label: string, maxLen: number = 26): string {
+  if (label.length <= maxLen) return label;
+
+  // Remove common French filler prefixes
+  let short = label
+    .replace(/^(Le scénario d[eu']?\s*)/i, '')
+    .replace(/^(La |Le |Les |Un |Une |Des |Du )/i, '')
+    .replace(/^(Déclaration |Annonce |Appel |Risque d[e']?\s*)/i, (m) => {
+      // Keep a short version of the prefix
+      const map: Record<string, string> = {
+        'declaration ': 'Decl. ',
+        'déclaration ': 'Decl. ',
+        'annonce ': '',
+        'appel ': 'Appel ',
+        "risque d'": 'Risque: ',
+        'risque de ': 'Risque: ',
+      };
+      return map[m.toLowerCase()] ?? m.substring(0, 5) + '. ';
+    })
+    .replace(/\s+(sur|de|du|des|la|le|les|et|ou|en|au|aux|par|pour|dans|avec)\s+/gi, ' ')
+    .trim();
+
+  // If still too long, take first N chars at word boundary
+  if (short.length > maxLen) {
+    const cut = short.substring(0, maxLen);
+    const lastSpace = cut.lastIndexOf(' ');
+    short = lastSpace > maxLen * 0.5 ? cut.substring(0, lastSpace) : cut;
+  }
+
+  return short;
+}
