@@ -30,6 +30,8 @@ class QdrantService:
         # Intelligence Hub collections
         self.entities_collection = "novapress_entities"
         self.topics_collection = "novapress_topics"
+        # NovaLex legal documents collection
+        self.novalex_collection = "novalex_documents"
 
     async def initialize(self):
         """Initialize Qdrant client and create collections"""
@@ -99,6 +101,41 @@ class QdrantService:
                 logger.success(f"✅ Collection '{self.topics_collection}' created")
             else:
                 logger.info(f"Collection '{self.topics_collection}' already exists")
+
+            # NovaLex legal documents collection (Gemini Embedding 2 - 3072-dim)
+            if self.novalex_collection not in collection_names:
+                logger.info(f"Creating collection: {self.novalex_collection}")
+                self.client.create_collection(
+                    collection_name=self.novalex_collection,
+                    vectors_config=VectorParams(
+                        size=3072,  # Gemini Embedding 2
+                        distance=Distance.COSINE
+                    )
+                )
+                # Create payload indexes for filtering
+                self.client.create_payload_index(
+                    collection_name=self.novalex_collection,
+                    field_name="doc_type",
+                    field_schema="keyword"
+                )
+                self.client.create_payload_index(
+                    collection_name=self.novalex_collection,
+                    field_name="jurisdiction",
+                    field_schema="keyword"
+                )
+                self.client.create_payload_index(
+                    collection_name=self.novalex_collection,
+                    field_name="category",
+                    field_schema="keyword"
+                )
+                self.client.create_payload_index(
+                    collection_name=self.novalex_collection,
+                    field_name="source_name",
+                    field_schema="keyword"
+                )
+                logger.success(f"✅ Collection '{self.novalex_collection}' created")
+            else:
+                logger.info(f"Collection '{self.novalex_collection}' already exists")
 
             logger.success("✅ Qdrant connected")
 
@@ -2877,6 +2914,65 @@ class QdrantService:
         except Exception as e:
             logger.error(f"Failed to find topic for synthesis {synthesis_id}: {e}")
             return None
+
+
+    # ==================== NovaLex Legal Documents ====================
+
+    def upsert_legal_document(self, doc_id: str, vector: List[float], payload: Dict[str, Any]) -> bool:
+        """Upsert a legal document into the novalex collection"""
+        try:
+            self.client.upsert(
+                collection_name=self.novalex_collection,
+                points=[PointStruct(
+                    id=doc_id,
+                    vector=vector,
+                    payload=payload
+                )]
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to upsert legal doc {doc_id}: {e}")
+            return False
+
+    def search_legal_documents(
+        self,
+        query_vector: List[float],
+        limit: int = 10,
+        doc_type: Optional[str] = None,
+        jurisdiction: Optional[str] = None,
+        category: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Search legal documents with optional filters"""
+        filters = []
+        if doc_type:
+            filters.append(FieldCondition(key="doc_type", match=MatchValue(value=doc_type)))
+        if jurisdiction:
+            filters.append(FieldCondition(key="jurisdiction", match=MatchValue(value=jurisdiction)))
+        if category:
+            filters.append(FieldCondition(key="category", match=MatchValue(value=category)))
+
+        search_filter = Filter(must=filters) if filters else None
+
+        results = self.client.search(
+            collection_name=self.novalex_collection,
+            query_vector=query_vector,
+            limit=limit,
+            query_filter=search_filter,
+            with_payload=True
+        )
+
+        return [
+            {"id": str(r.id), "score": r.score, **r.payload}
+            for r in results
+        ]
+
+    def get_legal_document_count(self) -> int:
+        """Get total count of legal documents"""
+        try:
+            info = self.client.get_collection(self.novalex_collection)
+            return info.points_count or 0
+        except Exception:
+            return 0
 
 
 # Global instance
