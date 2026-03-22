@@ -35,7 +35,7 @@ logger.add(
     format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
     colorize=True
 )
-from app.api.routes import articles, trending, auth, search, websocket, syntheses, time_traveler, causal, admin, intelligence, artifacts, push, billing, subscription, waitlist, chat, talkshow
+from app.api.routes import articles, trending, auth, search, websocket, syntheses, time_traveler, causal, admin, intelligence, artifacts, push, billing, subscription, waitlist, chat, talkshow, novalex
 from app.core.circuit_breaker import init_circuit_breakers
 from app.core.metrics import generate_metrics, get_content_type, set_app_info
 
@@ -301,6 +301,7 @@ app.include_router(subscription.router, prefix=f"{settings.API_V1_PREFIX}/subscr
 app.include_router(waitlist.router, prefix=f"{settings.API_V1_PREFIX}/waitlist", tags=["Waitlist"])
 app.include_router(chat.router, prefix="/ws", tags=["Chat"])
 app.include_router(talkshow.router, prefix=f"{settings.API_V1_PREFIX}/talkshow", tags=["Talkshow"])
+app.include_router(novalex.router, prefix=f"{settings.API_V1_PREFIX}/novalex", tags=["NovaLex"])
 
 
 # ─── Telegram Webhook ───
