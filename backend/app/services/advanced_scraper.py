@@ -115,6 +115,55 @@ class AdvancedNewsScraper:
         "francetvinfo.fr": "https://www.francetvinfo.fr/titres.rss",
         "liberation.fr": "https://www.liberation.fr/arc/outboundfeeds/rss/?outputType=xml",
         "lesechos.fr": "https://www.lesechos.fr/rss/rss_manchettes.xml",
+
+        # === FINANCE US (added 2026-03) ===
+        "seekingalpha.com": "https://seekingalpha.com/market_currents.xml",
+        "benzinga.com": "https://www.benzinga.com/feed",
+        "marketwatch.com": "https://feeds.marketwatch.com/marketwatch/topstories/",
+        "barrons.com": "https://www.barrons.com/feed",
+        "thestreet.com": "https://www.thestreet.com/rss/main.xml",
+        "investorplace.com": "https://investorplace.com/feed/",
+        "fool.com": "https://www.fool.com/feeds/index.aspx",
+
+        # === FINANCE EU (added 2026-03) ===
+        "zonebourse.com": "https://www.zonebourse.com/rss/actualites.xml",
+        "boursorama.com": "https://www.boursorama.com/rss/actualites",
+        "investir.lesechos.fr": "https://investir.lesechos.fr/rss/rss_actus.xml",
+        "bfmtv.com": "https://www.bfmtv.com/rss/economie/",
+
+        # === CRYPTO (added 2026-03) ===
+        "coindesk.com": "https://www.coindesk.com/arc/outboundfeeds/rss/",
+        "theblock.co": "https://www.theblock.co/rss.xml",
+        "decrypt.co": "https://decrypt.co/feed",
+        "cointelegraph.com": "https://cointelegraph.com/rss",
+        "bitcoinmagazine.com": "https://bitcoinmagazine.com/feed",
+
+        # === MACRO (added 2026-03) ===
+        "imf.org": "https://www.imf.org/en/News/RSS?language=eng",
+        "worldbank.org": "https://blogs.worldbank.org/rss.xml",
+        "bis.org": "https://www.bis.org/rss/bispubls.rss",
+
+        # === COMMODITIES (added 2026-03) ===
+        "oilprice.com": "https://oilprice.com/rss/main",
+        "mining.com": "https://www.mining.com/feed/",
+        "kitco.com": "https://www.kitco.com/rss/kitconews.rss",
+
+        # === TECH / SEMICONDUCTORS (added 2026-03) ===
+        "semianalysis.com": "https://www.semianalysis.com/feed",
+        "eetimes.com": "https://www.eetimes.com/rss",
+
+        # === BIOTECH / PHARMA (added 2026-03) ===
+        "biopharmadive.com": "https://www.biopharmadive.com/feeds/news/",
+        "fiercepharma.com": "https://www.fiercepharma.com/rss/xml",
+        "statnews.com": "https://www.statnews.com/feed/",
+
+        # === ENERGY (added 2026-03) ===
+        "utilitydive.com": "https://www.utilitydive.com/feeds/news/",
+        "energymonitor.ai": "https://www.energymonitor.ai/feed/",
+
+        # === FINTECH (added 2026-03) ===
+        "finextra.com": "https://www.finextra.com/rss/headlines.aspx",
+        "paymentsdive.com": "https://www.paymentsdive.com/feeds/news/",
     }
 
     # Sources mondiales de qualité
@@ -1139,7 +1188,173 @@ class AdvancedNewsScraper:
                 "content": "div.article-body p"
             },
             "rate_limit": 1.5
-        }
+        },
+
+        # ═══════════════════════════════════════════════════════════════
+        # === FINANCE / CRYPTO / MACRO (added 2026-03) ===
+        # ═══════════════════════════════════════════════════════════════
+
+        # --- Crypto ---
+        "coindesk.com": {
+            "name": "CoinDesk",
+            "url": "https://www.coindesk.com",
+            "selectors": {
+                "article_links": "a[href*='/markets/'], a[href*='/tech/'], a[href*='/policy/'], a[href*='/business/']",
+                "title": "h1",
+                "content": "div.article-body p, div[class*='article-content'] p"
+            },
+            "rate_limit": 2.0
+        },
+        "theblock.co": {
+            "name": "The Block",
+            "url": "https://www.theblock.co",
+            "selectors": {
+                "article_links": "a[href*='/post/'], a[href*='/news/']",
+                "title": "h1",
+                "content": "div.article__content p, div[class*='articleBody'] p"
+            },
+            "rate_limit": 2.0
+        },
+        "decrypt.co": {
+            "name": "Decrypt",
+            "url": "https://decrypt.co",
+            "selectors": {
+                "article_links": "a[href*='/article/'], a[href*='/news/']",
+                "title": "h1",
+                "content": "div.article-content p, div[class*='content'] p"
+            },
+            "rate_limit": 2.0
+        },
+        "cointelegraph.com": {
+            "name": "Cointelegraph",
+            "url": "https://cointelegraph.com",
+            "selectors": {
+                "article_links": "a[href*='/news/'], a[href*='/article/']",
+                "title": "h1",
+                "content": "div.post-content p, div[class*='article'] p"
+            },
+            "rate_limit": 2.0
+        },
+        "bitcoinmagazine.com": {
+            "name": "Bitcoin Magazine",
+            "url": "https://bitcoinmagazine.com",
+            "selectors": {
+                "article_links": "a[href*='/articles/'], a[href*='/markets/']",
+                "title": "h1",
+                "content": "div.article-content p, div.entry-content p"
+            },
+            "rate_limit": 2.0
+        },
+
+        # --- Finance US ---
+        "seekingalpha.com": {
+            "name": "Seeking Alpha",
+            "url": "https://seekingalpha.com/market-news",
+            "selectors": {
+                "article_links": "a[href*='/article/'], a[href*='/news/']",
+                "title": "h1",
+                "content": "div[data-test-id='article-content'] p, div.article-content p"
+            },
+            "rate_limit": 2.5
+        },
+        "benzinga.com": {
+            "name": "Benzinga",
+            "url": "https://www.benzinga.com",
+            "selectors": {
+                "article_links": "a[href*='/news/'], a[href*='/article/']",
+                "title": "h1",
+                "content": "div.article-content p, div[class*='story'] p"
+            },
+            "rate_limit": 2.0
+        },
+        "marketwatch.com": {
+            "name": "MarketWatch",
+            "url": "https://www.marketwatch.com",
+            "selectors": {
+                "article_links": "a[href*='/story/']",
+                "title": "h1",
+                "content": "div.article__body p"
+            },
+            "rate_limit": 2.0
+        },
+        "thestreet.com": {
+            "name": "TheStreet",
+            "url": "https://www.thestreet.com",
+            "selectors": {
+                "article_links": "a[href*='/investing/'], a[href*='/markets/']",
+                "title": "h1",
+                "content": "div.article-body p, section[class*='body'] p"
+            },
+            "rate_limit": 2.0
+        },
+
+        # --- Macro / International ---
+        "imf.org": {
+            "name": "IMF News",
+            "url": "https://www.imf.org/en/News",
+            "selectors": {
+                "article_links": "a[href*='/en/News/Articles/'], a[href*='/en/Publications/']",
+                "title": "h1",
+                "content": "div.main-content p, div[class*='article-body'] p"
+            },
+            "rate_limit": 2.0
+        },
+
+        # --- Biotech / Pharma ---
+        "statnews.com": {
+            "name": "STAT News",
+            "url": "https://www.statnews.com",
+            "selectors": {
+                "article_links": "a[href*='/202'], a[href*='/article/']",
+                "title": "h1",
+                "content": "div.article-body p, div[class*='entry-content'] p"
+            },
+            "rate_limit": 2.0
+        },
+        "biopharmadive.com": {
+            "name": "BioPharma Dive",
+            "url": "https://www.biopharmadive.com",
+            "selectors": {
+                "article_links": "a[href*='/news/'], a[href*='/article/']",
+                "title": "h1",
+                "content": "div.article-body p"
+            },
+            "rate_limit": 2.0
+        },
+
+        # --- Commodities ---
+        "oilprice.com": {
+            "name": "OilPrice",
+            "url": "https://oilprice.com/latest-energy-news/world-news/",
+            "selectors": {
+                "article_links": "a[href*='/Energy/'], a[href*='/Metals/'], a[href*='/Finance/']",
+                "title": "h1",
+                "content": "div.article-content p, div[class*='content'] p"
+            },
+            "rate_limit": 2.0
+        },
+        "kitco.com": {
+            "name": "Kitco News",
+            "url": "https://www.kitco.com/news/",
+            "selectors": {
+                "article_links": "a[href*='/news/']",
+                "title": "h1",
+                "content": "div.article-body p, div[class*='article'] p"
+            },
+            "rate_limit": 2.0
+        },
+
+        # --- Fintech ---
+        "finextra.com": {
+            "name": "Finextra",
+            "url": "https://www.finextra.com",
+            "selectors": {
+                "article_links": "a[href*='/newsarticle/'], a[href*='/news/']",
+                "title": "h1",
+                "content": "div.full-article p, div[class*='article-body'] p"
+            },
+            "rate_limit": 2.0
+        },
     }
 
     # Extended sources - disabled by default for faster/reliable scraping
@@ -1166,7 +1381,12 @@ class AdvancedNewsScraper:
         "politico.eu", "euronews.com", "euractiv.com", "euobserver.com",
         "handelsblatt.com", "ansa.it", "dutchnews.nl", "nltimes.nl",
         "brusselstimes.com", "swissinfo.ch", "notesfrompoland.com",
-        "kyivindependent.com", "lrt.lt", "err.ee"
+        "kyivindependent.com", "lrt.lt", "err.ee",
+        # FINANCE / CRYPTO / MACRO - EXTENDED (added 2026-03)
+        "coindesk.com", "theblock.co", "decrypt.co", "cointelegraph.com",
+        "bitcoinmagazine.com", "seekingalpha.com", "benzinga.com",
+        "marketwatch.com", "thestreet.com", "imf.org", "statnews.com",
+        "biopharmadive.com", "oilprice.com", "kitco.com", "finextra.com",
     }
 
     def __init__(self):
