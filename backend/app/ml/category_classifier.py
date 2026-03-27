@@ -79,6 +79,48 @@ CATEGORY_KEYWORDS: Dict[str, List[str]] = {
         "astronomie", "planete", "Mars", "Lune", "satellite", "fusee", "SpaceX",
         "ESA", "telescope", "James Webb", "Big Bang", "trou noir", "galaxie",
         "rechauffement", "CO2", "carbone", "biodiversite", "extinction", "ecologie"
+    ],
+    "FINANCE": [
+        # English
+        "stock", "stocks", "shares", "equity", "equities", "market", "markets",
+        "trading", "trader", "wall street", "nasdaq", "nyse", "s&p", "dow jones",
+        "earnings", "revenue", "profit", "loss", "dividend", "ipo", "merger",
+        "acquisition", "buyout", "takeover", "hedge fund", "private equity",
+        "analyst", "upgrade", "downgrade", "price target", "guidance",
+        "bull", "bear", "rally", "crash", "correction", "volatility",
+        "portfolio", "investment", "investor", "sec", "insider trading",
+        "short selling", "options", "futures", "derivatives",
+        # French
+        "bourse", "action", "actions", "marche", "marches", "cotation",
+        "dividende", "introduction en bourse", "fusion", "acquisition",
+        "investisseur", "portefeuille", "rendement", "cours", "capitalisation",
+        "amf", "cac 40", "euronext",
+    ],
+    "CRYPTO": [
+        # English
+        "bitcoin", "btc", "ethereum", "eth", "crypto", "cryptocurrency",
+        "blockchain", "defi", "nft", "token", "altcoin", "stablecoin",
+        "mining", "wallet", "exchange", "binance", "coinbase", "solana",
+        "cardano", "polkadot", "avalanche", "polygon", "layer 2",
+        "web3", "dao", "smart contract", "dex", "cefi",
+        "halving", "staking", "yield", "liquidity",
+        # French
+        "cryptomonnaie", "cryptomonnaies", "jeton", "portefeuille numerique",
+        "minage", "chaine de blocs",
+    ],
+    "MACRO": [
+        # English
+        "federal reserve", "fed", "ecb", "central bank", "interest rate",
+        "rate cut", "rate hike", "inflation", "cpi", "ppi", "gdp",
+        "unemployment", "jobs report", "nonfarm", "payroll",
+        "treasury", "bond", "yield curve", "quantitative easing", "tapering",
+        "recession", "stagflation", "monetary policy", "fiscal policy",
+        "trade war", "tariff", "sanctions", "debt ceiling",
+        "imf", "world bank", "bis",
+        # French
+        "banque centrale", "taux directeur", "taux d'interet",
+        "inflation", "recession", "politique monetaire", "dette",
+        "bce", "reserve federale", "chomage", "pib",
     ]
 }
 
