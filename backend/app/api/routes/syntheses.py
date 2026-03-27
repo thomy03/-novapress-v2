@@ -962,6 +962,79 @@ async def get_syntheses_by_category(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@router.get("/market")
+@limiter.limit("60/minute")
+async def get_market_syntheses(
+    request: Request,
+    hours: int = Query(default=8, ge=1, le=72),
+    min_impact: str = Query(default="LOW"),
+    asset_class: Optional[str] = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=50),
+):
+    """Get syntheses with market metadata for Midas integration."""
+    impact_order = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
+    min_impact_level = impact_order.get(min_impact.upper(), 0)
+
+    try:
+        qdrant = get_qdrant_service()
+        raw_syntheses = qdrant.get_latest_syntheses(limit=100)
+
+        cutoff = datetime.utcnow().timestamp() - hours * 3600
+
+        # Parse asset_class filter
+        asset_class_filter = None
+        if asset_class:
+            asset_class_filter = {s.strip().lower() for s in asset_class.split(",") if s.strip()}
+
+        results = []
+        for s in raw_syntheses:
+            # Filter by time
+            created_at = s.get("created_at")
+            if created_at is None or float(created_at) < cutoff:
+                continue
+
+            # Filter by impact level
+            impact = str(s.get("market_impact", "LOW")).upper()
+            if impact_order.get(impact, 0) < min_impact_level:
+                continue
+
+            # Filter by asset_class
+            if asset_class_filter:
+                raw_ac = s.get("market_asset_classes", "")
+                ac_list = {x.strip().lower() for x in raw_ac.split(",") if x.strip()}
+                if not ac_list.intersection(asset_class_filter):
+                    continue
+
+            def parse_csv(field: str) -> list:
+                return [x.strip() for x in field.split(",") if x.strip()]
+
+            results.append({
+                "id": str(s.get("id", "")),
+                "title": str(s.get("title", "")),
+                "content": str(s.get("body") or s.get("summary", "")),
+                "category": str(s.get("category", "")),
+                "symbols": parse_csv(str(s.get("market_symbols", ""))),
+                "sectors": parse_csv(str(s.get("market_sectors", ""))),
+                "sentiment": float(s.get("market_sentiment", 0.0)),
+                "impact": impact,
+                "asset_classes": parse_csv(str(s.get("market_asset_classes", ""))),
+                "trading_keywords": parse_csv(str(s.get("market_trading_keywords", ""))),
+                "source_count": int(s.get("num_sources", 0)),
+                "published_at": str(created_at),
+            })
+
+            if len(results) >= limit:
+                break
+
+        return {"data": results, "total": len(results), "type": "market"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to fetch market syntheses: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 @router.get("/personas")
 async def get_available_personas():
     """

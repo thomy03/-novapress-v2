@@ -1148,6 +1148,13 @@ class QdrantService:
                 # Phase 3A: Geographic context from LLM
                 "geographic_context": synthesis.get("geographic_context", [])[:10],
                 "geo_relevance": synthesis.get("geo_relevance", "none"),
+                # Market tagger fields
+                "market_symbols": ",".join(synthesis.get("market_symbols", [])) if isinstance(synthesis.get("market_symbols"), list) else synthesis.get("market_symbols", ""),
+                "market_sectors": ",".join(synthesis.get("market_sectors", [])) if isinstance(synthesis.get("market_sectors"), list) else synthesis.get("market_sectors", ""),
+                "market_asset_classes": ",".join(synthesis.get("market_asset_classes", [])) if isinstance(synthesis.get("market_asset_classes"), list) else synthesis.get("market_asset_classes", ""),
+                "market_sentiment": float(synthesis.get("market_sentiment", 0.0)),
+                "market_impact": str(synthesis.get("market_impact", "LOW")),
+                "market_trading_keywords": ",".join(synthesis.get("market_trading_keywords", [])) if isinstance(synthesis.get("market_trading_keywords"), list) else synthesis.get("market_trading_keywords", ""),
             }
         )
 
