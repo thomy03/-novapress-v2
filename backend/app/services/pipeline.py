@@ -33,6 +33,7 @@ from app.ml.persona import (
 from app.ml.causal_extraction import validate_causal_chain
 from app.ml.persona_quality import evaluate_persona_synthesis, PersonaQualityReviewer
 from app.ml.keyword_learner import get_keyword_learner
+from app.ml.market_tagger import tag_synthesis
 # Intelligence Hub services
 from app.ml.entity_resolution import get_entity_resolution_service, init_entity_resolution
 from app.ml.topic_detection import get_topic_detection_service, init_topic_detection
@@ -1604,6 +1605,7 @@ Contenu existant (extrait):
             alert_svc = get_alert_service()
 
             for synthesis, embedding in zip(syntheses, synthesis_embeddings):
+                synthesis = tag_synthesis(synthesis)
                 self.qdrant.upsert_synthesis(synthesis, embedding)
                 # Notify subscribers (non-blocking)
                 try:
